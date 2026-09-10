@@ -2199,70 +2199,67 @@ function toast(msg, type='err') {
 
 /* ── auth UI ─────────────────────────────────────────────────── */
 function vLogin() {
-  const tab = st._loginTab || 'email';
-  const tabBtn = (id, label) => `<button onclick="st._loginTab='${id}';render()"
-    style="flex:1;padding:12px 4px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
-           border:none;cursor:pointer;background:none;font-family:inherit;
-           color:${tab===id?'var(--accent)':'var(--text3)'};
-           border-bottom:${tab===id?'2px solid var(--accent)':'2px solid transparent'}">${label}</button>`;
+  const mode = st._loginTab || 'email';
+  const googleSvg = `<svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0">
+    <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.6 2.5 30.1 0 24 0 14.7 0 6.7 5.5 2.8 13.5l7.8 6C12.4 13.2 17.7 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.8-2.1 5.2-4.5 6.8l7 5.4C43 36.5 46.1 30.9 46.1 24.5z"/>
+    <path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8l-7.8-6C1 15.8 0 19.8 0 24s1 8.2 2.8 11.5l7.8-7z"/>
+    <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.4l-7-5.4c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.6-3.7-13.4-9l-7.8 7C6.7 42.5 14.7 48 24 48z"/>
+  </svg>`;
 
-  let tabContent = '';
-  if (tab === 'email') {
-    tabContent = `
-      <input id="li-email" type="email" placeholder="Email" autocomplete="email"
-        style="width:100%;padding:11px 14px;margin-bottom:10px;background:var(--s2);border:1px solid var(--border);
-               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter')doLoginEmail('login')">
-      <input id="li-pw" type="password" placeholder="Senha"
-        style="width:100%;padding:11px 14px;margin-bottom:16px;background:var(--s2);border:1px solid var(--border);
-               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter')doLoginEmail('login')">
-      <button onclick="doLoginEmail('login')"
-        style="width:100%;padding:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;
-               border:none;border-radius:10px;cursor:pointer;margin-bottom:8px;font-family:inherit">Entrar</button>
-      <button onclick="doLoginEmail('signup')"
-        style="width:100%;padding:13px;background:none;color:var(--text2);font-size:13px;font-weight:600;
-               border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit">Criar conta</button>`;
-  } else if (tab === 'google') {
-    tabContent = `
-      <button onclick="doLoginGoogle()"
-        style="width:100%;padding:13px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
-               border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
-               justify-content:center;gap:10px;font-family:inherit">
-        <svg width="20" height="20" viewBox="0 0 48 48" style="flex-shrink:0">
-          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.6 2.5 30.1 0 24 0 14.7 0 6.7 5.5 2.8 13.5l7.8 6C12.4 13.2 17.7 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.8-2.1 5.2-4.5 6.8l7 5.4C43 36.5 46.1 30.9 46.1 24.5z"/>
-          <path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8l-7.8-6C1 15.8 0 19.8 0 24s1 8.2 2.8 11.5l7.8-7z"/>
-          <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.4l-7-5.4c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.6-3.7-13.4-9l-7.8 7C6.7 42.5 14.7 48 24 48z"/>
-        </svg>
-        Entrar com Google
-      </button>`;
-  } else {
-    tabContent = `
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5">Receba um link de acesso direto no email.</p>
-      <input id="li-link-email" type="email" placeholder="Email" autocomplete="email"
-        style="width:100%;padding:11px 14px;margin-bottom:12px;background:var(--s2);border:1px solid var(--border);
-               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter')doLoginMagicLink()">
+  const inp = (id, type, placeholder, extra='') =>
+    `<input id="${id}" type="${type}" placeholder="${placeholder}" autocomplete="${type==='email'?'email':type==='password'?'current-password':''}"
+      style="width:100%;padding:12px 14px;background:var(--s2);border:1px solid var(--border);border-radius:10px;
+             color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box" ${extra}>`;
+
+  let body = '';
+  if (mode === 'link') {
+    body = `
+      <button onclick="st._loginTab='email';render()"
+        style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:20px;
+               display:flex;align-items:center;gap:6px;font-family:inherit">← Voltar</button>
+      <p style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Entrar sem senha</p>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.5">Enviaremos um link de acesso para o seu email.</p>
+      ${inp('li-link-email','email','Seu email','onkeydown="if(event.key===\'Enter\')doLoginMagicLink()"')}
       <button onclick="doLoginMagicLink()"
-        style="width:100%;padding:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;
-               border:none;border-radius:10px;cursor:pointer;font-family:inherit">Enviar link</button>`;
+        style="width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;
+               border:none;border-radius:10px;cursor:pointer;margin-top:12px;font-family:inherit">Enviar link</button>`;
+  } else {
+    body = `
+      <button onclick="doLoginGoogle()"
+        style="width:100%;padding:12px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
+               border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
+               justify-content:center;gap:10px;font-family:inherit;margin-bottom:20px">
+        ${googleSvg} Entrar com Google
+      </button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:12px;color:var(--text3);white-space:nowrap">ou use seu email</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${inp('li-email','email','Email','onkeydown="if(event.key===\'Enter\')document.getElementById(\'li-pw\').focus()"')}
+        ${inp('li-pw','password','Senha','onkeydown="if(event.key===\'Enter\')doLoginEmail(\'login\')"')}
+      </div>
+      <button onclick="doLoginEmail('login')"
+        style="width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;
+               border:none;border-radius:10px;cursor:pointer;margin-top:14px;font-family:inherit">Entrar</button>
+      <div style="display:flex;justify-content:space-between;margin-top:14px">
+        <button onclick="doLoginEmail('signup')"
+          style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Criar conta</button>
+        <button onclick="st._loginTab='link';render()"
+          style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Entrar sem senha →</button>
+      </div>`;
   }
 
-  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:var(--bg)">
-    <div style="text-align:center;margin-bottom:32px">
-      <div style="font-size:52px;margin-bottom:10px">⚽</div>
-      <div style="font-size:22px;font-weight:800;color:var(--text)">Série B — Aceoma</div>
-      <div style="font-size:13px;color:var(--text3);margin-top:4px">Entre para continuar</div>
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg)">
+    <div style="text-align:center;margin-bottom:36px">
+      <div style="font-size:48px;margin-bottom:12px">⚽</div>
+      <div style="font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.5px">Série B — Aceoma</div>
     </div>
-    <div style="width:100%;max-width:360px;background:var(--s1);border-radius:16px;overflow:hidden;border:1px solid var(--border)">
-      <div style="display:flex;border-bottom:1px solid var(--border)">
-        ${tabBtn('email','Email')}${tabBtn('google','Google')}${tabBtn('link','Magic Link')}
-      </div>
-      <div id="login-panel" style="padding:24px 20px">
-        ${tabContent}
-        <div id="login-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
-      </div>
+    <div style="width:100%;max-width:360px;background:var(--s1);border-radius:16px;padding:28px 24px;border:1px solid var(--border)">
+      ${body}
+      <div id="login-err" style="margin-top:14px;color:var(--danger);font-size:13px;text-align:center"></div>
     </div>
   </div>`;
 }
@@ -2293,81 +2290,105 @@ function mAdminPanel() {
 
   const playerOpts = st.players.map(p=>`<option value="${playerKey(p.name)}">${esc(p.name)}</option>`).join('');
 
-  const pendingRows = pending.map(u=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border2);flex-wrap:wrap">
-      <div style="flex:1;min-width:120px">
-        <div style="font-size:13px;font-weight:600">${esc(u.displayName||'(sem nome)')}</div>
-        <div style="font-size:11px;color:var(--text3)">${esc(u.email||u.uid)}</div>
+  const avatar = name => {
+    const initials = (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    return `<div style="width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);
+              display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+              color:var(--text2);flex-shrink:0">${initials}</div>`;
+  };
+
+  const pendingCards = pending.map(u=>`
+    <div style="background:var(--s2);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        ${avatar(u.displayName)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.displayName||'(sem nome)')}</div>
+          <div style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.email||u.uid)}</div>
+        </div>
       </div>
       <select id="sel_${u.uid}"
-        style="font-size:11px;padding:4px 6px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-        <option value="">— sem vínculo —</option>${playerOpts}
+        style="width:100%;padding:9px 10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;
+               color:var(--text);font-size:13px;font-family:inherit;margin-bottom:10px;box-sizing:border-box">
+        <option value="">— vincular a jogador (opcional) —</option>${playerOpts}
       </select>
-      <button onclick="approveUser('${u.uid}',document.getElementById('sel_${u.uid}').value||null)"
-        style="padding:4px 10px;background:#00d67f18;color:#00d67f;border:1px solid #00d67f;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✓</button>
-      <button onclick="rejectUser('${u.uid}')"
-        style="padding:4px 10px;background:none;color:var(--danger);border:1px solid var(--danger);border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="approveUser('${u.uid}',document.getElementById('sel_${u.uid}').value||null)"
+          style="flex:1;padding:10px;background:var(--accent);color:#000;border:none;border-radius:8px;
+                 font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Aprovar</button>
+        <button onclick="rejectUser('${u.uid}')"
+          style="padding:10px 16px;background:none;color:var(--danger);border:1px solid var(--danger);
+                 border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Rejeitar</button>
+      </div>
     </div>`).join('');
 
-  const activeRows = active.map(u=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border2);flex-wrap:wrap">
-      <div style="flex:1;min-width:120px">
-        <div style="font-size:13px;font-weight:600">${esc(u.displayName||'(sem nome)')}
-          <span style="font-size:10px;font-weight:700;color:${u.role==='admin'?'var(--accent)':'var(--text3)'};margin-left:4px">${u.role==='admin'?'ADMIN':'jogador'}</span>
+  const activeRows = active.map(u=>{
+    const linkedPlayer = u.playerKey ? st.players.find(p=>playerKey(p.name)===u.playerKey) : null;
+    const displayName = linkedPlayer?.name || u.displayName || '(sem nome)';
+    return `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border2)">
+      ${avatar(displayName)}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName)}</span>
+          <span style="font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 6px;border-radius:4px;flex-shrink:0;
+                       background:${u.role==='admin'?'#00d67f22':'var(--s2)'};
+                       color:${u.role==='admin'?'var(--accent)':'var(--text3)'}">${u.role==='admin'?'ADMIN':'jogador'}</span>
         </div>
-        <div style="font-size:11px;color:var(--text3)">${esc(u.email||u.uid)}${u.playerKey?` · 🔗 ${u.playerKey}`:''}</div>
+        <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${esc(u.email||u.uid)}${u.playerKey?` · 🔗 ${u.playerKey}`:''}
+        </div>
       </div>
-      ${u.role!=='admin'?`
+      <div style="display:flex;gap:4px;flex-shrink:0">
         <select id="asel_${u.uid}"
-          style="font-size:11px;padding:4px 6px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-          <option value="">sem vínculo</option>${playerOpts
+          style="font-size:11px;padding:5px 6px;background:var(--s2);border:1px solid var(--border);
+                 border-radius:6px;color:var(--text);max-width:90px">
+          <option value="">— jogador —</option>${playerOpts
             .replace(`value="${u.playerKey||'__NONE__'}"`,`value="${u.playerKey||'__NONE__'}" selected`)}
         </select>
-        <button onclick="linkUserToPlayer('${u.uid}',document.getElementById('asel_${u.uid}').value)"
-          style="padding:4px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer">🔗</button>
-        <button onclick="promoteToAdmin('${u.uid}')"
-          style="padding:4px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:10px;cursor:pointer">▲ Admin</button>
-      `:''}
-    </div>`).join('');
+        <button onclick="linkUserToPlayer('${u.uid}',document.getElementById('asel_${u.uid}').value)" title="Vincular"
+          style="padding:5px 8px;background:var(--s2);border:1px solid var(--border);border-radius:6px;
+                 font-size:12px;cursor:pointer">🔗</button>
+      </div>
+    </div>`;
+  }).join('');
 
-  return `<div class="modal-overlay" onclick="st.modal=null;render()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;max-height:85vh;display:flex;flex-direction:column">
-      <div class="modal-hdr">
-        <span>⚙️ Painel Admin</span>
-        <button onclick="st.modal=null;render()" class="close-btn">✕</button>
+  return `<div class="overlay" onclick="st.modal=null;render()">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-height:88dvh;display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px)+16px)">
+      <div class="sheet-handle"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:17px;font-weight:800">Painel Admin</div>
+        <button onclick="st.modal=null;render()"
+          style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;
+                 display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:14px">✕</button>
       </div>
       <div style="overflow-y:auto;flex:1">
-        ${m.loading ? `<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">
-          <div class="spinner" style="margin:0 auto 12px"></div>Carregando usuários...
-        </div>` : `
-        <div style="padding:12px 16px">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
-            Aguardando aprovação (${pending.length})
-          </div>
-          ${pending.length ? pendingRows : `<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text3);padding:6px 0">
-            <span style="font-size:18px">✅</span> Nenhuma aprovação pendente.
+        ${m.loading ? `<div class="loading"><div class="spinner"></div> Carregando...</div>` : `
+        ${pending.length ? `
+          <div class="sec-lbl" style="padding-top:0">Aprovações pendentes (${pending.length})</div>
+          ${pendingCards}
+        ` : `
+          <div style="display:flex;align-items:center;gap:10px;padding:14px;background:var(--s2);border-radius:10px;margin-bottom:16px">
+            <span style="font-size:20px">✅</span>
+            <span style="font-size:14px;color:var(--text2)">Nenhuma aprovação pendente</span>
           </div>`}
-        </div>
-        <div style="padding:12px 16px;border-top:1px solid var(--border)">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
-            Usuários ativos (${active.length})
-          </div>
-          ${active.length ? activeRows : `<div style="font-size:13px;color:var(--text3)">Nenhum usuário cadastrado ainda.</div>`}
-        </div>`}
-        ${rejected.length?`<div style="padding:10px 16px;border-top:1px solid var(--border)">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Rejeitados (${rejected.length})</div>
+        ${active.length ? `
+          <div class="sec-lbl">Membros (${active.length})</div>
+          <div>${activeRows}</div>
+        ` : ''}
+        ${rejected.length ? `
+          <div class="sec-lbl">Rejeitados (${rejected.length})</div>
           ${rejected.map(u=>`<div style="font-size:12px;color:var(--text3);padding:4px 0">${esc(u.email||u.uid)}</div>`).join('')}
-        </div>`:''}
-        <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="generateInviteLink()"
-            style="padding:9px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
-            🔗 Gerar link de convite
-          </button>
-          <button onclick="setCreateAuthorized(!st.createAuthorized)"
-            style="padding:9px 14px;background:${st.createAuthorized?'#00d67f18':'var(--s2)'};border:1px solid ${st.createAuthorized?'var(--accent)':'var(--border)'};border-radius:8px;color:${st.createAuthorized?'var(--accent)':'var(--text2)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
-            ${st.createAuthorized?'✅':'⬜'} Autorizar campeonato
-          </button>
-        </div>
+        ` : ''}
+        <div class="sec-lbl">Ações</div>
+        <button onclick="generateInviteLink()" class="btn btn-ghost" style="margin-top:0;text-align:left;font-size:14px">
+          🔗 Gerar link de convite
+        </button>
+        <button onclick="setCreateAuthorized(!st.createAuthorized)" class="btn" style="margin-top:8px;text-align:left;font-size:14px;
+          background:${st.createAuthorized?'#00d67f18':'var(--s2)'};color:${st.createAuthorized?'var(--accent)':'var(--text2)'};
+          border:1px solid ${st.createAuthorized?'var(--accent)':'var(--border)'}">
+          ${st.createAuthorized?'✅ Criação de campeonato autorizada':'⬜ Autorizar criação de campeonato'}
+        </button>
+        `}
       </div>
     </div>
   </div>`;
