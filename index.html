@@ -419,6 +419,7 @@ details[open] .det-arrow { transform: rotate(180deg); }
 <!-- Firebase SDK (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <!-- Cloudinary upload (no Firebase Storage needed) -->
 <script>
 const CLOUDINARY_CLOUD = 'fwtyio7l';
@@ -487,6 +488,11 @@ const st = {
   finAvulsos: [],
   finMonth: new Date().toISOString().slice(0,7),
   finPrevisaoOculta: true,
+  authUser: null,
+  userRole: null,
+  userDoc: null,
+  createAuthorized: false,
+  _loginTab: 'email',
 };
 
 /* ── helpers ────────────────────────────────────────────────── */
@@ -583,63 +589,257 @@ function champion(matches) {
   return f.hs>f.as?f.home:f.away;
 }
 
-/* ── db (Firebase) ──────────────────────────────────────────── */
+/* ── db / auth (Firebase) ───────────────────────────────────── */
 let DB = null;
+let AUTH = null;
+let _unsubListeners = [];
 
-function initDB() {
+function isAdmin() { return st.userRole === 'admin'; }
+
+function startListeners() {
+  _unsubListeners.forEach(u=>u());
+  _unsubListeners = [];
+
+  const u1 = DB.collection('championships').onSnapshot(snap => {
+    st.champs = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>b.date.localeCompare(a.date));
+    st.ready = true;
+    render();
+  }, () => { st.ready = true; render(); });
+
+  const u2 = DB.collection('player_titles').onSnapshot(snap => {
+    st.ranks = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=> b.titles!==a.titles ? b.titles-a.titles : (a.last_date||'').localeCompare(b.last_date||''));
+    render();
+  }, ()=>{});
+
+  const u3 = DB.collection('player_registry').onSnapshot(snap => {
+    st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
+    render();
+  }, ()=>{});
+
+  const u4 = DB.collection('financeiro_config').onSnapshot(snap => {
+    const doc = snap.docs.find(d=>d.id==='main');
+    const data = doc ? doc.data() : {};
+    st.finCfg = {
+      valorMensalidade: data.valorMensalidade ?? data.valor ?? 50,
+      valorChurrasco: data.valorChurrasco ?? 0,
+      reserva: data.reserva ?? 300,
+      saldoInicial: data.saldoInicial ?? 0,
+      valorAvulso: data.valorAvulso ?? 20,
+    };
+    if(st.view==='financeiro') render();
+  }, ()=>{});
+
+  const u5 = DB.collection('financeiro_mensalidades').onSnapshot(snap => {
+    st.finMens = {};
+    snap.docs.forEach(d=>{ st.finMens[d.id]=d.data(); });
+    if(st.view==='financeiro') render();
+  }, ()=>{});
+
+  const u6 = DB.collection('financeiro_despesas').onSnapshot(snap => {
+    st.finDesp = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+    if(st.view==='financeiro') render();
+  }, ()=>{});
+
+  const u7 = DB.collection('financeiro_avulsos').onSnapshot(snap => {
+    st.finAvulsos = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));
+    if(st.view==='financeiro') render();
+  }, ()=>{});
+
+  const u8 = DB.collection('app_config').onSnapshot(snap => {
+    const doc = snap.docs.find(d=>d.id==='main');
+    st.createAuthorized = doc ? !!(doc.data().createAuthorized) : false;
+  }, ()=>{});
+
+  _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8];
+}
+
+function initFirebase() {
   try {
     firebase.initializeApp(firebaseConfig);
     DB = firebase.firestore();
+    AUTH = firebase.auth();
 
-    DB.collection('championships').onSnapshot(snap => {
-      st.champs = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>b.date.localeCompare(a.date));
-      st.ready = true;
-      render();
-    }, () => { st.ready = true; render(); });
+    if (AUTH.isSignInWithEmailLink(location.href)) {
+      const storedEmail = localStorage.getItem('aceoma_emailForSignIn');
+      if (storedEmail) {
+        AUTH.signInWithEmailLink(storedEmail, location.href)
+          .then(() => {
+            localStorage.removeItem('aceoma_emailForSignIn');
+            history.replaceState(null, '', location.pathname);
+          })
+          .catch(e => toast('Erro no link de acesso: ' + e.message));
+      }
+    }
 
-    DB.collection('player_titles').onSnapshot(snap => {
-      st.ranks = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=> b.titles!==a.titles ? b.titles-a.titles : (a.last_date||'').localeCompare(b.last_date||''));
-      render();
-    }, ()=>{});
-
-    DB.collection('player_registry').onSnapshot(snap => {
-      st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
-      render();
-    }, ()=>{});
-
-    DB.collection('financeiro_config').onSnapshot(snap => {
-      const doc = snap.docs.find(d=>d.id==='main');
-      const data = doc ? doc.data() : {};
-      st.finCfg = {
-        valorMensalidade: data.valorMensalidade ?? data.valor ?? 50,
-        valorChurrasco: data.valorChurrasco ?? 0,
-        reserva: data.reserva ?? 300,
-        saldoInicial: data.saldoInicial ?? 0,
-        valorAvulso: data.valorAvulso ?? 20,
-      };
-      if(st.view==='financeiro') render();
-    }, ()=>{});
-
-    DB.collection('financeiro_mensalidades').onSnapshot(snap => {
-      st.finMens = {};
-      snap.docs.forEach(d=>{ st.finMens[d.id]=d.data(); });
-      if(st.view==='financeiro') render();
-    }, ()=>{});
-
-    DB.collection('financeiro_despesas').onSnapshot(snap => {
-      st.finDesp = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
-      if(st.view==='financeiro') render();
-    }, ()=>{});
-
+    AUTH.onAuthStateChanged(async user => {
+      st.authUser = user;
+      if (!user) {
+        _unsubListeners.forEach(u=>u()); _unsubListeners = [];
+        st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
+        st.userRole = null; st.userDoc = null; st.ready = true;
+        render(); return;
+      }
+      try {
+        const snap = await DB.doc(`users/${user.uid}`).get();
+        if (snap.exists) {
+          st.userDoc = snap.data();
+          st.userRole = snap.data().role || 'pending';
+        } else {
+          let role = 'pending';
+          if (user.email === 'castanho.caiop@gmail.com') {
+            role = 'admin';
+          } else {
+            const inviteToken = new URLSearchParams(location.search).get('invite');
+            if (inviteToken) {
+              try {
+                const tokenSnap = await DB.doc(`invite_tokens/${inviteToken}`).get();
+                if (tokenSnap.exists && !tokenSnap.data().used) {
+                  role = tokenSnap.data().role || 'player';
+                  await DB.doc(`invite_tokens/${inviteToken}`).update({used:true, usedBy:user.uid, usedAt:new Date().toISOString()});
+                  history.replaceState(null, '', location.pathname);
+                }
+              } catch(e) {}
+            }
+          }
+          const newDoc = {email:user.email||'', displayName:user.displayName||'', role, createdAt:new Date().toISOString()};
+          await DB.doc(`users/${user.uid}`).set(newDoc);
+          st.userDoc = newDoc; st.userRole = role;
+        }
+      } catch(e) {
+        st.userRole = user.email === 'castanho.caiop@gmail.com' ? 'admin' : 'pending';
+      }
+      if (st.userRole !== 'pending') startListeners();
+      else { st.ready = true; render(); }
+    });
   } catch(e) {
-    st.ready = true;
-    render();
+    st.ready = true; render();
     toast('Erro ao conectar: ' + (e?.message || e));
   }
+}
+
+async function signOutUser() {
+  _unsubListeners.forEach(u=>u()); _unsubListeners=[];
+  st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
+  st.userRole=null; st.userDoc=null; st.ready=false;
+  await AUTH.signOut();
+}
+
+async function sendMagicLink(email) {
+  const url = location.origin + location.pathname;
+  await AUTH.sendSignInLinkToEmail(email, {url, handleCodeInApp:true});
+  localStorage.setItem('aceoma_emailForSignIn', email);
+}
+
+async function doLoginEmail(mode) {
+  const email = document.getElementById('li-email')?.value?.trim();
+  const pw = document.getElementById('li-pw')?.value;
+  const err = document.getElementById('login-err');
+  if (!email || !pw) { if(err) err.textContent='Preencha email e senha.'; return; }
+  try {
+    if (mode==='signup') await AUTH.createUserWithEmailAndPassword(email, pw);
+    else await AUTH.signInWithEmailAndPassword(email, pw);
+  } catch(e) {
+    if(err) err.textContent = _firebaseErrMsg(e.code);
+  }
+}
+
+async function doLoginGoogle() {
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await AUTH.signInWithPopup(provider);
+  } catch(e) {
+    toast('Erro Google: ' + (e.message||e));
+  }
+}
+
+async function doLoginMagicLink() {
+  const email = document.getElementById('li-link-email')?.value?.trim();
+  const err = document.getElementById('login-err');
+  if (!email) { if(err) err.textContent='Informe seu email.'; return; }
+  try {
+    await sendMagicLink(email);
+    const panel = document.getElementById('login-panel');
+    if(panel) panel.innerHTML=`<div style="text-align:center;padding:8px 0">
+      <div style="font-size:36px;margin-bottom:12px">📨</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text)">Link enviado!</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:8px;line-height:1.5">
+        Verifique seu email<br><strong>${esc(email)}</strong>
+      </div>
+    </div>`;
+  } catch(e) {
+    if(err) err.textContent = _firebaseErrMsg(e.code);
+  }
+}
+
+function _firebaseErrMsg(code) {
+  const m = {
+    'auth/user-not-found':'Email não encontrado.',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/invalid-credential':'Email ou senha inválidos.',
+    'auth/email-already-in-use':'Email já cadastrado. Tente entrar.',
+    'auth/weak-password':'Senha muito fraca (mínimo 6 caracteres).',
+    'auth/invalid-email':'Email inválido.',
+    'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
+  };
+  return m[code] || 'Erro de autenticação.';
+}
+
+async function generateInviteLink() {
+  if (!DB) return;
+  const token = uid();
+  await DB.doc(`invite_tokens/${token}`).set({role:'player', createdBy:st.authUser?.uid||'', createdAt:new Date().toISOString(), used:false});
+  const url = location.origin + location.pathname + '?invite=' + token;
+  try { await navigator.clipboard.writeText(url); toast('Link de convite copiado!'); }
+  catch(e) { prompt('Copie o link de convite:', url); }
+}
+
+async function approveUser(userId, playerKeyVal) {
+  if (!DB) return;
+  const update = {role:'player'};
+  if (playerKeyVal) update.playerKey = playerKeyVal;
+  await DB.doc(`users/${userId}`).update(update);
+  toast('Usuário aprovado!');
+  loadAdminUsers();
+}
+
+async function rejectUser(userId) {
+  if (!DB) return;
+  await DB.doc(`users/${userId}`).update({role:'rejected'});
+  toast('Usuário rejeitado.');
+  loadAdminUsers();
+}
+
+async function promoteToAdmin(userId) {
+  if (!DB || !confirm('Promover este usuário a administrador?')) return;
+  await DB.doc(`users/${userId}`).update({role:'admin'});
+  toast('Usuário promovido a admin!');
+  loadAdminUsers();
+}
+
+async function linkUserToPlayer(userId, playerKeyVal) {
+  if (!DB) return;
+  await DB.doc(`users/${userId}`).update({playerKey: playerKeyVal || firebase.firestore.FieldValue.delete()});
+  toast('Vínculo atualizado!');
+  loadAdminUsers();
+}
+
+async function setCreateAuthorized(val) {
+  if (!DB) return;
+  await DB.doc('app_config/main').set({createAuthorized:val}, {merge:true});
+  toast(val ? 'Criação de campeonato autorizada para jogadores!' : 'Autorização removida.');
+}
+
+async function loadAdminUsers() {
+  if (!DB || !isAdmin()) return;
+  try {
+    const snap = await DB.collection('users').get();
+    const users = snap.docs.map(d=>({uid:d.id,...d.data()}));
+    if (st.modal?.type === 'adminPanel') { st.modal.users = users; render(); }
+  } catch(e) { toast('Erro ao carregar usuários.'); }
 }
 
 /* ── async actions ──────────────────────────────────────────── */
@@ -1484,9 +1684,12 @@ function applyDrawToForm() {
 
 function vCreate() {
   const hasActive = !!activeChamp();
+  const playerBlocked = !isAdmin() && hasActive && !st.createAuthorized;
   return `${renderDrawCard()}<div class="card">
     <div class="card-hdr"><span class="card-lbl">Novo Campeonato</span></div>
-    ${hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
+    ${playerBlocked ? `<div class="warn-box">⚠️ Campeonato em andamento. Solicite autorização ao administrador para criar um novo.</div>` : ''}
+    ${!playerBlocked && hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
+    ${playerBlocked ? '' : `
     <div style="padding:12px 14px 4px">
       <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Data</label>
       <input type="date" id="champ-date" value="${today()}"
@@ -1512,7 +1715,7 @@ function vCreate() {
       </summary>
       <div id="player-assign-inner"></div>
     </details>
-    <label style="display:flex;align-items:center;gap:9px;padding:4px 14px 12px;cursor:pointer">
+    ${isAdmin()?`<label style="display:flex;align-items:center;gap:9px;padding:4px 14px 12px;cursor:pointer">
       <input type="checkbox" id="quick-reg" onchange="onQuickChg()"
         style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
       <span style="font-size:13px;color:var(--text2)">Campeonato já encerrado <span style="color:var(--text3)">(registrar histórico)</span></span>
@@ -1520,9 +1723,10 @@ function vCreate() {
     <div id="quick-champ" style="display:none;padding:0 14px 12px">
       <p style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Time Campeão</p>
       <div id="champ-team-sel"></div>
-    </div>
+    </div>`:''}
     <div id="fmthint" class="fmt-hint" style="display:none"></div>
     <button class="btn btn-primary" id="dobtn" style="display:none" onclick="doCreate()">Criar Campeonato</button>
+    `}
   </div>`;
 }
 
@@ -1686,6 +1890,7 @@ function vPlayers() {
     return `<div style="display:flex;align-items:center;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:${isActive?1:.45}">
       <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isChurr?` <span style="font-size:10px;font-weight:700;color:#FF8A3C;background:#FF8A3C18;padding:2px 5px;border-radius:10px">🍖</span>`:''}  </span>
       <span style="display:flex;gap:0">${renderStars(p.id, p.stars)}</span>
+      ${isAdmin()?`
       <button onclick="togglePlayerActive('${p.id}',${isActive})"
         style="padding:3px 9px;border-radius:20px;border:1px solid ${isActive?'#00d67f':'#6e7681'};
                background:${isActive?'#00d67f18':'none'};color:${isActive?'#00d67f':'#6e7681'};
@@ -1702,6 +1907,7 @@ function vPlayers() {
         style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:4px 6px">✏️</button>
       <button onclick="deleteRegisteredPlayer('${p.id}')"
         style="background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;opacity:.7;padding:4px 6px">✕</button>
+      `:''}
     </div>`;
   };
 
@@ -1710,16 +1916,17 @@ function vPlayers() {
       <span class="card-lbl">Elenco de Jogadores</span>
       <span style="font-size:11px;color:var(--text3)">${active.length} ativos${inactive.length?` · ${inactive.length} inativos`:''}</span>
     </div>
-    <div class="card-body" style="display:flex;gap:8px;align-items:center">
+    ${isAdmin()?`<div class="card-body" style="display:flex;gap:8px;align-items:center">
       <input id="newp-inp" class="player-input" type="text" placeholder="Nome do jogador"
         style="flex:1;margin:0"
         onkeydown="if(event.key==='Enter'){addPfromInput();event.preventDefault()}">
       <button class="btn btn-primary btn-sm btn-inline" onclick="addPfromInput()" style="margin:0;padding:10px 14px;white-space:nowrap">+ Adicionar</button>
-    </div>
+    </div>`:''}
+    <div style="display:none" id="__spacer_compat"></div>
     ${!st.players.length
       ? `<div style="padding:10px 14px 14px">
-           <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Nenhum jogador cadastrado. Adicione acima.</p>
-           ${st.ranks.length ? `<button class="btn btn-primary btn-sm" onclick="importPlayersFromRanking()" style="font-size:13px">
+           <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Nenhum jogador cadastrado.${isAdmin()?' Adicione acima.':''}</p>
+           ${isAdmin()&&st.ranks.length ? `<button class="btn btn-primary btn-sm" onclick="importPlayersFromRanking()" style="font-size:13px">
              Importar ${st.ranks.length} jogadores do ranking
            </button>` : ''}
          </div>`
@@ -1983,9 +2190,192 @@ function toast(msg, type='err') {
   setTimeout(() => el.remove(), 3200);
 }
 
+/* ── auth UI ─────────────────────────────────────────────────── */
+function vLogin() {
+  const tab = st._loginTab || 'email';
+  const tabBtn = (id, label) => `<button onclick="st._loginTab='${id}';render()"
+    style="flex:1;padding:12px 4px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+           border:none;cursor:pointer;background:none;font-family:inherit;
+           color:${tab===id?'var(--accent)':'var(--text3)'};
+           border-bottom:${tab===id?'2px solid var(--accent)':'2px solid transparent'}">${label}</button>`;
+
+  let tabContent = '';
+  if (tab === 'email') {
+    tabContent = `
+      <input id="li-email" type="email" placeholder="Email" autocomplete="email"
+        style="width:100%;padding:11px 14px;margin-bottom:10px;background:var(--s2);border:1px solid var(--border);
+               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')doLoginEmail('login')">
+      <input id="li-pw" type="password" placeholder="Senha"
+        style="width:100%;padding:11px 14px;margin-bottom:16px;background:var(--s2);border:1px solid var(--border);
+               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')doLoginEmail('login')">
+      <button onclick="doLoginEmail('login')"
+        style="width:100%;padding:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;
+               border:none;border-radius:10px;cursor:pointer;margin-bottom:8px;font-family:inherit">Entrar</button>
+      <button onclick="doLoginEmail('signup')"
+        style="width:100%;padding:13px;background:none;color:var(--text2);font-size:13px;font-weight:600;
+               border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit">Criar conta</button>`;
+  } else if (tab === 'google') {
+    tabContent = `
+      <button onclick="doLoginGoogle()"
+        style="width:100%;padding:13px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
+               border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
+               justify-content:center;gap:10px;font-family:inherit">
+        <svg width="20" height="20" viewBox="0 0 48 48" style="flex-shrink:0">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.6 2.5 30.1 0 24 0 14.7 0 6.7 5.5 2.8 13.5l7.8 6C12.4 13.2 17.7 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.8-2.1 5.2-4.5 6.8l7 5.4C43 36.5 46.1 30.9 46.1 24.5z"/>
+          <path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8l-7.8-6C1 15.8 0 19.8 0 24s1 8.2 2.8 11.5l7.8-7z"/>
+          <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.4l-7-5.4c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.6-3.7-13.4-9l-7.8 7C6.7 42.5 14.7 48 24 48z"/>
+        </svg>
+        Entrar com Google
+      </button>`;
+  } else {
+    tabContent = `
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5">Receba um link de acesso direto no email.</p>
+      <input id="li-link-email" type="email" placeholder="Email" autocomplete="email"
+        style="width:100%;padding:11px 14px;margin-bottom:12px;background:var(--s2);border:1px solid var(--border);
+               border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')doLoginMagicLink()">
+      <button onclick="doLoginMagicLink()"
+        style="width:100%;padding:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;
+               border:none;border-radius:10px;cursor:pointer;font-family:inherit">Enviar link</button>`;
+  }
+
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:var(--bg)">
+    <div style="text-align:center;margin-bottom:32px">
+      <div style="font-size:52px;margin-bottom:10px">⚽</div>
+      <div style="font-size:22px;font-weight:800;color:var(--text)">Série B — Aceoma</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px">Entre para continuar</div>
+    </div>
+    <div style="width:100%;max-width:360px;background:var(--s1);border-radius:16px;overflow:hidden;border:1px solid var(--border)">
+      <div style="display:flex;border-bottom:1px solid var(--border)">
+        ${tabBtn('email','Email')}${tabBtn('google','Google')}${tabBtn('link','Magic Link')}
+      </div>
+      <div id="login-panel" style="padding:24px 20px">
+        ${tabContent}
+        <div id="login-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function vPending() {
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:var(--bg)">
+    <div style="text-align:center;max-width:320px">
+      <div style="font-size:52px;margin-bottom:16px">⏳</div>
+      <div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:10px">Aguardando aprovação</div>
+      <div style="font-size:14px;color:var(--text3);line-height:1.6;margin-bottom:24px">
+        Sua conta foi criada e está aguardando aprovação de um administrador.
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:24px">${esc(st.authUser?.email || '')}</div>
+      <button onclick="signOutUser()"
+        style="padding:11px 28px;background:none;border:1px solid var(--border);border-radius:10px;
+               color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Sair</button>
+    </div>
+  </div>`;
+}
+
+function mAdminPanel() {
+  const m = st.modal;
+  if (!m || m.type !== 'adminPanel') return '';
+  const users = m.users || [];
+  const pending  = users.filter(u=>u.role==='pending');
+  const active   = users.filter(u=>u.role==='admin'||u.role==='player');
+  const rejected = users.filter(u=>u.role==='rejected');
+
+  const playerOpts = st.players.map(p=>`<option value="${playerKey(p.name)}">${esc(p.name)}</option>`).join('');
+
+  const pendingRows = pending.map(u=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border2);flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:13px;font-weight:600">${esc(u.displayName||'(sem nome)')}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(u.email||u.uid)}</div>
+      </div>
+      <select id="sel_${u.uid}"
+        style="font-size:11px;padding:4px 6px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <option value="">— sem vínculo —</option>${playerOpts}
+      </select>
+      <button onclick="approveUser('${u.uid}',document.getElementById('sel_${u.uid}').value||null)"
+        style="padding:4px 10px;background:#00d67f18;color:#00d67f;border:1px solid #00d67f;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✓</button>
+      <button onclick="rejectUser('${u.uid}')"
+        style="padding:4px 10px;background:none;color:var(--danger);border:1px solid var(--danger);border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+    </div>`).join('');
+
+  const activeRows = active.map(u=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border2);flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:13px;font-weight:600">${esc(u.displayName||'(sem nome)')}
+          <span style="font-size:10px;font-weight:700;color:${u.role==='admin'?'var(--accent)':'var(--text3)'};margin-left:4px">${u.role==='admin'?'ADMIN':'jogador'}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3)">${esc(u.email||u.uid)}${u.playerKey?` · 🔗 ${u.playerKey}`:''}</div>
+      </div>
+      ${u.role!=='admin'?`
+        <select id="asel_${u.uid}"
+          style="font-size:11px;padding:4px 6px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+          <option value="">sem vínculo</option>${playerOpts
+            .replace(`value="${u.playerKey||'__NONE__'}"`,`value="${u.playerKey||'__NONE__'}" selected`)}
+        </select>
+        <button onclick="linkUserToPlayer('${u.uid}',document.getElementById('asel_${u.uid}').value)"
+          style="padding:4px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer">🔗</button>
+        <button onclick="promoteToAdmin('${u.uid}')"
+          style="padding:4px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:10px;cursor:pointer">▲ Admin</button>
+      `:''}
+    </div>`).join('');
+
+  return `<div class="modal-overlay" onclick="st.modal=null;render()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;max-height:85vh;display:flex;flex-direction:column">
+      <div class="modal-hdr">
+        <span>⚙️ Painel Admin</span>
+        <button onclick="st.modal=null;render()" class="close-btn">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <div style="padding:12px 16px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            Aguardando aprovação (${pending.length})
+          </div>
+          ${pending.length ? pendingRows : `<div style="font-size:13px;color:var(--text3)">Nenhum pendente.</div>`}
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            Usuários ativos (${active.length})
+          </div>
+          ${active.length ? activeRows : `<div style="font-size:13px;color:var(--text3)">Nenhum usuário.</div>`}
+        </div>
+        ${rejected.length?`<div style="padding:10px 16px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Rejeitados (${rejected.length})</div>
+          ${rejected.map(u=>`<div style="font-size:12px;color:var(--text3);padding:4px 0">${esc(u.email||u.uid)}</div>`).join('')}
+        </div>`:''}
+        <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="generateInviteLink()"
+            style="padding:9px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
+            🔗 Gerar link de convite
+          </button>
+          <button onclick="setCreateAuthorized(!st.createAuthorized)"
+            style="padding:9px 14px;background:${st.createAuthorized?'#00d67f18':'var(--s2)'};border:1px solid ${st.createAuthorized?'var(--accent)':'var(--border)'};border-radius:8px;color:${st.createAuthorized?'var(--accent)':'var(--text2)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
+            ${st.createAuthorized?'✅':'⬜'} Autorizar campeonato
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ── render ──────────────────────────────────────────────────── */
 function render() {
   const app=document.getElementById('app'); if(!app) return;
+
+  if (!st.authUser) {
+    if (document.getElementById('main')) app.innerHTML='';
+    app.innerHTML = st.ready ? vLogin() : `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><div style="font-size:52px">⚽</div></div>`;
+    return;
+  }
+  if (st.userRole === 'pending') {
+    if (document.getElementById('main')) app.innerHTML='';
+    app.innerHTML = vPending();
+    return;
+  }
+
   if (!document.getElementById('main')) buildShell();
 
   const main=document.getElementById('main');
@@ -2003,7 +2393,7 @@ function render() {
     case 'financeiro': content=vFinanceiro(); break;
   }
   if(main) main.innerHTML=content;
-  if(modR) modR.innerHTML=mScore()+mChamp()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel();
   if(st.view==='stats') requestAnimationFrame(()=>{drawEvoChart();drawArtChart();drawArtFinalChart();drawGoalsChart();drawGoalsFinalChart();});
   navBtns.forEach(b=>b.classList.toggle('active',b.dataset.view===st.view));
 
@@ -2018,10 +2408,16 @@ function buildShell() {
   document.getElementById('app').innerHTML=`
     <header>
       <span class="hdr-logo">⚽</span>
-      <div>
+      <div style="flex:1">
         <div class="hdr-title">Série B — Aceoma</div>
         <div class="hdr-sub" id="hdrsub"></div>
       </div>
+      ${isAdmin()?`<button onclick="st.modal={type:'adminPanel',users:[]};loadAdminUsers();render()"
+        style="background:none;border:none;color:var(--text3);font-size:19px;cursor:pointer;padding:4px 6px;line-height:1"
+        title="Painel Admin">⚙️</button>`:''}
+      <button onclick="signOutUser()"
+        style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1"
+        title="Sair">🚪</button>
     </header>
     <main id="main"></main>
     <nav>
@@ -3091,8 +3487,8 @@ function vFinanceiro() {
         ? `<div style="font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:2px">••••••</div>`
         : `<div style="font-size:16px;font-weight:700;color:${previsao>=0?'var(--accent)':'var(--danger)'};margin-top:3px">${fmtR(previsao)}</div>`}
     </div>
-    <button onclick="st.modal={type:'finConfig',valorMensalidade:${valM},valorChurrasco:${valC},reserva:${reserva},saldoInicial:${cfg.saldoInicial||0},valorAvulso:${cfg.valorAvulso||20}};render()"
-      style="margin-top:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer">⚙️ Configurar valores</button>
+    ${isAdmin()?`<button onclick="st.modal={type:'finConfig',valorMensalidade:${valM},valorChurrasco:${valC},reserva:${reserva},saldoInicial:${cfg.saldoInicial||0},valorAvulso:${cfg.valorAvulso||20}};render()"
+      style="margin-top:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer">⚙️ Configurar valores</button>`:''}
   </div>
 
   ${evoRows.length > 1 ? `<div class="card" style="padding:0">
@@ -3141,12 +3537,13 @@ function vFinanceiro() {
       return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
         <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isCO?` <span style="font-size:10px;color:#FF8A3C">🍖</span>`:''}  </span>
         ${tot?`<span style="font-size:12px;color:var(--accent);font-weight:600">${fmtR(tot)}</span>`:`<span style="font-size:12px;color:var(--text3)">pendente</span>`}
-        ${isCO?'':`<button data-player="${esc(p.name)}" data-type="mensalidade" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
-          style="${btnS(pM)}">💵${pM?' ✓':''}</button>`}
-        <button data-player="${esc(p.name)}" data-type="churrasco" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
-          style="${btnS(pC)}">🍖${pC?' ✓':''}</button>
-        ${isCO?'':`<button data-player="${esc(p.name)}" onclick="togglePagamentoBoth(this.dataset.player)"
-          style="${btnS(pM&&pC)}">Ambos${pM&&pC?' ✓':''}</button>`}
+        ${isAdmin()?(isCO?'':`<button data-player="${esc(p.name)}" data-type="mensalidade" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
+          style="${btnS(pM)}">💵${pM?' ✓':''}</button>`):''}
+        ${isAdmin()?`<button data-player="${esc(p.name)}" data-type="churrasco" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
+          style="${btnS(pC)}">🍖${pC?' ✓':''}</button>`:''}
+        ${isAdmin()?(isCO?'':`<button data-player="${esc(p.name)}" onclick="togglePagamentoBoth(this.dataset.player)"
+          style="${btnS(pM&&pC)}">Ambos${pM&&pC?' ✓':''}</button>`):''}
+        ${!isAdmin()&&st.userDoc?.playerKey===playerKey(p.name)?`<span style="font-size:11px;font-weight:700;color:var(--accent);background:#00d67f18;padding:2px 8px;border-radius:10px">você</span>`:''}
       </div>`;
     }).join(''):`<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhum jogador ativo.</p>`}
   </div>
@@ -3159,8 +3556,8 @@ function vFinanceiro() {
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px 8px;border-bottom:1px solid var(--border2)">
       <span style="font-size:12px;color:#00d67f">✅ ${fmtR(despMesPagas)}</span>
-      <button onclick="st.modal={type:'finDespesa',descricao:'',valor:'',data:'${today()}',categoria:'Outro'};render()"
-        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Nova</button>
+      ${isAdmin()?`<button onclick="st.modal={type:'finDespesa',descricao:'',valor:'',data:'${today()}',categoria:'Outro'};render()"
+        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Nova</button>`:''}
       <span style="font-size:12px;color:var(--text3)">⏳ ${fmtR(despMesPend)}</span>
     </div>
     ${despMesAll.length
@@ -3174,10 +3571,10 @@ function vFinanceiro() {
               <div style="font-size:11px;color:var(--text3);margin-top:2px">${dd}/${dm}/${dy} · <span style="color:${catC[cat]||'#9EA7B3'}">${cat}</span></div>
             </div>
             <span style="font-weight:700;font-size:14px;color:${paga?'var(--danger)':'var(--text3)'};white-space:nowrap">${fmtR(d.valor)}</span>
-            <button data-id="${d.id}" data-paga="${paga}" data-occ="${d.occKey||''}" onclick="toggleDespesaPaga(this.dataset.id,this.dataset.paga==='true',this.dataset.occ||null)"
+            ${isAdmin()?`<button data-id="${d.id}" data-paga="${paga}" data-occ="${d.occKey||''}" onclick="toggleDespesaPaga(this.dataset.id,this.dataset.paga==='true',this.dataset.occ||null)"
               style="padding:4px 10px;border-radius:16px;border:1px solid ${paga?'var(--accent)':'var(--border)'};background:${paga?'#00d67f18':'none'};color:${paga?'var(--accent)':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">
               ${paga?'✓ Paga':'Pagar'}
-            </button>
+            </button>`:''}
             ${(()=>{
                 const expiredComp = d.comprovante && d.comprovanteAt &&
                   (new Date() - new Date(d.comprovanteAt)) > 39 * 86400000;
@@ -3192,21 +3589,22 @@ function vFinanceiro() {
                   return `<span style="display:inline-flex;align-items:center;gap:1px;flex-shrink:0">
                     <a href="${d.comprovante}" target="_blank" rel="noopener"
                        style="font-size:15px;padding:2px 3px;text-decoration:none" title="Ver comprovante">📎</a>
-                    <label style="cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Trocar comprovante">
+                    ${isAdmin()?`<label style="cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Trocar comprovante">
                       🔄<input type="file" accept="image/*,application/pdf" style="display:none"
                         onchange="uploadComprovante('${d.id}',this.files[0])">
                     </label>
                     <button data-id="${d.id}" onclick="deleteComprovante(this.dataset.id)"
-                      style="background:none;border:none;cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Excluir comprovante">✕</button>
+                      style="background:none;border:none;cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Excluir comprovante">✕</button>`:''}
                   </span>`;
                 }
+                if (!isAdmin()) return '';
                 return `<label style="cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0;color:var(--border)" title="Anexar comprovante">
                   📎<input type="file" accept="image/*,application/pdf" style="display:none"
                     onchange="uploadComprovante('${d.id}',this.files[0])">
                 </label>`;
               })()}
-            <button data-id="${d.id}" onclick="deleteDespesa(this.dataset.id)"
-              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>
+            ${isAdmin()?`<button data-id="${d.id}" onclick="deleteDespesa(this.dataset.id)"
+              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>`:''}
           </div>`;
         }).join('')
       : `<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhuma despesa em ${monthLabel}.</p>`}
@@ -3219,8 +3617,8 @@ function vFinanceiro() {
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px 8px;border-bottom:1px solid var(--border2)">
       <span style="font-size:12px;color:#00d67f">✅ ${fmtR(avulsosMesPagas)}</span>
-      <button onclick="st.modal={type:'finAvulso',nome:'',valor:${cfg.valorAvulso||20}};render()"
-        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Avulso</button>
+      ${isAdmin()?`<button onclick="st.modal={type:'finAvulso',nome:'',valor:${cfg.valorAvulso||20}};render()"
+        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Avulso</button>`:''}
       <span style="font-size:12px;color:var(--text3)">⏳ ${fmtR(avulsosMesPend)}</span>
     </div>
     ${avulsosMes.length
@@ -3229,12 +3627,12 @@ function vFinanceiro() {
           return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
             <span style="flex:1;font-size:14px;font-weight:600;opacity:${paga?1:.5}">${esc(a.nome||'')}</span>
             <span style="font-weight:700;font-size:14px;color:${paga?'var(--accent)':'var(--text3)'};white-space:nowrap">${fmtR(a.valor)}</span>
-            <button data-id="${a.id}" data-paga="${paga}" onclick="toggleAvulsoPaga(this.dataset.id,this.dataset.paga==='true')"
+            ${isAdmin()?`<button data-id="${a.id}" data-paga="${paga}" onclick="toggleAvulsoPaga(this.dataset.id,this.dataset.paga==='true')"
               style="padding:4px 10px;border-radius:16px;border:1px solid ${paga?'var(--accent)':'var(--border)'};background:${paga?'#00d67f18':'none'};color:${paga?'var(--accent)':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">
               ${paga?'✓ Pago':'Receber'}
             </button>
             <button data-id="${a.id}" onclick="deleteAvulso(this.dataset.id)"
-              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>
+              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>`:''}
           </div>`;
         }).join('')
       : `<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhum avulso em ${monthLabel}.</p>`}
@@ -3803,9 +4201,8 @@ function nextPlayerInput(i) {
 }
 
 /* ── init ────────────────────────────────────────────────────── */
-buildShell();
 render();
-initDB();
+initFirebase();
 </script>
 </body>
 </html>
