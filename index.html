@@ -1,0 +1,3811 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Série B — Aceoma</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script defer src="/_vercel/insights/script.js"></script>
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap">
+
+<style>
+/* ── tokens (dark-only design) ─────────────────────────────── */
+:root {
+  --bg:      #0d1117;
+  --s0:      #161b22;
+  --s1:      #1c2333;
+  --s2:      #21262d;
+  --border:  #30363d;
+  --border2: #21262d;
+  --text:    #e6edf3;
+  --text2:   #8b949e;
+  --text3:   #6e7681;
+  --accent:  #00d67f;
+  --gold:    #f0a500;
+  --danger:  #f85149;
+  --nav-h:   62px;
+  --hdr-h:   52px;
+  --r:       12px;
+  --r-sm:    8px;
+}
+
+/* ── reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* ── shell ─────────────────────────────────────────────────── */
+#app {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+header {
+  position: sticky; top: 0; z-index: 50;
+  height: var(--hdr-h);
+  background: var(--s0);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 10px;
+}
+.hdr-logo { font-size: 22px; }
+.hdr-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.hdr-sub { font-size: 11px; color: var(--text3); }
+
+main {
+  flex: 1;
+  padding: 14px 14px calc(var(--nav-h) + 14px);
+  overflow-y: auto;
+}
+
+nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 520px;
+  height: var(--nav-h);
+  background: var(--s0);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.nav-btn {
+  flex: 1; background: none; border: none;
+  color: var(--text3); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.2px; transition: color .15s;
+}
+.nav-btn .ni { font-size: 20px; line-height: 1; }
+.nav-btn.active { color: var(--accent); }
+
+/* ── cards ─────────────────────────────────────────────────── */
+.card {
+  background: var(--s0);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.card-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border2);
+}
+.card-lbl {
+  font-size: 11px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--text2);
+}
+.card-body { padding: 12px 14px; }
+
+/* ── chip ──────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 20px;
+  font-size: 12px; font-weight: 600; border: 1px solid;
+}
+
+/* ── section label ─────────────────────────────────────────── */
+.sec-lbl {
+  font-size: 11px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--text3);
+  padding: 14px 0 6px;
+}
+
+/* ── buttons ───────────────────────────────────────────────── */
+.btn {
+  display: block; width: 100%;
+  padding: 13px 16px; border-radius: var(--r-sm);
+  border: none; font-family: inherit; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s, transform .1s;
+  margin-top: 8px; text-align: center;
+}
+.btn:active { transform: scale(.97); opacity: .85; }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-gold    { background: var(--gold); color: #000; }
+.btn-ghost   { background: var(--s2); color: var(--text); }
+.btn-danger  { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn-sm { padding: 8px 12px; font-size: 13px; margin-top: 0; }
+.btn-inline { width: auto; display: inline-block; }
+
+/* ── match card ────────────────────────────────────────────── */
+.match-card {
+  background: var(--s1);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border2);
+  margin-bottom: 7px; overflow: hidden;
+  transition: border-color .15s;
+}
+.match-card.clickable { cursor: pointer; }
+.match-card.clickable:hover { border-color: var(--accent); }
+.match-row {
+  display: flex; align-items: center;
+  padding: 12px 14px; gap: 8px;
+}
+.match-team-col {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 15px;
+  overflow: hidden;
+}
+.match-team-col.right { justify-content: flex-end; flex-direction: row-reverse; }
+.t-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.t-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.match-score-box {
+  min-width: 64px; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.score-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 30px; line-height: 1;
+}
+.score-sep { color: var(--border); font-size: 20px; font-weight: 300; }
+.match-vs { font-size: 13px; color: var(--text3); font-weight: 500; }
+.phase-tag {
+  padding: 4px 14px; font-size: 11px; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase;
+}
+.final-tag  { background: #f0a50018; color: var(--gold); }
+.sf-tag     { background: #2f81f718; color: #4db8ff; }
+.rest-row {
+  padding: 0 14px 10px;
+  font-size: 12px; color: var(--text3);
+  display: flex; align-items: center; gap: 6px;
+}
+
+details[open] .det-arrow { transform: rotate(180deg); }
+.det-arrow { transition: transform .2s; display:inline-block; }
+.star-btn { background:none;border:none;cursor:pointer;font-size:17px;padding:0 1px;line-height:1;transition:color .1s; }
+.draw-team-card { background:var(--s1);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:8px; }
+.draw-team-name { font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px; }
+.draw-player-chip { display:inline-flex;align-items:center;gap:4px;background:var(--s2);border-radius:20px;padding:3px 9px;font-size:12px;font-weight:600;margin:2px; }
+
+/* ── standings ─────────────────────────────────────────────── */
+.standings-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.standings-table th {
+  padding: 8px 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase;
+  color: var(--text3); text-align: center; border-bottom: 1px solid var(--border2);
+}
+.standings-table th:first-child { padding-left: 14px; }
+.standings-table th:nth-child(2) { text-align: left; }
+.standings-table td { padding: 10px 6px; text-align: center; border-bottom: 1px solid var(--border2); }
+.standings-table td:first-child { padding-left: 14px; }
+.standings-table td:nth-child(2) { text-align: left; }
+.standings-table tr:last-child td { border-bottom: none; }
+.td-pts { font-weight: 800; font-size: 14px; }
+.td-pos { width: 32px; }
+.pos-num { font-weight: 700; font-size: 13px; }
+.sg-pos { color: #4DDA72; }
+.sg-neg { color: var(--danger); }
+.dot-sm { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; margin-right: 6px; }
+.zone-note { font-size: 11px; color: var(--text3); }
+
+/* ── champion banner ───────────────────────────────────────── */
+.champion-banner {
+  border-radius: var(--r); border: 1px solid;
+  padding: 24px 16px 20px;
+  text-align: center; margin-bottom: 10px;
+  background: linear-gradient(135deg, #0d1117, #161b22);
+}
+.champ-icon { font-size: 44px; margin-bottom: 6px; }
+.champ-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); }
+.champ-name { font-family: 'Bebas Neue', sans-serif; font-size: 48px; line-height: 1; margin-top: 2px; }
+.champ-players { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 14px; }
+.p-tag {
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: #ffffff12; color: var(--text2);
+}
+.p-tag.half { color: #f0883e; background: #f0883e12; }
+
+/* ── champ header bar ──────────────────────────────────────── */
+.champ-bar {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 10px; gap: 10px;
+}
+.champ-date { font-weight: 700; font-size: 17px; }
+.champ-fmt { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.chips-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; }
+
+/* ── create form ───────────────────────────────────────────── */
+.hint { font-size: 13px; color: var(--text2); padding: 12px 14px 8px; }
+.team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px 14px; }
+.team-chk-label {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px; border-radius: var(--r-sm);
+  border: 1.5px solid var(--border); cursor: pointer;
+  background: var(--s1); transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.team-chk-label input { display: none; }
+.chk-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; }
+.chk-name { font-weight: 600; font-size: 14px; }
+.fmt-hint {
+  margin: 0 14px 12px;
+  padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--s2); font-size: 13px; color: var(--text2); line-height: 1.5;
+}
+
+/* ── ranking table ─────────────────────────────────────────── */
+.rank-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.rank-table th {
+  padding: 8px 10px; font-size: 10px; font-weight: 700; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2);
+  text-align: center;
+}
+.rank-table th:nth-child(2) { text-align: left; }
+.rank-table td { padding: 11px 10px; border-bottom: 1px solid var(--border2); text-align: center; }
+.rank-table td:nth-child(2) { text-align: left; }
+.rank-table tr:last-child td { border-bottom: none; }
+.td-titles { font-weight: 800; font-size: 16px; }
+.td-date { font-size: 12px; color: var(--text2); }
+.half-frac { font-size: 11px; opacity: .7; }
+
+/* ── history ───────────────────────────────────────────────── */
+.hist-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border2);
+  cursor: pointer; transition: background .1s;
+}
+.hist-row:hover { background: var(--s1); }
+.hist-row:last-child { border-bottom: none; }
+.hist-date { font-size: 12px; color: var(--text3); min-width: 60px; }
+.hist-info { flex: 1; }
+.hist-teams { font-size: 12px; color: var(--text3); }
+.hist-champ { font-weight: 700; font-size: 14px; margin-top: 2px; }
+.hist-arrow { color: var(--text3); font-size: 18px; }
+
+/* ── modals ────────────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.75); z-index: 200;
+  display: flex; align-items: flex-end;
+  padding: 0;
+}
+.sheet {
+  background: var(--s0);
+  border-radius: 18px 18px 0 0;
+  border-top: 1px solid var(--border);
+  width: 100%; max-width: 520px;
+  margin: 0 auto;
+  padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  max-height: 90dvh; overflow-y: auto;
+  animation: slideUp .25s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: 0 auto 16px;
+}
+
+/* score modal */
+.score-vs-row {
+  display: flex; align-items: center;
+  justify-content: center; gap: 20px;
+  padding: 16px 0 8px;
+}
+.score-team-col { display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 1; }
+.score-team-nm { font-weight: 700; font-size: 16px; text-align: center; }
+.score-stepper { display: flex; align-items: center; gap: 12px; }
+.step-btn {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: var(--s2); border: 1px solid var(--border);
+  color: var(--text); font-size: 24px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .1s;
+}
+.step-btn:active { background: var(--border); }
+.step-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 52px; line-height: 1; min-width: 48px; text-align: center;
+}
+.score-x { font-size: 20px; color: var(--text3); align-self: flex-end; padding-bottom: 14px; }
+
+/* champion modal */
+.champ-modal-hdr { text-align: center; padding: 8px 0 16px; }
+.champ-modal-name { font-family: 'Bebas Neue', sans-serif; font-size: 42px; line-height: 1; margin-top: 4px; }
+.champ-modal-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+.player-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; border-bottom: 1px solid var(--border2);
+}
+.player-input {
+  flex: 1; background: var(--s2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 12px;
+  color: var(--text); font-family: inherit; font-size: 14px;
+  outline: none; transition: border-color .15s;
+}
+.player-input:focus { border-color: var(--accent); }
+.weight-btns { display: flex; gap: 4px; }
+.wbtn {
+  padding: 8px 11px; border-radius: 8px;
+  border: 1px solid var(--border); background: none;
+  color: var(--text2); font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background .1s, color .1s;
+}
+.wbtn.on { background: var(--accent); border-color: var(--accent); color: #000; }
+.add-player-btn { background: none; color: var(--text2); border: 1px dashed var(--border); margin-top: 10px; }
+
+/* ── empty / loading ───────────────────────────────────────── */
+.empty { text-align: center; padding: 60px 24px; }
+.empty .ei { font-size: 52px; margin-bottom: 14px; }
+.empty h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.empty p { font-size: 14px; color: var(--text2); line-height: 1.5; margin-bottom: 24px; }
+.loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 60px; color: var(--text2); }
+.spinner { width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+  .sheet { animation: none; }
+}
+
+/* ── toast ─────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: calc(var(--nav-h) + 14px);
+  left: 50%; transform: translateX(-50%);
+  background: var(--s1); border: 1px solid var(--border);
+  color: var(--text); padding: 10px 16px; border-radius: 10px;
+  font-size: 14px; font-weight: 500; z-index: 500;
+  max-width: 88%; text-align: center; pointer-events: none;
+  animation: fadeUp .2s ease;
+}
+.toast.err { border-color: var(--danger); color: #ff8080; }
+.toast.ok  { border-color: var(--accent); color: var(--accent); }
+@keyframes fadeUp {
+  from { opacity:0; transform:translateX(-50%) translateY(8px); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+
+/* ── round label ────────────────────────────────────────────── */
+.round-lbl {
+  font-size: 10px; font-weight: 700; letter-spacing: .7px;
+  text-transform: uppercase; color: var(--text3);
+  padding: 8px 0 4px; opacity: .8;
+}
+
+/* ── active-champ warning in create ────────────────────────── */
+.warn-box {
+  margin: 8px 14px 0; padding: 10px 12px;
+  border-radius: var(--r-sm); border-left: 3px solid var(--danger);
+  background: #f8514910; font-size: 13px; color: #ff8080; line-height: 1.4;
+}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<!-- Cloudinary upload (no Firebase Storage needed) -->
+<script>
+const CLOUDINARY_CLOUD = 'fwtyio7l';
+const CLOUDINARY_PRESET = 'aceoma_uploads';
+async function cloudinaryUpload(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`, {method:'POST', body:fd});
+  if (!res.ok) throw new Error('Upload falhou: ' + res.status);
+  const data = await res.json();
+  return data.secure_url;
+}
+</script>
+
+<script>
+'use strict';
+
+/* ── Firebase config ────────────────────────────────────────── */
+const firebaseConfig = {
+  apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
+  authDomain: "seriebaceoma.firebaseapp.com",
+  projectId: "seriebaceoma",
+  storageBucket: "seriebaceoma.firebasestorage.app",
+  messagingSenderId: "354275671624",
+  appId: "1:354275671624:web:e2318f3726e6c9487b627d"
+};
+
+/* ── teams ──────────────────────────────────────────────────── */
+const T = {
+  azul:     { l: 'Azul',     c: '#4DB8FF' },
+  preto:    { l: 'Preto',    c: '#9EA7B3' },
+  amarelo:  { l: 'Amarelo',  c: '#F5C842' },
+  vermelho: { l: 'Vermelho', c: '#FF5C5C' },
+  laranja:  { l: 'Laranja',  c: '#FF8A3C' },
+  verde:    { l: 'Verde',    c: '#4DDA72' },
+};
+const FMT = { 3:'Vira (3 times)', 4:'Todos contra todos', 5:'Fase de grupos + Semis' };
+
+/* ── state ──────────────────────────────────────────────────── */
+const st = {
+  view: 'home',
+  champs: [],
+  ranks: [],
+  players: [],
+  modal: null,
+  histId: null,
+  confirmDelete: null,
+  rankFilter: {type:'all', val:null},
+  statsFilter: {minTitles: 0, player: ''},
+  showInactive: false,
+  ready: false,
+  drawNumTeams: 3,
+  drawMode: 'balanced',
+  drawExtras: [],
+  drawAbsent: [],
+  drawResult: null,
+  drawTeamColors: [],
+  drawOpen: false,
+  createPresetTeams: [],
+  createRosters: {},
+  playerTeamMap: {},
+  finCfg: {valorMensalidade: 50, valorChurrasco: 0, saldoInicial: 0, reserva: 300, valorAvulso: 20},
+  finMens: {},
+  finDesp: [],
+  finAvulsos: [],
+  finMonth: new Date().toISOString().slice(0,7),
+  finPrevisaoOculta: true,
+};
+
+/* ── helpers ────────────────────────────────────────────────── */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const today = () => new Date().toISOString().slice(0,10);
+const fdt = d => { if(!d)return''; const[y,m,dy]=d.split('-'); return `${dy}/${m}/${y}`; };
+const tc = t => T[t]?.c || '#8B949E';
+const tl = t => T[t]?.l || t;
+const activeChamp = () => st.champs.find(c => c.status === 'active');
+
+/* ── championship logic (pure) ──────────────────────────────── */
+function genRoundRobinRounds(teams) {
+  const n = teams.length;
+  const rounds = [];
+  if (n % 2 === 0) {
+    const fixed = teams[0];
+    let rot = teams.slice(1);
+    for (let r = 0; r < n - 1; r++) {
+      const pairs = [[fixed, rot[0]]];
+      for (let i = 1; i < n / 2; i++) pairs.push([rot[i], rot[n - 1 - i]]);
+      rounds.push(pairs);
+      rot = [...rot.slice(1), rot[0]];
+    }
+  } else {
+    let rot = [...teams];
+    for (let r = 0; r < n; r++) {
+      const pairs = [];
+      for (let i = 1; i <= (n - 1) / 2; i++) pairs.push([rot[i], rot[n - i]]);
+      rounds.push(pairs);
+      rot = [...rot.slice(1), rot[0]];
+    }
+  }
+  return rounds;
+}
+
+function genMatches(teams, fmt) {
+  const ms = [];
+  if (fmt === 3) {
+    ms.push({ id:`m_${uid()}`, home:teams[0], away:teams[1], rest:teams[2], hs:null, as:null, phase:'regular', seq:1, played:false });
+  } else {
+    const rounds = genRoundRobinRounds(teams);
+    const legs = fmt === 4 ? 2 : 1;
+    let n = 0;
+    for (let lg = 0; lg < legs; lg++) {
+      for (let r = 0; r < rounds.length; r++) {
+        for (const [h, a] of rounds[r]) {
+          ms.push({
+            id: `m_${++n}`,
+            home: lg === 0 ? h : a,
+            away: lg === 0 ? a : h,
+            hs: null, as: null,
+            phase: 'regular',
+            leg: fmt === 4 ? lg + 1 : null,
+            round: r + 1,
+            played: false,
+          });
+        }
+      }
+    }
+  }
+  return ms;
+}
+
+function standings(teams, matches) {
+  const s = Object.fromEntries(teams.map(t=>[t,{team:t,j:0,v:0,e:0,d:0,gp:0,gc:0,pts:0}]));
+  for (const m of matches) {
+    if (!m.played || m.phase!=='regular' || m.hs==null) continue;
+    const h=s[m.home], a=s[m.away];
+    if (!h||!a) continue;
+    h.j++; a.j++; h.gp+=m.hs; h.gc+=m.as; a.gp+=m.as; a.gc+=m.hs;
+    if (m.hs>m.as)       { h.v++; h.pts+=3; a.d++; }
+    else if (m.as>m.hs)  { a.v++; a.pts+=3; h.d++; }
+    else                 { h.e++; h.pts++;  a.e++; a.pts++; }
+  }
+  return Object.values(s).sort((a,b)=>{
+    if (b.pts!==a.pts) return b.pts-a.pts;
+    const sa=a.gp-a.gc, sb=b.gp-b.gc;
+    return sb!==sa ? sb-sa : b.gp-a.gp;
+  });
+}
+
+function next3(matches) {
+  const done = matches.filter(m=>m.phase==='regular'&&m.played).sort((a,b)=>b.seq-a.seq);
+  if (!done.length) return null;
+  const last=done[0];
+  const winner=last.hs>last.as?last.home:last.away;
+  const loser =last.hs>last.as?last.away:last.home;
+  return { id:`m_${uid()}`, home:winner, away:last.rest, rest:loser, hs:null,as:null, phase:'regular', seq:last.seq+1, played:false };
+}
+
+function champion(matches) {
+  const f=matches.find(m=>m.phase==='final'&&m.played);
+  if (!f||f.hs===f.as) return null;
+  return f.hs>f.as?f.home:f.away;
+}
+
+/* ── db (Firebase) ──────────────────────────────────────────── */
+let DB = null;
+
+function initDB() {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    DB = firebase.firestore();
+
+    DB.collection('championships').onSnapshot(snap => {
+      st.champs = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>b.date.localeCompare(a.date));
+      st.ready = true;
+      render();
+    }, () => { st.ready = true; render(); });
+
+    DB.collection('player_titles').onSnapshot(snap => {
+      st.ranks = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=> b.titles!==a.titles ? b.titles-a.titles : (a.last_date||'').localeCompare(b.last_date||''));
+      render();
+    }, ()=>{});
+
+    DB.collection('player_registry').onSnapshot(snap => {
+      st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
+      render();
+    }, ()=>{});
+
+    DB.collection('financeiro_config').onSnapshot(snap => {
+      const doc = snap.docs.find(d=>d.id==='main');
+      const data = doc ? doc.data() : {};
+      st.finCfg = {
+        valorMensalidade: data.valorMensalidade ?? data.valor ?? 50,
+        valorChurrasco: data.valorChurrasco ?? 0,
+        reserva: data.reserva ?? 300,
+        saldoInicial: data.saldoInicial ?? 0,
+        valorAvulso: data.valorAvulso ?? 20,
+      };
+      if(st.view==='financeiro') render();
+    }, ()=>{});
+
+    DB.collection('financeiro_mensalidades').onSnapshot(snap => {
+      st.finMens = {};
+      snap.docs.forEach(d=>{ st.finMens[d.id]=d.data(); });
+      if(st.view==='financeiro') render();
+    }, ()=>{});
+
+    DB.collection('financeiro_despesas').onSnapshot(snap => {
+      st.finDesp = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+      if(st.view==='financeiro') render();
+    }, ()=>{});
+
+  } catch(e) {
+    st.ready = true;
+    render();
+    toast('Erro ao conectar: ' + (e?.message || e));
+  }
+}
+
+/* ── async actions ──────────────────────────────────────────── */
+async function abandonActive() {
+  const active = activeChamp();
+  if (active) {
+    try { await DB.doc(`championships/${active.id}`).update({status:'abandoned'}); } catch(e) {}
+  }
+}
+
+async function createChampionship(teams, date=today()) {
+  if (!DB) { toast('Banco de dados não conectado. Recarregue a página.'); return; }
+  const btn = document.getElementById('dobtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Criando...'; }
+  try {
+    await abandonActive();
+    const id = uid();
+    let rosters = null;
+    if (st.createRosters && Object.keys(st.createRosters).length) {
+      rosters = st.createRosters;
+    } else if (st.playerTeamMap && Object.keys(st.playerTeamMap).length) {
+      rosters = {};
+      for (const [player, team] of Object.entries(st.playerTeamMap)) {
+        if (!rosters[team]) rosters[team] = [];
+        rosters[team].push(player);
+      }
+    }
+    await DB.doc(`championships/${id}`).set({
+      date, teams, format: teams.length, status:'active',
+      matches: genMatches(teams, teams.length),
+      champion:null, champion_players:null, regularEnded:false,
+      ...(rosters ? {teamRosters: rosters} : {}),
+    });
+    st.createPresetTeams = []; st.createRosters = {}; st.playerTeamMap = {};
+    st.view='home'; st.modal=null; render();
+  } catch(e) {
+    toast('Erro ao criar campeonato: ' + (e?.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = `Criar com ${teams.length} Times`; }
+  }
+}
+
+async function createHistoricalChamp(teams, date, champTeam) {
+  if (!DB) { toast('Banco de dados não conectado.'); return; }
+  const btn = document.getElementById('dobtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+  const id = uid();
+  st.modal = {type:'champion', champion:champTeam, players:defPlayers(), champId:id, champDate:date};
+  st.view = 'home';
+  try {
+    await abandonActive();
+    await DB.doc(`championships/${id}`).set({
+      date, teams, format:teams.length, status:'active',
+      matches:[], champion:null, champion_players:null, regularEnded:true,
+    });
+    render();
+  } catch(e) {
+    st.modal = null;
+    toast('Erro ao salvar: ' + (e?.message||e));
+    if (btn) { btn.disabled=false; btn.textContent='Registrar'; }
+  }
+}
+
+async function submitScore(matchId, hs, as_, goals=[]) {
+  if (!DB) return;
+  const champ = activeChamp();
+  if (!champ) return;
+  try {
+    const ref = DB.doc(`championships/${champ.id}`);
+    const fmt = champ.format;
+    const wasPlayed = champ.matches.find(m=>m.id===matchId)?.played || false;
+    const matches = champ.matches.map(m => m.id===matchId ? {...m,hs,as:as_,played:true,goals} : {...m});
+    const mi = matches.findIndex(m=>m.id===matchId);
+
+    if (!wasPlayed) {
+      if (fmt===3 && matches[mi].phase==='regular' && !champ.regularEnded) {
+        const nxt = next3(matches);
+        if (nxt) matches.push(nxt);
+      }
+
+      if (fmt===4) {
+        const regDone = matches.filter(m=>m.phase==='regular').every(m=>m.played);
+        if (regDone && !matches.some(m=>m.phase==='final')) {
+          const st2 = standings(champ.teams, matches);
+          matches.push({id:'final',home:st2[0].team,away:st2[1].team,hs:null,as:null,phase:'final',played:false});
+        }
+      }
+
+      if (fmt===5) {
+        const regDone = matches.filter(m=>m.phase==='regular').every(m=>m.played);
+        if (regDone && !matches.some(m=>m.phase==='semifinal')) {
+          const st2 = standings(champ.teams, matches);
+          matches.push(
+            {id:'sf1',home:st2[0].team,away:st2[3].team,hs:null,as:null,phase:'semifinal',played:false},
+            {id:'sf2',home:st2[1].team,away:st2[2].team,hs:null,as:null,phase:'semifinal',played:false}
+          );
+        }
+        const sfs = matches.filter(m=>m.phase==='semifinal');
+        if (sfs.length===2 && sfs.every(m=>m.played) && !matches.some(m=>m.phase==='final')) {
+          const w1=sfs[0].hs>sfs[0].as?sfs[0].home:sfs[0].away;
+          const w2=sfs[1].hs>sfs[1].as?sfs[1].home:sfs[1].away;
+          matches.push({id:'final',home:w1,away:w2,hs:null,as:null,phase:'final',played:false});
+        }
+      }
+    }
+
+    await ref.update({matches});
+    st.modal = null;
+
+    if (!wasPlayed && matches[mi].phase==='final') {
+      const champ2 = hs>as_?matches[mi].home:matches[mi].away;
+      st.modal = {type:'champion', champion:champ2, players:defPlayers()};
+    }
+    render();
+  } catch(e) { toast('Erro ao salvar placar: ' + (e?.message||e)); }
+}
+
+async function endRegular() {
+  if (!DB) { toast('Banco de dados não conectado.'); return; }
+  const champ = activeChamp();
+  if (!champ) return;
+  try {
+    const ref = DB.doc(`championships/${champ.id}`);
+    const matches = champ.matches.filter(m=>!(m.phase==='regular'&&!m.played));
+    const st2 = standings(champ.teams, matches);
+    matches.push({id:'final',home:st2[0].team,away:st2[1].team,hs:null,as:null,phase:'final',played:false});
+    await ref.update({matches, regularEnded:true});
+  } catch(e) { toast('Erro ao encerrar fase: ' + (e?.message||e)); }
+}
+
+async function saveChampion() {
+  if (!DB||!st.modal?.players) return;
+
+  document.querySelectorAll('#plist .player-input').forEach((inp,i) => {
+    if (st.modal.players[i]) st.modal.players[i].name = inp.value;
+  });
+
+  const snap = JSON.parse(JSON.stringify(st.modal));
+
+  let champId, champDate;
+  if (snap.champId) {
+    champId = snap.champId;
+    champDate = snap.champDate || today();
+  } else {
+    const champ = activeChamp();
+    if (!champ) return;
+    champId = champ.id;
+    champDate = champ.date;
+  }
+
+  const players = snap.players.filter(p=>p.name.trim());
+  if (!players.length) { toast('Adicione ao menos um jogador.'); return; }
+
+  st.modal = {type:'saving'};
+  render();
+
+  try {
+    const champTeam = snap.champion;
+    await DB.doc(`championships/${champId}`).update({status:'completed', champion:champTeam, champion_players:players});
+
+    for (const p of players) {
+      const key = playerKey(p.name.trim());
+      if (!key) continue;
+      const pref = DB.doc(`player_titles/${key}`);
+      const ex = await pref.get();
+      const entry = {date:champDate, weight:p.weight, team:champTeam, champId};
+      if (ex.exists) {
+        const d = ex.data();
+        const allEntries = [...(d.entries||[]), entry];
+        const last_date = allEntries.reduce((ld,e)=>e.date>ld?e.date:ld, '');
+        await pref.update({name:p.name.trim(), titles:(d.titles||0)+p.weight, last_date, entries:allEntries});
+      } else {
+        await pref.set({name:p.name.trim(), titles:p.weight, last_date:champDate, entries:[entry]});
+      }
+    }
+    st.modal = null;
+    render();
+  } catch(e) {
+    st.modal = snap;
+    render();
+    toast('Erro ao salvar campeão: ' + (e?.message||e));
+  }
+}
+
+async function swapMatchesInChamp(champId, mId1, mId2) {
+  const champ = st.champs.find(c=>c.id===champId);
+  if (!champ) return;
+  const matches = [...champ.matches];
+  const i1=matches.findIndex(m=>m.id===mId1), i2=matches.findIndex(m=>m.id===mId2);
+  if (i1<0||i2<0) return;
+  [matches[i1],matches[i2]]=[matches[i2],matches[i1]];
+  try { await DB.doc(`championships/${champId}`).update({matches}); }
+  catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function swapRoundsInChamp(champId, r1, r2) {
+  const champ = st.champs.find(c=>c.id===champId);
+  if (!champ) return;
+  const matches = champ.matches.map(m => {
+    if (m.round===r1) return {...m,round:r2};
+    if (m.round===r2) return {...m,round:r1};
+    return m;
+  });
+  try { await DB.doc(`championships/${champId}`).update({matches}); }
+  catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function deleteChampionship(id) {
+  if (!DB) { toast('Banco de dados não conectado.'); return; }
+  const champ = st.champs.find(c => c.id === id);
+  if (!champ) return;
+  try {
+    if (champ.status === 'completed' && champ.champion_players?.length) {
+      for (const p of champ.champion_players) {
+        const key = playerKey(p.name.trim());
+        if (!key) continue;
+        const pref = DB.doc(`player_titles/${key}`);
+        const ex = await pref.get();
+        if (!ex.exists) continue;
+        const d = ex.data();
+        const entries = (d.entries||[]).filter(e =>
+          e.champId ? e.champId !== id
+                    : !(e.date===champ.date && e.team===champ.champion && e.weight===p.weight)
+        );
+        if (!entries.length) {
+          await pref.delete();
+        } else {
+          const titles = entries.reduce((s,e)=>s+e.weight, 0);
+          const last_date = entries.reduce((ld,e)=>e.date>ld?e.date:ld, '');
+          await pref.update({titles, last_date, entries});
+        }
+      }
+    }
+    await DB.doc(`championships/${id}`).delete();
+    st.histId = null;
+    st.confirmDelete = null;
+    toast('Campeonato excluído.', 'ok');
+  } catch(e) {
+    toast('Erro ao excluir: ' + (e?.message||e));
+  }
+}
+
+function defPlayers() {
+  return Array.from({length:5}, ()=>({name:'',weight:1}));
+}
+
+const playerKey = name => name.trim().toLowerCase().normalize('NFD')
+  .replace(/[̀-ͯ]/g,'').replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'').slice(0,80);
+
+async function addRegisteredPlayer(name) {
+  if (!DB || !name.trim()) return;
+  const key = playerKey(name);
+  if (!key) { toast('Nome inválido.'); return; }
+  try {
+    await DB.doc(`player_registry/${key}`).set({name:name.trim(), added:today()});
+    toast('Jogador adicionado!', 'ok');
+  } catch(e) { toast('Erro ao salvar jogador: ' + (e?.message||e)); }
+}
+
+async function deleteRegisteredPlayer(key) {
+  if (!DB) return;
+  try {
+    await DB.doc(`player_registry/${key}`).delete();
+  } catch(e) { toast('Erro ao remover: ' + (e?.message||e)); }
+}
+
+async function renamePlayer() {
+  const m = st.modal;
+  if (!m || !m.id || !DB) return;
+  const newName = (m.newName||'').trim();
+  const oldName = m.name;
+  if (!newName) { toast('Informe o nome.'); return; }
+  if (newName === oldName) { closeModal(); return; }
+  const newKey = playerKey(newName);
+  const oldKey = m.id;
+  if (!newKey) { toast('Nome inválido.'); return; }
+  try {
+    const old = st.players.find(p=>p.id===oldKey) || {};
+
+    // 1. player_registry
+    if (newKey !== oldKey) {
+      const regData = {name: newName, added: old.added||today(), active: old.active!==false};
+      if (old.stars != null) regData.stars = old.stars;
+      await DB.doc(`player_registry/${newKey}`).set(regData);
+      await DB.doc(`player_registry/${oldKey}`).delete();
+    } else {
+      await DB.doc(`player_registry/${oldKey}`).update({name: newName});
+    }
+
+    // 2. player_titles (keyed by sanitized name — migrate key + update name field)
+    if (newKey !== oldKey) {
+      const titlesDoc = await DB.doc(`player_titles/${oldKey}`).get();
+      if (titlesDoc.exists) {
+        await DB.doc(`player_titles/${newKey}`).set({...titlesDoc.data(), name: newName});
+        await DB.doc(`player_titles/${oldKey}`).delete();
+      }
+    } else {
+      // Same sanitized key — just update the display name in player_titles
+      const titlesDoc = await DB.doc(`player_titles/${oldKey}`).get();
+      if (titlesDoc.exists) await DB.doc(`player_titles/${oldKey}`).update({name: newName});
+    }
+
+    // 3. financeiro_mensalidades (payments keyed by display name)
+    const updates = [];
+    for (const [month, data] of Object.entries(st.finMens||{})) {
+      const pags = data?.pagamentos || {};
+      if (Object.prototype.hasOwnProperty.call(pags, oldName)) {
+        const newPags = {...pags, [newName]: pags[oldName]};
+        delete newPags[oldName];
+        updates.push(DB.doc(`financeiro_mensalidades/${month}`).update({pagamentos: newPags}));
+      }
+    }
+
+    // 4. championships — champion_players (keyed by display name)
+    for (const champ of (st.champs||[])) {
+      if (!champ.champion_players?.some(p=>p.name===oldName)) continue;
+      const newPlayers = champ.champion_players.map(p=>p.name===oldName?{...p,name:newName}:p);
+      updates.push(DB.doc(`championships/${champ.id}`).update({champion_players: newPlayers}));
+    }
+
+    await Promise.all(updates);
+
+    st.modal = null;
+    render();
+    toast('Nome atualizado!', 'ok');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+function mRenamePlayer() {
+  const m = st.modal;
+  if (!m || m.type!=='renamePlayer') return '';
+  const inp = `width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:15px;font-weight:600`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px">✏️ Renomear jogador</div>
+      <div style="margin-bottom:24px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Novo nome</label>
+        <input type="text" value="${esc(m.newName||m.name)}"
+          oninput="st.modal.newName=this.value"
+          onkeydown="if(event.key==='Enter')renamePlayer()"
+          style="${inp}" autofocus>
+      </div>
+      <button onclick="renamePlayer()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+      <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:10px;border:none;background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;margin-top:8px">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+async function togglePlayerActive(id, isActive) {
+  if (!DB) return;
+  try {
+    await DB.doc(`player_registry/${id}`).update({active: !isActive});
+  } catch(e) { toast('Erro ao atualizar: ' + (e?.message||e)); }
+}
+
+async function togglePlayerChurrasco(id, current) {
+  if (!DB) return;
+  try {
+    await DB.doc(`player_registry/${id}`).update({somenteChurrasco: !current});
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function setPlayerStars(id, stars) {
+  if (!DB) return;
+  try {
+    await DB.doc(`player_registry/${id}`).update({stars});
+  } catch(e) { toast('Erro ao salvar avaliação: ' + (e?.message||e)); }
+}
+
+function toggleDrawAbsent(id) {
+  const i = st.drawAbsent.indexOf(id);
+  if (i >= 0) st.drawAbsent.splice(i, 1);
+  else st.drawAbsent.push(id);
+  st.drawResult = null;
+  // DOM update only — no full render so <details> stays open
+  const active = st.players.filter(p=>p.active!==false);
+  const extraCount2 = (st.drawExtras||[]).filter(n=>n.trim()).length;
+  const presentCount = active.length - st.drawAbsent.length + extraCount2;
+  const countEl = document.getElementById('draw-present-count');
+  if (countEl) countEl.textContent = `Marque quem está presente hoje (${active.length - st.drawAbsent.length} de ${active.length}${extraCount2?` · ${extraCount2} avulso${extraCount2!==1?'s':''}`:''})  `;
+  const btn = document.getElementById('draw-run-btn');
+  if (btn) { const ok = presentCount>=st.drawNumTeams; btn.disabled=!ok; btn.style.opacity=ok?'1':'0.4'; }
+  const resEl = document.getElementById('draw-result');
+  if (resEl) resEl.innerHTML = '';
+}
+
+function setDrawNumTeams(n) {
+  st.drawNumTeams = n;
+  st.drawResult = null;
+  render();
+}
+
+function balancedDraw(players, n) {
+  /* shuffle within same-star tiers for randomness, then snake draft + swap */
+  const byStars = {};
+  for (const p of players) {
+    const s = p.stars || 3;
+    if (!byStars[s]) byStars[s] = [];
+    byStars[s].push(p);
+  }
+  for (const arr of Object.values(byStars)) {
+    for (let i = arr.length-1; i > 0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+  }
+  const sorted = [5,4,3,2,1].flatMap(s => byStars[s]||[]);
+
+  const teams = Array.from({length:n}, ()=>[]);
+  const sums = new Array(n).fill(0);
+  let dir = 1, idx = 0;
+  for (const p of sorted) {
+    teams[idx].push(p);
+    sums[idx] += p.stars || 3;
+    idx += dir;
+    if (idx >= n) { idx = n-1; dir = -1; }
+    else if (idx < 0) { idx = 0; dir = 1; }
+  }
+
+  /* swap optimization: minimize range(sums) */
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < n && !improved; i++) {
+      for (let j = i+1; j < n && !improved; j++) {
+        for (let pi = 0; pi < teams[i].length && !improved; pi++) {
+          for (let pj = 0; pj < teams[j].length && !improved; pj++) {
+            const si = teams[i][pi].stars||3, sj = teams[j][pj].stars||3;
+            if (si === sj) continue;
+            const ns = [...sums]; ns[i]=ns[i]-si+sj; ns[j]=ns[j]-sj+si;
+            if (Math.max(...ns)-Math.min(...ns) < Math.max(...sums)-Math.min(...sums)) {
+              [teams[i][pi],teams[j][pj]] = [teams[j][pj],teams[i][pi]];
+              sums[i]=ns[i]; sums[j]=ns[j];
+              improved = true;
+            }
+          }
+        }
+      }
+    }
+  }
+  return {teams, sums};
+}
+
+function setDrawTeamColor(teamIdx, colorId) {
+  st.drawTeamColors[teamIdx] = st.drawTeamColors[teamIdx] === colorId ? '' : colorId;
+  render();
+}
+
+
+function getPlayerDrawStats(name) {
+  const rank = st.ranks.find(r => r.name === name);
+  const {tally} = computeGoalsRanking();
+  return {
+    titles: rank?.titles || 0,
+    last_date: rank?.last_date || null,
+    goals: tally[name] || 0,
+  };
+}
+
+function randomDraw(players, n) {
+  const shuffled = [...players];
+  for (let i = shuffled.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [shuffled[i],shuffled[j]] = [shuffled[j],shuffled[i]];
+  }
+  const teams = Array.from({length:n}, ()=>[]);
+  const sums  = new Array(n).fill(0);
+  shuffled.forEach((p,i) => { const t=i%n; teams[t].push(p); sums[t]+=(p.stars||3); });
+  return {teams, sums};
+}
+
+function addDrawExtra() {
+  const inp = document.getElementById('extra-inp');
+  if (!inp || !inp.value.trim()) return;
+  if (!st.drawExtras) st.drawExtras = [];
+  st.drawExtras.push(inp.value.trim());
+  inp.value = '';
+  st.drawResult = null;
+  render();
+}
+
+function removeDrawExtra(idx) {
+  if (!st.drawExtras) return;
+  st.drawExtras.splice(idx, 1);
+  st.drawResult = null;
+  render();
+}
+
+
+function runBalancedDraw() {
+  const absentSet = new Set(st.drawAbsent);
+  const present = st.players.filter(p=>p.active!==false && !absentSet.has(p.id));
+  const extras = (st.drawExtras||[]).filter(n=>n.trim()).map(n=>({name:n.trim(),stars:0,id:'_extra_'+n}));
+  const allPresent = [...present, ...extras];
+  if (allPresent.length < st.drawNumTeams) { toast('Jogadores insuficientes'); return; }
+  st.drawResult = st.drawMode === 'random'
+    ? randomDraw(allPresent, st.drawNumTeams)
+    : balancedDraw(allPresent, st.drawNumTeams);
+  st.drawTeamColors = new Array(st.drawNumTeams).fill('');
+  render();
+}
+
+
+async function importPlayersFromRanking() {
+  if (!DB || !st.ranks.length) return;
+  const existing = new Set(st.players.map(p=>p.name.trim()));
+  const toAdd = st.ranks.filter(r=>r.name&&!existing.has(r.name.trim()));
+  if (!toAdd.length) { toast('Todos os jogadores do ranking já estão no elenco.'); return; }
+  try {
+    for (const r of toAdd) {
+      const key = playerKey(r.name);
+      if (!key) continue;
+      await DB.doc(`player_registry/${key}`).set({name:r.name.trim(), added:today(), active:true});
+    }
+    toast(`${toAdd.length} jogadores importados!`, 'ok');
+  } catch(e) { toast('Erro ao importar: ' + (e?.message||e)); }
+}
+
+function addPfromInput() {
+  const inp = document.getElementById('newp-inp');
+  if (!inp || !inp.value.trim()) return;
+  addRegisteredPlayer(inp.value);
+  inp.value = '';
+}
+
+/* ── render helpers ─────────────────────────────────────────── */
+function chip(team, sm=false) {
+  const t=T[team]; if(!t)return team;
+  const sz=sm?'font-size:11px;padding:2px 7px;gap:4px':'font-size:13px;padding:3px 9px;gap:5px';
+  const d=sm?6:8;
+  return `<span class="chip" style="${sz};border-color:${t.c}25;background:${t.c}12;color:${t.c}">
+    <span style="width:${d}px;height:${d}px;border-radius:50%;background:${t.c};display:inline-block;flex-shrink:0"></span>${t.l}</span>`;
+}
+
+function matchCard(m, interactive=true) {
+  const ht=T[m.home]||{l:m.home,c:'#8B949E'};
+  const at=T[m.away]||{l:m.away,c:'#8B949E'};
+  const phaseTag = m.phase==='final'
+    ? `<div class="phase-tag final-tag">🏆 Final</div>`
+    : m.phase==='semifinal'
+    ? `<div class="phase-tag sf-tag">⚡ Semifinal</div>` : '';
+  const score = m.played
+    ? `<span class="score-num" style="color:${m.hs>m.as?'#4DDA72':m.hs<m.as?'#FF5C5C':'#8B949E'}">${m.hs}</span>
+       <span class="score-sep">–</span>
+       <span class="score-num" style="color:${m.as>m.hs?'#4DDA72':m.as<m.hs?'#FF5C5C':'#8B949E'}">${m.as}</span>`
+    : `<span class="match-vs">vs</span>`;
+  const clk = interactive&&!m.played ? `onclick="openScore('${m.id}')"` : '';
+  const editBtn = interactive&&m.played
+    ? `<button onclick="event.stopPropagation();editScore('${m.id}')"
+        style="position:absolute;top:6px;right:8px;background:none;border:none;
+               color:var(--text3);font-size:13px;cursor:pointer;padding:2px 4px;
+               border-radius:4px;line-height:1" title="Editar placar">✎</button>` : '';
+  const restRow = m.rest
+    ? `<div class="rest-row">${chip(m.rest,true)}<span>descansa</span></div>` : '';
+  return `<div class="match-card${!m.played&&interactive?' clickable':''}" style="position:relative" ${clk}>
+    ${phaseTag}
+    ${editBtn}
+    <div class="match-row">
+      <div class="match-team-col" style="color:${ht.c}">
+        <span class="t-dot" style="background:${ht.c}"></span>
+        <span class="t-name">${ht.l}</span>
+      </div>
+      <div class="match-score-box">${score}</div>
+      <div class="match-team-col right" style="color:${at.c}">
+        <span class="t-name">${at.l}</span>
+        <span class="t-dot" style="background:${at.c}"></span>
+      </div>
+    </div>${restRow}
+  </div>`;
+}
+
+function standingsTable(teams, matches, fmt) {
+  const st2 = standings(teams, matches);
+  const posC = ['#F0A500','#C0C0C0','#CD7F32'];
+  const rows = st2.map((s,i)=>{
+    const tc2=T[s.team]||{l:s.team,c:'#8B949E'};
+    const sg=s.gp-s.gc;
+    const zone = fmt===5&&i<4?'sf-zone':((fmt===3||fmt===4)&&i<2)?'f-zone':'';
+    return `<tr class="${zone}">
+      <td class="td-pos"><span class="pos-num" style="color:${posC[i]||'#6e7681'}">${i+1}°</span></td>
+      <td><span class="dot-sm" style="background:${tc2.c}"></span><span style="color:${tc2.c};font-weight:600">${tc2.l}</span></td>
+      <td>${s.j}</td><td>${s.v}</td><td>${s.e}</td><td>${s.d}</td>
+      <td class="${sg>=0?'sg-pos':'sg-neg'}">${sg>0?'+':''}${sg}</td>
+      <td class="td-pts">${s.pts}</td>
+    </tr>`;
+  }).join('');
+  const note = fmt===5
+    ? '<span class="zone-note">Top 4 → Semis</span>'
+    : '<span class="zone-note">Top 2 → Final</span>';
+  return `<div class="card">
+    <div class="card-hdr"><span class="card-lbl">Classificação</span>${note}</div>
+    <table class="standings-table">
+      <thead><tr><th></th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th><th>Pts</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderChamp(champ, editable=false) {
+  const {teams,format:fmt,matches,date,status,champion_players,regularEnded}=champ;
+  const chmpTeam = champion(matches);
+  const regMs = matches.filter(m=>m.phase==='regular');
+  const sfMs  = matches.filter(m=>m.phase==='semifinal');
+  const finM  = matches.find(m=>m.phase==='final');
+  const playedReg = regMs.filter(m=>m.played);
+  let html='';
+
+  if (chmpTeam) {
+    const ct=T[chmpTeam]||{l:chmpTeam,c:'#F0A500'};
+    const artList=champArtilheiros(champ);
+    const artHtml=artList.length
+      ?`<div style="margin-top:8px;font-size:12px;color:var(--text2)">⚽ <span style="color:var(--text3)">Artilheiro:</span> ${artList.map(a=>`<strong>${esc(a.name)}</strong> (${a.goals})`).join(', ')}</div>`:'';
+    html+=`<div class="champion-banner" style="border-color:${ct.c}35;box-shadow:0 0 40px ${ct.c}18">
+      <div class="champ-icon">🏆</div>
+      <div class="champ-eyebrow">Campeão</div>
+      <div class="champ-name" style="color:${ct.c}">${ct.l}</div>
+      ${champion_players?.length?`<div class="champ-players">
+        ${champion_players.map(p=>`<span class="p-tag${p.weight<1?' half':''}">${p.name}${p.weight<1?' ½':''}</span>`).join('')}
+      </div>`:''}
+      ${artHtml}
+    </div>`;
+  }
+
+  html+=`<div class="champ-bar">
+    <div><div class="champ-date">${fdt(date)}</div><div class="champ-fmt">${FMT[fmt]||''}</div></div>
+    <div class="chips-row">${teams.map(t=>chip(t,true)).join('')}</div>
+  </div>`;
+
+  html += standingsTable(teams, matches, fmt);
+
+  {
+    const analysis = analyzeClassification(champ);
+    if (analysis) {
+      const phaseLabel = analysis.qualify === 2 ? 'Final' : 'Semifinais';
+      const roundLabel = analysis.roundsLeft === 1 ? 'Última rodada' : `${analysis.roundsLeft} rodadas restantes`;
+      html += `<details class="card" style="padding:0" open>
+        <summary style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;list-style:none;user-select:none">
+          <span>
+            <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3)">🔍 Cenários — ${phaseLabel}</span>
+            <span style="font-size:11px;color:var(--text3);margin-left:8px;font-weight:400">${roundLabel}</span>
+          </span>
+          <span class="det-arrow" style="font-size:11px;color:var(--text3)">▼</span>
+        </summary>
+        ${analysis.teams.map(t => {
+          const tc = T[t.team]||{l:t.team,c:'#8B949E'};
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border2)">
+            <span style="font-size:15px;width:20px;text-align:center">${t.icon}</span>
+            <span style="flex:1;font-size:13px;font-weight:700;color:${tc.c}">${tc.l}</span>
+            <span style="font-size:12px;color:var(--text2);text-align:right;max-width:180px">${esc(t.detail)}</span>
+          </div>`;
+        }).join('')}
+      </details>`;
+    }
+  }
+
+  {
+    const tally = champGoalTally(champ);
+    const artRows = Object.entries(tally).sort((a,b)=>b[1]-a[1]);
+    if (artRows.length) {
+      const maxG = artRows[0][1];
+      html += `<details class="card" style="padding:0">
+        <summary style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;list-style:none;user-select:none">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3)">⚽ Artilheiros</span>
+          <span style="font-size:11px;color:var(--text3)" class="det-arrow">▼</span>
+        </summary>
+        ${artRows.map(([name,g],i)=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border2)">
+            <span style="font-size:11px;font-weight:700;color:${g===maxG?'var(--gold)':'#6e7681'};width:18px">${i+1}°</span>
+            <span style="flex:1;font-size:13px;font-weight:600">${esc(name)}</span>
+            ${g===maxG?`<span style="font-size:10px;color:var(--gold)">⭐</span>`:''}
+            <span style="font-weight:800;font-size:15px;color:#4DB8FF">${g}</span>
+          </div>`).join('')}
+      </details>`;
+    }
+  }
+
+  const swapMatchBtn = (id1,id2) => editable
+    ? `<div style="text-align:center;margin:-3px 0;position:relative;z-index:1">
+        <button onclick="swapMatchesInChamp('${champ.id}','${id1}','${id2}')"
+          style="background:var(--s1);border:1px solid var(--border);border-radius:6px;cursor:pointer;
+                 font-size:11px;padding:2px 12px;color:var(--text3)">⇅ trocar ordem</button></div>` : '';
+
+  const roundHeader = (r, unplayedRounds, showSwap) => {
+    if (!showSwap) return `<div class="round-lbl">Rodada ${r}</div>`;
+    const idx=unplayedRounds.indexOf(r);
+    const prev=idx>0?unplayedRounds[idx-1]:null, next=idx<unplayedRounds.length-1?unplayedRounds[idx+1]:null;
+    const btn=(dir,t)=>t!==null?`<button onclick="swapRoundsInChamp('${champ.id}',${r},${t})"
+      style="background:var(--s1);border:1px solid var(--border);border-radius:4px;cursor:pointer;
+             font-size:11px;padding:1px 6px;color:var(--text2)">${dir}</button>`:'<span style="width:22px"></span>';
+    return `<div class="round-lbl" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Rodada ${r}</span><div style="display:flex;gap:3px">${btn('▲',prev)}${btn('▼',next)}</div></div>`;
+  };
+
+  const renderRounds = (ms, showSwap=false) => {
+    const all=[...new Set(ms.map(m=>m.round).filter(Boolean))].sort((a,b)=>a-b);
+    const unplayed=all.filter(r=>ms.filter(m=>m.round===r).some(m=>!m.played));
+    const done=all.filter(r=>ms.filter(m=>m.round===r).every(m=>m.played));
+    let h='';
+    for (const r of unplayed) {
+      h+=roundHeader(r,unplayed,showSwap);
+      const rMs=ms.filter(m=>m.round===r), up=rMs.filter(m=>!m.played);
+      h+=up.map(m=>matchCard(m,editable)).join('');
+      h+=[...rMs.filter(m=>m.played)].reverse().map(m=>matchCard(m,editable)).join('');
+    }
+    for (const r of done) {
+      h+=`<div class="round-lbl">Rodada ${r}</div>`;
+      h+=ms.filter(m=>m.round===r).map(m=>matchCard(m,editable)).join('');
+    }
+    return h;
+  };
+
+  if (fmt===3 && !regularEnded && !chmpTeam) {
+    const unplayed=regMs.filter(m=>!m.played);
+    if (unplayed.length) {
+      html+=`<div class="sec-lbl">Próxima${unplayed.length>1?'s Partidas':' Partida'}</div>`;
+      unplayed.forEach((m,i)=>{ html+=matchCard(m,editable); if(i<unplayed.length-1) html+=swapMatchBtn(m.id,unplayed[i+1].id); });
+    }
+    if (editable && playedReg.length>=3)
+      html+=`<button class="btn btn-danger" onclick="confirmEnd()">⏹ Encerrar Fase Regular</button>`;
+    if (playedReg.length)
+      html+=`<div class="sec-lbl">Partidas Disputadas</div>`+
+        [...playedReg].reverse().map(m=>matchCard(m,editable)).join('');
+  }
+
+  if (fmt===4) {
+    const leg1Ms=regMs.filter(m=>m.leg===1), leg2Ms=regMs.filter(m=>m.leg===2);
+    const leg1Done=leg1Ms.length&&leg1Ms.every(m=>m.played);
+    const legs=leg1Done?[2,1]:[1,2];
+    for (const lg of legs) {
+      const legMs=regMs.filter(m=>m.leg===lg);
+      const isActiveLeg=legMs.some(m=>!m.played);
+      const showSwap=editable&&isActiveLeg;
+      if (lg===2&&leg1Done) {
+        html+=`<div class="sec-lbl" style="display:flex;align-items:center;gap:8px">
+          <span>Returno</span>
+          <span style="background:var(--accent);color:#000;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px">EM ANDAMENTO</span>
+        </div>`;
+      } else {
+        const note=lg===2&&!leg1Done?` <span style="font-size:11px;color:var(--text3);font-weight:400">· ordem segue turno 1</span>`:'';
+        html+=`<div class="sec-lbl">Turno ${lg}${note}</div>`;
+      }
+      const roundNums=[...new Set(legMs.map(m=>m.round).filter(Boolean))].sort((a,b)=>a-b);
+      html+=roundNums.length?renderRounds(legMs,showSwap):legMs.map(m=>matchCard(m,editable)).join('');
+    }
+  }
+  if (fmt===5) {
+    html+=`<div class="sec-lbl">Fase de Grupos</div>`;
+    const roundNums=[...new Set(regMs.map(m=>m.round).filter(Boolean))].sort((a,b)=>a-b);
+    html+=roundNums.length ? renderRounds(regMs, editable) : regMs.map(m=>matchCard(m,editable)).join('');
+  }
+  if (sfMs.length) {
+    html+=`<div class="sec-lbl">Semifinais</div>`;
+    html+=sfMs.map(m=>matchCard(m,editable)).join('');
+  }
+  if (finM) {
+    html+=`<div class="sec-lbl">Final</div>`+matchCard(finM, editable);
+    if (!editable && finM.played) {
+      const hasFG = finM.finalGoals?.length > 0 || finM.goals?.length > 0;
+      html+=`<button onclick="openFinalGoalsEdit('${champ.id}','${finM.id}')"
+        style="display:flex;align-items:center;gap:6px;margin:6px 0 0;background:none;border:1px solid var(--border);
+               border-radius:8px;padding:7px 14px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;width:100%">
+        <span>⚽</span>
+        <span style="flex:1;text-align:left">${hasFG ? 'Editar gols da final' : 'Indicar gols da final'}</span>
+        ${hasFG?`<span style="color:var(--text3);font-weight:400">${(finM.finalGoals?.length||finM.goals?.length||0)} gol${(finM.finalGoals?.length||finM.goals?.length||0)!==1?'s':''} registrados</span>`:''}
+      </button>`;
+    }
+  }
+  if (editable && finM?.played && status==='active')
+    html+=`<button class="btn btn-gold" onclick="openChampModal()">🏆 Registrar Jogadores Campeões</button>`;
+
+  return html;
+}
+
+/* ── views ──────────────────────────────────────────────────── */
+function vHome() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  const c = activeChamp();
+  if (!c) return `<div class="empty">
+    <div class="ei">⚽</div>
+    <h3>Nenhum campeonato ativo</h3>
+    <p>Crie um novo campeonato para começar!</p>
+    <button class="btn btn-primary btn-inline" onclick="nav('create')">+ Novo Campeonato</button>
+  </div>`;
+  return renderChamp(c, true);
+}
+
+function renderPlayerAssignInner(selectedTeams) {
+  if (!selectedTeams || selectedTeams.length < 2) return '';
+  const active = st.players.filter(p => p.active !== false);
+  if (!active.length) return '';
+  const map = st.playerTeamMap;
+  const rows = active.map(p => {
+    const assigned = map[p.name] || null;
+    const btns = selectedTeams.map(tid => {
+      const t = T[tid];
+      const sel = assigned === tid;
+      return `<button onclick="setManualRoster('${p.name.replace(/'/g,"\\'")}','${tid}')" title="${t.l}"
+        style="width:22px;height:22px;border-radius:50%;border:2.5px solid ${sel?'var(--text)':'transparent'};
+               background:${sel?t.c:t.c+'40'};cursor:pointer;padding:0;flex-shrink:0;transition:all .1s"></button>`;
+    }).join('');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-top:1px solid var(--border2)">
+      <span style="flex:1;font-size:13px;font-weight:600;${assigned?'':'color:var(--text3)'}">${esc(p.name)}</span>
+      <div style="display:flex;gap:5px">${btns}</div>
+    </div>`;
+  }).join('');
+  const assigned = active.filter(p => map[p.name]).length;
+  return `<div style="padding:2px 14px 6px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:var(--text3)">${assigned} de ${active.length} distribuídos</span>
+    ${assigned ? `<button onclick="st.playerTeamMap={};refreshPlayerAssign()" style="background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;padding:2px 4px">Limpar</button>` : ''}
+  </div>${rows}`;
+}
+
+function refreshPlayerAssign() {
+  const el = document.getElementById('player-assign-inner');
+  const ck = [...document.querySelectorAll('.tck:checked')].map(c => c.value);
+  if (el) el.innerHTML = renderPlayerAssignInner(ck);
+}
+
+function setManualRoster(playerName, teamId) {
+  if (st.playerTeamMap[playerName] === teamId) delete st.playerTeamMap[playerName];
+  else st.playerTeamMap[playerName] = teamId;
+  st.createRosters = {}; // clear draw rosters when manual assignment is used
+  refreshPlayerAssign();
+}
+
+function applyDrawToForm() {
+  const colors = (st.drawTeamColors || []).filter(Boolean);
+  if (colors.length < st.drawNumTeams) { toast('Atribua uma cor para cada time primeiro'); return; }
+  const rosters = {};
+  (st.drawResult?.teams || []).forEach((tp, i) => {
+    const colorId = st.drawTeamColors[i];
+    if (colorId) rosters[colorId] = tp.map(p => p.name);
+  });
+  st.createPresetTeams = colors;
+  st.createRosters = rosters;
+  render();
+  requestAnimationFrame(() => {
+    onTkChg();
+    document.getElementById('champ-date')?.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+}
+
+function vCreate() {
+  const hasActive = !!activeChamp();
+  return `${renderDrawCard()}<div class="card">
+    <div class="card-hdr"><span class="card-lbl">Novo Campeonato</span></div>
+    ${hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
+    <div style="padding:12px 14px 4px">
+      <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Data</label>
+      <input type="date" id="champ-date" value="${today()}"
+        style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;
+               padding:9px 12px;color:var(--text);font-family:inherit;font-size:14px;
+               outline:none;color-scheme:dark">
+    </div>
+    <p class="hint" style="padding-top:10px">Times participantes (3 a 5):</p>
+    <div class="team-grid">
+      ${Object.entries(T).map(([id,t])=>{
+        const pre = (st.createPresetTeams||[]).includes(id);
+        return `<label class="team-chk-label" id="tcl_${id}">
+          <input type="checkbox" class="tck" value="${id}" onchange="onTkChg()" ${pre?'checked':''}>
+          <span class="chk-dot" style="background:${t.c}"></span>
+          <span class="chk-name" style="color:${t.c}">${t.l}</span>
+        </label>`;
+      }).join('')}
+    </div>
+    <details id="player-assign-wrap" style="display:none">
+      <summary style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;list-style:none;user-select:none;border-top:1px solid var(--border2)">
+        <span style="font-size:12px;font-weight:700;color:var(--text2)">👥 Distribuir jogadores por time <span style="font-weight:400;color:var(--text3)">(opcional)</span></span>
+        <span class="det-arrow" style="font-size:11px;color:var(--text3)">▼</span>
+      </summary>
+      <div id="player-assign-inner"></div>
+    </details>
+    <label style="display:flex;align-items:center;gap:9px;padding:4px 14px 12px;cursor:pointer">
+      <input type="checkbox" id="quick-reg" onchange="onQuickChg()"
+        style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+      <span style="font-size:13px;color:var(--text2)">Campeonato já encerrado <span style="color:var(--text3)">(registrar histórico)</span></span>
+    </label>
+    <div id="quick-champ" style="display:none;padding:0 14px 12px">
+      <p style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Time Campeão</p>
+      <div id="champ-team-sel"></div>
+    </div>
+    <div id="fmthint" class="fmt-hint" style="display:none"></div>
+    <button class="btn btn-primary" id="dobtn" style="display:none" onclick="doCreate()">Criar Campeonato</button>
+  </div>`;
+}
+
+function renderStars(pid, stars) {
+  const s = stars || 0;
+  return [1,2,3,4,5].map(i =>
+    `<button class="star-btn" onclick="setPlayerStars('${pid}',${i===s&&i===1?0:i===s?0:i})" title="${i} estrela${i>1?'s':''}"
+      style="color:${s>=i?'var(--gold)':'var(--border)'}">★</button>`
+  ).join('');
+}
+
+function renderDrawCard() {
+  if (!st.ready || !st.players.filter(p=>p.active!==false).length) return '';
+  const active = st.players.filter(p=>p.active!==false);
+  const absentSet = new Set(st.drawAbsent);
+  const teamLabels = ['A','B','C','D','E'];
+
+  const nBtns = [2,3,4,5].map(n => {
+    const act = st.drawNumTeams===n;
+    return `<button onclick="setDrawNumTeams(${n})"
+      style="padding:5px 13px;border-radius:20px;border:1px solid ${act?'var(--accent)':'var(--border)'};
+             background:${act?'#00d67f18':'none'};color:${act?'var(--accent)':'var(--text2)'};
+             font-size:12px;font-weight:700;cursor:pointer">${n} times</button>`;
+  }).join('');
+
+  const presRows = active.map(p => {
+    const absent = absentSet.has(p.id);
+    const s = p.stars||0;
+    const starsLabel = s ? '★'.repeat(s) : '—';
+    return `<label style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--border2);cursor:pointer">
+      <input type="checkbox" ${absent?'':'checked'} onchange="toggleDrawAbsent('${p.id}')"
+        style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+      <span style="flex:1;font-size:13px;font-weight:600">${esc(p.name)}</span>
+      <span style="font-size:12px;color:var(--gold);letter-spacing:-1px">${starsLabel}</span>
+    </label>`;
+  }).join('');
+
+  let resultHtml = '';
+  if (st.drawResult) {
+    const {teams, sums} = st.drawResult;
+    const usedColors = new Set(st.drawTeamColors.filter(Boolean));
+    const allColored = teams.every((_,i) => !!st.drawTeamColors[i]);
+    const tColors = Object.entries(T);
+    const {tally} = computeGoalsRanking();
+
+    resultHtml = `<div style="padding:12px 14px 4px">
+      <p style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Resultado do Sorteio</p>
+      ${teams.map((tp, i) => {
+        const colorId = st.drawTeamColors[i] || '';
+        const tObj = T[colorId];
+        const teamLabel = tObj ? tObj.l : `Time ${teamLabels[i]}`;
+        const accentHex = tObj ? tObj.c : 'var(--text3)';
+        const colorChips = tColors.map(([id, t]) => {
+          const sel = st.drawTeamColors[i] === id;
+          const taken = !sel && usedColors.has(id);
+          return `<button onclick="setDrawTeamColor(${i},'${id}')" title="${t.l}"
+            style="width:22px;height:22px;border-radius:50%;border:2.5px solid ${sel?'var(--text)':'transparent'};
+                   background:${t.c};cursor:pointer;opacity:${taken?.3:1};padding:0;flex-shrink:0"></button>`;
+        }).join('');
+        let teamTitles = 0, teamGoals = 0;
+        for (const p of tp) {
+          const rank = st.ranks.find(r => r.name === p.name);
+          teamTitles += rank?.titles || 0;
+          teamGoals  += tally[p.name] || 0;
+        }
+        const playerRows = tp.map(p => {
+          const s = p.stars||0;
+          const stats = getPlayerDrawStats(p.name);
+          const starsStr = s ? '★'.repeat(s) : '—';
+          const lastTitle = stats.last_date ? stats.last_date.split('-').reverse().join('/') : '—';
+          return `<details style="border-top:1px solid var(--border2)">
+            <summary style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;list-style:none;user-select:none">
+              <span style="flex:1;font-size:13px;font-weight:600">${esc(p.name)}</span>
+              <span style="font-size:12px;color:var(--gold);letter-spacing:-1px">${starsStr}</span>
+              <span style="font-size:11px;color:var(--text3)">▸</span>
+            </summary>
+            <div style="padding:4px 0 8px;display:flex;gap:16px;font-size:12px;color:var(--text2)">
+              <span>🏆 <strong>${stats.titles}</strong> título${stats.titles!==1?'s':''}</span>
+              <span>⚽ <strong>${stats.goals}</strong> gol${stats.goals!==1?'s':''}</span>
+              <span>📅 ${lastTitle}</span>
+            </div>
+          </details>`;
+        }).join('');
+        return `<div class="draw-team-card" style="border-left:3px solid ${accentHex}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="flex:1;font-size:13px;font-weight:700;color:${accentHex}">${esc(teamLabel)}</span>
+            <span style="font-size:11px;color:var(--text3)">${sums[i]}★</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">${colorChips}</div>
+          <div style="display:flex;gap:14px;font-size:11px;color:var(--text3);padding:6px 0;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);margin-bottom:2px">
+            <span>🏆 <strong style="color:var(--text2)">${teamTitles}</strong> títulos</span>
+            <span>⚽ <strong style="color:var(--text2)">${teamGoals}</strong> gols</span>
+            <span>👥 <strong style="color:var(--text2)">${tp.length}</strong> jogadores</span>
+          </div>
+          ${playerRows}
+        </div>`;
+      }).join('')}
+      ${allColored
+        ? `<button class="btn btn-primary" onclick="applyDrawToForm()" style="width:100%;margin-top:4px;margin-bottom:8px">
+             Usar estes times no campeonato ↓
+           </button>`
+        : `<p style="font-size:12px;color:var(--text3);text-align:center;padding-bottom:12px">Atribua uma cor para cada time para continuar</p>`}
+    </div>`;
+  }
+
+  const extraCount = (st.drawExtras||[]).filter(n=>n.trim()).length;
+  const presentCount = active.length - absentSet.size + extraCount;
+  const canDraw = presentCount >= st.drawNumTeams;
+
+  return `<div class="card" style="margin-bottom:10px">
+    <details id="draw-details" ${st.drawOpen?'open':''} ontoggle="st.drawOpen=this.open">
+      <summary style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;list-style:none;user-select:none">
+        <span style="font-size:14px;font-weight:700">🎲 Sortear Times</span>
+        <span class="det-arrow" style="font-size:11px;color:var(--text3)">▼</span>
+      </summary>
+      <div style="padding:0 14px 10px;display:flex;gap:0;background:var(--s2);border-radius:20px;width:fit-content;margin:0 14px 10px">
+        ${['balanced','random'].map(mode => {
+          const act = st.drawMode === mode;
+          const lbl = mode === 'balanced' ? '⚖️ Equilibrado' : '🎲 Aleatório';
+          return `<button onclick="st.drawMode='${mode}';st.drawResult=null;render()"
+            style="padding:6px 14px;border-radius:20px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+                   background:${act?'var(--accent)':'transparent'};color:${act?'var(--bg)':'var(--text2)'};transition:all .15s">${lbl}</button>`;
+        }).join('')}
+      </div>
+      <div style="padding:0 14px 10px;display:flex;flex-wrap:wrap;gap:6px">${nBtns}</div>
+      <p id="draw-present-count" style="padding:0 14px 10px;font-size:12px;color:var(--text3)">Marque quem está presente hoje (${active.length - absentSet.size} de ${active.length}${extraCount?` · ${extraCount} avulso${extraCount!==1?'s':''}`:''})  </p>
+      ${presRows}
+      <div style="padding:8px 14px 10px;border-top:1px solid var(--border2)">
+        <p style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">🎟️ Avulsos${extraCount?' ('+extraCount+')':''}</p>
+        ${(st.drawExtras||[]).map((name,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <span style="flex:1;font-size:13px">${esc(name)}</span>
+          <button data-idx="${i}" onclick="removeDrawExtra(+this.dataset.idx)" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:2px 4px">✕</button>
+        </div>`).join('')}
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input id="extra-inp" type="text" placeholder="Nome do avulso" onkeydown="if(event.key==='Enter')addDrawExtra()"
+            style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px">
+          <button onclick="addDrawExtra()"
+            style="padding:8px 12px;border-radius:8px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">+ Adicionar</button>
+        </div>
+      </div>
+      <div style="padding:12px 14px">
+        <button id="draw-run-btn" class="btn btn-primary" onclick="runBalancedDraw()" ${canDraw?'':'disabled'}
+          style="width:100%;${canDraw?'':'opacity:.4;cursor:not-allowed'}">
+          Sortear ${st.drawNumTeams} times
+        </button>
+        ${!canDraw?`<p style="font-size:12px;color:var(--text3);margin-top:8px;text-align:center">Mínimo ${st.drawNumTeams} jogadores presentes</p>`:''}
+      </div>
+      <div id="draw-result">${resultHtml}</div>
+    </details>
+  </div>`;
+}
+
+function vPlayers() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  const active = st.players.filter(p=>p.active!==false);
+  const inactive = st.players.filter(p=>p.active===false);
+
+  const row = p => {
+    const isActive = p.active !== false;
+    const isChurr = !!p.somenteChurrasco;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:${isActive?1:.45}">
+      <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isChurr?` <span style="font-size:10px;font-weight:700;color:#FF8A3C;background:#FF8A3C18;padding:2px 5px;border-radius:10px">🍖</span>`:''}  </span>
+      <span style="display:flex;gap:0">${renderStars(p.id, p.stars)}</span>
+      <button onclick="togglePlayerActive('${p.id}',${isActive})"
+        style="padding:3px 9px;border-radius:20px;border:1px solid ${isActive?'#00d67f':'#6e7681'};
+               background:${isActive?'#00d67f18':'none'};color:${isActive?'#00d67f':'#6e7681'};
+               font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+        ${isActive?'Ativo':'Inativo'}
+      </button>
+      <button onclick="togglePlayerChurrasco('${p.id}',${isChurr})"
+        style="padding:3px 9px;border-radius:20px;border:1px solid ${isChurr?'#FF8A3C':'var(--border)'};
+               background:${isChurr?'#FF8A3C18':'none'};color:${isChurr?'#FF8A3C':'var(--text3)'};
+               font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+        🍖
+      </button>
+      <button onclick="st.modal={type:'renamePlayer',id:'${p.id}',name:'${esc(p.name)}',newName:'${esc(p.name)}'};render()"
+        style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:4px 6px">✏️</button>
+      <button onclick="deleteRegisteredPlayer('${p.id}')"
+        style="background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;opacity:.7;padding:4px 6px">✕</button>
+    </div>`;
+  };
+
+  return `<div class="card">
+    <div class="card-hdr">
+      <span class="card-lbl">Elenco de Jogadores</span>
+      <span style="font-size:11px;color:var(--text3)">${active.length} ativos${inactive.length?` · ${inactive.length} inativos`:''}</span>
+    </div>
+    <div class="card-body" style="display:flex;gap:8px;align-items:center">
+      <input id="newp-inp" class="player-input" type="text" placeholder="Nome do jogador"
+        style="flex:1;margin:0"
+        onkeydown="if(event.key==='Enter'){addPfromInput();event.preventDefault()}">
+      <button class="btn btn-primary btn-sm btn-inline" onclick="addPfromInput()" style="margin:0;padding:10px 14px;white-space:nowrap">+ Adicionar</button>
+    </div>
+    ${!st.players.length
+      ? `<div style="padding:10px 14px 14px">
+           <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Nenhum jogador cadastrado. Adicione acima.</p>
+           ${st.ranks.length ? `<button class="btn btn-primary btn-sm" onclick="importPlayersFromRanking()" style="font-size:13px">
+             Importar ${st.ranks.length} jogadores do ranking
+           </button>` : ''}
+         </div>`
+      : [...active,...inactive].map(row).join('')}
+  </div>`;
+}
+
+function vRanking() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  if (!st.ranks.length) return `<div class="empty">
+    <div class="ei">🏆</div>
+    <h3>Ranking vazio</h3>
+    <p>Conclua campeonatos para ver o ranking!</p>
+  </div>`;
+
+  const filter = st.rankFilter||{type:'all'};
+  const _rankRaw = computeFilteredRanks(filter);
+  const _rankActiveSet = activeOnlySet();
+  const filtered = _rankActiveSet ? _rankRaw.filter(r=>_rankActiveSet.has(r.name)) : _rankRaw;
+  const months = availableMonths();
+  const posC = ['#F0A500','#C0C0C0','#CD7F32'];
+  const fmtT = n => {
+    if (n%1===0) return `${n}`;
+    const w=Math.floor(n);
+    return w ? `${w}<span class="half-frac">½</span>` : `<span class="half-frac">½</span>`;
+  };
+  const fbtn = (type,val,label) => {
+    const active=filter.type===type&&(type==='all'||filter.val===val);
+    return `<button onclick="setRankFilter('${type}','${val===null?'':val}')"
+      style="padding:5px 11px;border-radius:20px;border:1px solid ${active?'var(--accent)':'var(--border)'};
+             background:${active?'#00d67f18':'none'};color:${active?'var(--accent)':'var(--text2)'};
+             font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${label}</button>`;
+  };
+
+  return `<div class="card">
+    <div class="card-hdr"><span class="card-lbl">Ranking de Campeões</span></div>
+    <div style="padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border2);align-items:center">
+      ${['Todos','Ativos'].map((lbl,i)=>{const act=st.showInactive===(i===0);return`<button onclick="setShowInactive(${i===0})"
+        style="padding:5px 11px;border-radius:20px;border:1px solid ${act?'var(--accent)':'var(--border)'};
+               background:${act?'#00d67f18':'none'};color:${act?'var(--accent)':'var(--text2)'};
+               font-size:12px;font-weight:600;cursor:pointer">${lbl}</button>`;}).join('')}
+      <span style="width:1px;height:18px;background:var(--border2);margin:0 2px"></span>
+      ${fbtn('all',null,'Geral')}
+      ${fbtn('last',3,'Últimos 3')}
+      ${fbtn('last',5,'Últimos 5')}
+      ${fbtn('last',10,'Últimos 10')}
+      <select onchange="setRankFilter('month',this.value)"
+        style="padding:5px 10px;border-radius:20px;border:1px solid ${filter.type==='month'?'var(--accent)':'var(--border)'};
+               background:${filter.type==='month'?'#00d67f18':'var(--s2)'};
+               color:${filter.type==='month'?'var(--accent)':'var(--text2)'};
+               font-size:12px;font-weight:600;cursor:pointer;outline:none">
+        <option value="" ${filter.type!=='month'?'selected':''}>Por mês...</option>
+        ${months.map(m=>`<option value="${m}" ${filter.type==='month'&&filter.val===m?'selected':''}>${fmtMonth(m)}</option>`).join('')}
+      </select>
+    </div>
+    ${!filtered.length
+      ? `<p style="padding:16px 14px;font-size:13px;color:var(--text3);text-align:center">Nenhum resultado para este filtro.</p>`
+      : `<table class="rank-table">
+          <thead><tr><th>#</th><th>Jogador</th><th>Títulos</th><th>Último</th></tr></thead>
+          <tbody>
+            ${filtered.map((p,i)=>`<tr class="${i<3?'top3':''}">
+              <td class="td-pos"><span class="pos-num" style="color:${posC[i]||'#6e7681'}">${i+1}°</span></td>
+              <td style="font-weight:600;font-size:15px">${p.name}</td>
+              <td class="td-titles">${fmtT(p.titles)}</td>
+              <td class="td-date">${fdt(p.last_date)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`}
+  </div>
+
+  ${(()=>{
+    const fd=filteredDoneChamps();
+    const {tally,artTitles}=computeGoalsRanking(fd);
+    const byGoals=Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const byArt=Object.entries(artTitles).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    if(!byGoals.length) return '';
+    const {tally:ftally,finalsScored}=computeFinalsGoalTally(fd);
+    const byFinalGoals=Object.entries(ftally).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const byFinalsArt=Object.entries(computeFinalsArtilheiroRanking(fd)).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const rowFmt = (name,val,i,color) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+        <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+        <span style="flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</span>
+        <span style="font-weight:800;color:${color};font-size:15px">${val}</span>
+      </div>`;
+    return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="card">
+        <div class="card-hdr"><span class="card-lbl">🥇 Artilheiro</span></div>
+        ${byArt.length?byArt.map(([name,n],i)=>rowFmt(name,n,i,'var(--gold)')).join('')
+        :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-lbl">🏆 Artilheiro da Final</span></div>
+        ${byFinalsArt.length?byFinalsArt.map(([name,n],i)=>rowFmt(name,n,i,'var(--gold)')).join('')
+        :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="card">
+        <div class="card-hdr"><span class="card-lbl">⚽ Gols (total)</span></div>
+        ${byGoals.map(([name,g],i)=>rowFmt(name,g,i,'#4DB8FF')).join('')}
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-lbl">⚽ Gols Finais</span></div>
+        ${byFinalGoals.length?byFinalGoals.map(([name,g],i)=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+            <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+            <span style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div>
+              <div style="font-size:10px;color:var(--text3)">${finalsScored[name]||0} final${(finalsScored[name]||0)!==1?'is':''}</div>
+            </span>
+            <span style="font-weight:800;color:#4DB8FF;font-size:15px">${g}</span>
+          </div>`).join('')
+        :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+      </div>
+    </div>`;
+  })()}`;
+}
+
+function vHistory() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  const done = st.champs.filter(c=>c.status==='completed');
+
+  if (st.histId) {
+    const c = done.find(x=>x.id===st.histId);
+    if (c) {
+      const confirming = st.confirmDelete === c.id;
+      const topBar = confirming
+        ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+             <button class="btn btn-ghost btn-sm btn-inline" style="margin:0" onclick="st.histId=null;st.confirmDelete=null;render()">← Voltar</button>
+             <span style="flex:1"></span>
+             <span style="font-size:13px;color:var(--danger);font-weight:600">Excluir este campeonato?</span>
+             <button class="btn btn-sm btn-inline" style="margin:0;background:var(--danger);color:#fff;border:none;padding:7px 14px" onclick="deleteChampionship('${c.id}')">Sim, excluir</button>
+             <button class="btn btn-ghost btn-sm btn-inline" style="margin:0" onclick="st.confirmDelete=null;render()">Cancelar</button>
+           </div>`
+        : `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+             <button class="btn btn-ghost btn-sm btn-inline" style="margin:0" onclick="st.histId=null;render()">← Voltar</button>
+             <span style="flex:1"></span>
+             <button class="btn btn-sm btn-inline" style="margin:0;background:none;border:1px solid var(--danger);color:var(--danger);padding:7px 14px"
+               onclick="st.confirmDelete='${c.id}';render()">🗑 Excluir</button>
+           </div>`;
+      return topBar + renderChamp(c, false);
+    }
+    st.histId=null;
+  }
+
+  if (!done.length) return `<div class="empty">
+    <div class="ei">📅</div>
+    <h3>Sem histórico</h3>
+    <p>Campeonatos concluídos aparecerão aqui.</p>
+  </div>`;
+
+  return `<div class="card">
+    <div class="card-hdr"><span class="card-lbl">Histórico</span></div>
+    ${done.map(c=>{
+      const ct=T[c.champion]||{l:c.champion,c:'#F0A500'};
+      return `<div class="hist-row" onclick="st.histId='${c.id}';render()">
+        <div class="hist-date">${fdt(c.date)}</div>
+        <div class="hist-info">
+          <div class="hist-teams">${c.teams.map(tl).join(' · ')} · ${c.format} times</div>
+          <div class="hist-champ" style="color:${ct.c}">🏆 ${ct.l}</div>
+        </div>
+        <span class="hist-arrow">›</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ── modals ──────────────────────────────────────────────────── */
+function mScore() {
+  const m=st.modal; if(m?.type!=='score') return '';
+  const ht=T[m.home]||{l:m.home,c:'#8B949E'};
+  const at=T[m.away]||{l:m.away,c:'#8B949E'};
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      ${(()=>{
+        const champ = activeChamp();
+        const rosters = champ?.teamRosters || {};
+        const allActive = st.players.filter(p=>p.active!==false).map(p=>p.name);
+        const homePlayers = rosters[st.modal?.home] || [];
+        const awayPlayers = rosters[st.modal?.away] || [];
+        const homeOthers = allActive.filter(n=>!homePlayers.includes(n));
+        const awayOthers = allActive.filter(n=>!awayPlayers.includes(n));
+        const opts = arr => arr.map(n=>`<option value="${esc(n)}">`).join('');
+        return `<datalist id="playerlist-home">${opts([...homePlayers,...homeOthers])}</datalist>
+                <datalist id="playerlist-away">${opts([...awayPlayers,...awayOthers])}</datalist>`;
+      })()}
+      <div class="score-vs-row">
+        <div class="score-team-col">
+          <div class="score-team-nm" style="color:${ht.c}">${ht.l}</div>
+          <div class="score-stepper">
+            <button class="step-btn" onclick="adj('hs',-1)">−</button>
+            <div class="step-val" id="sv-hs">${m.hs}</div>
+            <button class="step-btn" onclick="adj('hs',1)">+</button>
+          </div>
+        </div>
+        <div class="score-x">×</div>
+        <div class="score-team-col">
+          <div class="score-team-nm" style="color:${at.c}">${at.l}</div>
+          <div class="score-stepper">
+            <button class="step-btn" onclick="adj('as',-1)">−</button>
+            <div class="step-val" id="sv-as">${m.as}</div>
+            <button class="step-btn" onclick="adj('as',1)">+</button>
+          </div>
+        </div>
+      </div>
+      <div id="goals-section">${renderGoalsInputs()}</div>
+      <button class="btn btn-primary" onclick="confirmScore()">${m.editing?'Salvar Edição':'Confirmar Resultado'}</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function mChamp() {
+  const m=st.modal;
+  if(m?.type==='saving') return `<div class="overlay"><div class="sheet" style="text-align:center;padding:48px 16px">
+    <div class="spinner" style="margin:0 auto 14px"></div>
+    <p style="color:var(--text2);font-size:14px">Salvando...</p>
+  </div></div>`;
+  if(m?.type!=='champion') return '';
+  const ct=T[m.champion]||{l:m.champion,c:'#F0A500'};
+  const players=m.players||defPlayers();
+  return `<div class="overlay">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div class="champ-modal-hdr">
+        <div style="font-size:40px">🏆</div>
+        <div class="champ-modal-name" style="color:${ct.c}">${ct.l}</div>
+        <div class="champ-modal-sub">Registre os jogadores do time campeão</div>
+      </div>
+      <datalist id="playerlist">
+        ${st.players.filter(p=>p.active!==false).map(p=>`<option value="${esc(p.name)}">`).join('')}
+      </datalist>
+      <div id="plist">
+        ${players.map((p,i)=>`<div class="player-row">
+          <input class="player-input" type="text" list="playerlist" placeholder="Jogador ${i+1}" value="${esc(p.name)}"
+            oninput="st.modal.players[${i}].name=this.value"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();nextPlayerInput(${i})}">
+          <div class="weight-btns">
+            <button class="wbtn${p.weight===1?' on':''}" onclick="upP(${i},'weight',1)">1</button>
+            <button class="wbtn${p.weight===0.5?' on':''}" onclick="upP(${i},'weight',0.5)">½</button>
+          </div>
+        </div>`).join('')}
+      </div>
+      <button class="btn btn-ghost add-player-btn" onclick="addP()">+ Jogador</button>
+      <button class="btn btn-gold" onclick="saveChampion()">Salvar e Concluir</button>
+      <button class="btn btn-ghost" style="opacity:.5;margin-top:4px" onclick="closeModal()">Fechar (salvar depois)</button>
+    </div>
+  </div>`;
+}
+
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+function toast(msg, type='err') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* ── render ──────────────────────────────────────────────────── */
+function render() {
+  const app=document.getElementById('app'); if(!app) return;
+  if (!document.getElementById('main')) buildShell();
+
+  const main=document.getElementById('main');
+  const modR=document.getElementById('modal-root');
+  const navBtns=document.querySelectorAll('.nav-btn');
+
+  let content='';
+  switch(st.view){
+    case 'home':    content=vHome(); break;
+    case 'create':  content=vCreate(); break;
+    case 'players': content=vPlayers(); break;
+    case 'ranking': content=vRanking(); break;
+    case 'history': content=vHistory(); break;
+    case 'stats':   content=vStats(); break;
+    case 'financeiro': content=vFinanceiro(); break;
+  }
+  if(main) main.innerHTML=content;
+  if(modR) modR.innerHTML=mScore()+mChamp()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso();
+  if(st.view==='stats') requestAnimationFrame(()=>{drawEvoChart();drawArtChart();drawArtFinalChart();drawGoalsChart();drawGoalsFinalChart();});
+  navBtns.forEach(b=>b.classList.toggle('active',b.dataset.view===st.view));
+
+  const sub=document.getElementById('hdrsub');
+  if(sub){
+    const ac=activeChamp();
+    sub.textContent=ac&&st.view==='home'?`Campeonato ativo · ${fdt(ac.date)}`:'';
+  }
+}
+
+function buildShell() {
+  document.getElementById('app').innerHTML=`
+    <header>
+      <span class="hdr-logo">⚽</span>
+      <div>
+        <div class="hdr-title">Série B — Aceoma</div>
+        <div class="hdr-sub" id="hdrsub"></div>
+      </div>
+    </header>
+    <main id="main"></main>
+    <nav>
+      <button class="nav-btn active" data-view="home" onclick="nav('home')"><span class="ni">⚽</span>Jogo</button>
+      <button class="nav-btn" data-view="create" onclick="nav('create')"><span class="ni">➕</span>Novo</button>
+      <button class="nav-btn" data-view="players" onclick="nav('players')"><span class="ni">👥</span>Elenco</button>
+      <button class="nav-btn" data-view="ranking" onclick="nav('ranking')"><span class="ni">🏆</span>Ranking</button>
+      <button class="nav-btn" data-view="history" onclick="nav('history')"><span class="ni">📅</span>Histórico</button>
+      <button class="nav-btn" data-view="stats" onclick="nav('stats')"><span class="ni">📊</span>Stats</button>
+      <button class="nav-btn" data-view="financeiro" onclick="nav('financeiro')"><span class="ni">💰</span>Caixa</button>
+    </nav>
+    <div id="modal-root"></div>`;
+}
+
+/* ── ranking filter helpers ─────────────────────────────────── */
+function fmtMonth(ym) {
+  const [y,m]=ym.split('-');
+  return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2);
+}
+function availableMonths() {
+  return [...new Set(st.champs.filter(c=>c.status==='completed').map(c=>c.date.slice(0,7)))]
+    .sort().reverse();
+}
+function filteredDoneChamps() {
+  const f = st.rankFilter || {type:'all'};
+  const all = st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  if (f.type==='month' && f.val) return all.filter(c=>c.date.startsWith(f.val));
+  if (f.type==='last' && f.val) return all.slice(-f.val);
+  return all;
+}
+
+function computeFilteredRanks(filter) {
+  if (!filter||filter.type==='all') return st.ranks;
+  const done=st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  let sub;
+  if (filter.type==='month') sub=done.filter(c=>c.date.startsWith(filter.val));
+  else if (filter.type==='last') sub=done.slice(-filter.val);
+  else return st.ranks;
+  const ids=new Set(sub.map(c=>c.id));
+  const map={};
+  for (const r of st.ranks) {
+    const entries=(r.entries||[]).filter(e=>
+      e.champId?ids.has(e.champId):sub.some(c=>c.date===e.date&&c.champion===e.team)
+    );
+    if (!entries.length) continue;
+    const titles=entries.reduce((s,e)=>s+e.weight,0);
+    const last_date=entries.reduce((ld,e)=>e.date>ld?e.date:ld,'');
+    map[r.id]={id:r.id,name:r.name,titles,last_date};
+  }
+  return Object.values(map).sort((a,b)=>b.titles!==a.titles?b.titles-a.titles:a.last_date.localeCompare(b.last_date));
+}
+function setRankFilter(type,val) {
+  const v=val===''||val==='null'||val===undefined?null:(isNaN(+val)?val:+val);
+  st.rankFilter={type,val:v};
+  render();
+}
+
+/* ── stats computations ─────────────────────────────────────── */
+function computeStreaks(eligibleNames) {
+  const done = st.champs.filter(c=>c.status==='completed')
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  const all = {};
+  for (const champ of done)
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim();
+      if (n && (!eligibleNames||eligibleNames.has(n)) && !all[n])
+        all[n]={cur:0,max:0,curStart:null,startDate:null,endDate:null};
+    }
+  done.forEach(champ => {
+    const wMap={};
+    for (const p of (champ.champion_players||[])) { const n=p.name.trim(); if(n) wMap[n]=p.weight||1; }
+    for (const n of Object.keys(all)) {
+      if (wMap[n]!==undefined) {
+        if (all[n].cur===0) all[n].curStart=champ.date;
+        all[n].cur+=wMap[n];
+        if (all[n].cur>all[n].max) { all[n].max=all[n].cur; all[n].startDate=all[n].curStart; all[n].endDate=champ.date; }
+      } else { all[n].cur=0; all[n].curStart=null; }
+    }
+  });
+  return Object.entries(all).map(([name,s])=>({name,streak:s.max,startDate:s.startDate,endDate:s.endDate}))
+    .filter(x=>x.streak>0).sort((a,b)=>b.streak-a.streak).slice(0,5);
+}
+
+function computeDroughts(eligibleNames) {
+  const done = st.champs.filter(c=>c.status==='completed')
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  const inactiveNames = new Set(st.players.filter(p=>p.active===false).map(p=>p.name.trim().toLowerCase()));
+  const wins = {};
+  done.forEach((champ,idx) => {
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim();
+      if (!n || inactiveNames.has(n.toLowerCase()) || (eligibleNames && !eligibleNames.has(n))) continue;
+      if (!wins[n]) wins[n]=[];
+      wins[n].push(idx);
+    }
+  });
+  const total=done.length, result=[];
+  for (const [name,idxs] of Object.entries(wins)) {
+    let max=0, startIdx=-1, endIdx=-1;
+    for (let i=1;i<idxs.length;i++) {
+      const gap=idxs[i]-idxs[i-1]-1;
+      if (gap>max) { max=gap; startIdx=idxs[i-1]+1; endIdx=idxs[i]-1; }
+    }
+    const cur=total-1-idxs[idxs.length-1];
+    if (cur>max) { max=cur; startIdx=idxs[idxs.length-1]+1; endIdx=total-1; }
+    if (max>0) result.push({
+      name, drought:max,
+      current: total-1-idxs[idxs.length-1],
+      startDate: startIdx>=0?done[startIdx].date:null,
+      endDate:   endIdx>=0?done[endIdx].date:null,
+    });
+  }
+  return result.sort((a,b)=>b.drought-a.drought);
+}
+
+function computeActiveStreaks(eligibleNames) {
+  const done = st.champs.filter(c=>c.status==='completed')
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  const all = {};
+  for (const champ of done)
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim();
+      if (n && (!eligibleNames||eligibleNames.has(n)) && !all[n]) all[n]={cur:0,startDate:null};
+    }
+  done.forEach(champ => {
+    const wMap={};
+    for (const p of (champ.champion_players||[])) { const n=p.name.trim(); if(n) wMap[n]=p.weight||1; }
+    for (const n of Object.keys(all)) {
+      if (wMap[n]!==undefined) { if(all[n].cur===0) all[n].startDate=champ.date; all[n].cur+=wMap[n]; }
+      else { all[n].cur=0; all[n].startDate=null; }
+    }
+  });
+  const lastDate = done.length ? done[done.length-1].date : null;
+  return Object.entries(all)
+    .filter(([,s])=>s.cur>0)
+    .map(([name,s])=>({name,streak:s.cur,startDate:s.startDate,endDate:lastDate}))
+    .sort((a,b)=>b.streak-a.streak).slice(0,5);
+}
+
+function computeActiveDroughts(eligibleNames) {
+  const done = st.champs.filter(c=>c.status==='completed')
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  const inactiveNames = new Set(st.players.filter(p=>p.active===false).map(p=>p.name.trim().toLowerCase()));
+  const lastWin = {};
+  done.forEach((champ,idx) => {
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim();
+      if (!n || inactiveNames.has(n.toLowerCase()) || (eligibleNames && !eligibleNames.has(n))) continue;
+      lastWin[n]=idx;
+    }
+  });
+  const total=done.length, result=[];
+  for (const [name,idx] of Object.entries(lastWin)) {
+    const cur=total-1-idx;
+    if (cur>0) result.push({name,drought:cur,startDate:done[idx+1]?.date||null,endDate:done[total-1]?.date||null});
+  }
+  return result.sort((a,b)=>b.drought-a.drought).slice(0,5);
+}
+
+function computeFullHalf(eligibleNames) {
+  const full={}, half={};
+  for (const r of st.ranks) {
+    if (eligibleNames && !eligibleNames.has(r.name)) continue;
+    for (const e of (r.entries||[])) {
+      if (e.weight===1)   full[r.name]=(full[r.name]||0)+1;
+      if (e.weight===0.5) half[r.name]=(half[r.name]||0)+1;
+    }
+  }
+  return {
+    full: Object.entries(full).sort((a,b)=>b[1]-a[1]).slice(0,5),
+    half: Object.entries(half).sort((a,b)=>b[1]-a[1]).slice(0,5),
+  };
+}
+
+function champGoalTally(champ) {
+  const t={};
+  for (const m of (champ.matches||[]))
+    for (const g of (m.goals||[]))
+      if(g.player) t[g.player]=(t[g.player]||0)+1;
+  return t;
+}
+
+function champArtilheiros(champ) {
+  const t=champGoalTally(champ);
+  const entries=Object.entries(t);
+  if(!entries.length) return [];
+  const max=Math.max(...entries.map(([,v])=>v));
+  return entries.filter(([,v])=>v===max).map(([name,goals])=>({name,goals}));
+}
+
+function computeFinalsGoalTally(doneChamps) {
+  const tally = {}, finalsScored = {};
+  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed'))) {
+    const fm = (champ.matches || []).find(m => m.phase === 'final' && m.played);
+    if (!fm) continue;
+    const goals = (fm.finalGoals && fm.finalGoals.length ? fm.finalGoals : fm.goals) || [];
+    const inThis = new Set();
+    for (const g of goals) {
+      if (!g.player) continue;
+      tally[g.player] = (tally[g.player] || 0) + 1;
+      inThis.add(g.player);
+    }
+    for (const n of inThis) finalsScored[n] = (finalsScored[n] || 0) + 1;
+  }
+  return {tally, finalsScored};
+}
+
+function computeFinalsArtilheiroRanking(doneChamps) {
+  const artTitles = {};
+  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed'))) {
+    const fm = (champ.matches || []).find(m => m.phase === 'final' && m.played);
+    if (!fm) continue;
+    const goals = (fm.finalGoals && fm.finalGoals.length ? fm.finalGoals : fm.goals) || [];
+    const t = {};
+    for (const g of goals) { if (g.player) t[g.player] = (t[g.player] || 0) + 1; }
+    if (!Object.keys(t).length) continue;
+    const maxG = Math.max(...Object.values(t));
+    for (const [n, g] of Object.entries(t)) if (g === maxG) artTitles[n] = (artTitles[n] || 0) + 1;
+  }
+  return artTitles;
+}
+
+function computeGoalDroughts() {
+  const cutoff = '2026-09-08';
+  const done = st.champs.filter(c=>c.status==='completed' && c.date>=cutoff)
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  if (!done.length) return [];
+  const {tally} = computeGoalsRanking();
+  const result = [];
+  for (const player of Object.keys(tally)) {
+    let drought = 0;
+    for (const champ of done) {
+      const ct = champGoalTally(champ);
+      if (ct[player]) break;
+      drought++;
+    }
+    if (drought > 0) result.push({name: player, drought, total: done.length});
+  }
+  return result.sort((a,b)=>b.drought-a.drought).slice(0,10);
+}
+
+function computeSingleChampGoalRecords() {
+  const records = [];
+  for (const champ of st.champs.filter(c=>c.status==='completed')) {
+    const tally = champGoalTally(champ);
+    for (const [name, goals] of Object.entries(tally)) {
+      records.push({name, goals, date: champ.date});
+    }
+  }
+  return records.sort((a,b)=>b.goals-a.goals||a.date.localeCompare(b.date)).slice(0,10);
+}
+
+function computeGoalsRanking(doneChamps) {
+  const tally={}, artTitles={};
+  for (const champ of (doneChamps || st.champs.filter(c=>c.status==='completed'))) {
+    const ct=champGoalTally(champ);
+    for (const [n,g] of Object.entries(ct)) tally[n]=(tally[n]||0)+g;
+    const maxG=Object.values(ct).reduce((a,b)=>Math.max(a,b),0);
+    if(maxG>0) for (const [n,g] of Object.entries(ct)) if(g===maxG) artTitles[n]=(artTitles[n]||0)+1;
+  }
+  return {tally, artTitles};
+}
+
+function computeGoalsPerTitle() {
+  const cutoff='2026-09-02';
+  const data={};
+  for (const champ of st.champs.filter(c=>c.status==='completed'&&c.date>cutoff)) {
+    const ct=champGoalTally(champ);
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim(); if(!n) continue;
+      if(!data[n]) data[n]={goals:0,titles:0};
+      data[n].goals+=(ct[n]||0);
+      data[n].titles+=(p.weight||1);
+    }
+  }
+  return Object.entries(data)
+    .filter(([,d])=>d.titles>0)
+    .map(([name,d])=>({name,goals:d.goals,titles:d.titles,ratio:d.goals/d.titles}))
+    .sort((a,b)=>b.ratio-a.ratio);
+}
+
+function analyzeClassification(champ) {
+  const fmt = champ.format;
+  if (fmt !== 4 && fmt !== 5) return null;
+  const qualify = fmt === 4 ? 2 : 4;
+  const regMs = champ.matches.filter(m => m.phase === 'regular');
+  const unplayed = regMs.filter(m => !m.played && !m.rest);
+  const roundsLeft = new Set(unplayed.map(m => m.round).filter(Boolean)).size;
+  if (roundsLeft === 0 || roundsLeft > 2) return null;
+
+  const st2 = standings(champ.teams, regMs.filter(m => m.played));
+  const basePts = Object.fromEntries(st2.map(s => [s.team, s.pts]));
+  const baseSG  = Object.fromEntries(st2.map(s => [s.team, s.gp - s.gc]));
+  const teams = champ.teams;
+  const n = unplayed.length;
+  const total = Math.pow(3, n);
+
+  const qualCount  = Object.fromEntries(teams.map(t => [t, 0]));
+  const swData     = Object.fromEntries(teams.map(t => [t, { all: 0, qual: 0 }]));
+  const noLossData = Object.fromEntries(teams.map(t => [t, { all: 0, qual: 0 }]));
+
+  for (let mask = 0; mask < total; mask++) {
+    const pts = { ...basePts };
+    const wAll   = Object.fromEntries(teams.map(t => [t, true]));
+    const noLoss = Object.fromEntries(teams.map(t => [t, true]));
+    let tmp = mask;
+    for (const m of unplayed) {
+      const r = tmp % 3; tmp = Math.floor(tmp / 3);
+      if (r === 0) {
+        pts[m.home] += 3;
+        wAll[m.away] = false; noLoss[m.away] = false;
+      } else if (r === 1) {
+        pts[m.home] += 1; pts[m.away] += 1;
+        wAll[m.home] = false; wAll[m.away] = false;
+      } else {
+        pts[m.away] += 3;
+        wAll[m.home] = false; noLoss[m.home] = false;
+      }
+    }
+    const sorted = [...teams].sort((a, b) =>
+      pts[b] !== pts[a] ? pts[b] - pts[a] : baseSG[b] - baseSG[a]
+    );
+    const qSet = new Set(sorted.slice(0, qualify));
+    for (const t of teams) {
+      if (qSet.has(t)) qualCount[t]++;
+      if (wAll[t])   { swData[t].all++;     if (qSet.has(t)) swData[t].qual++;     }
+      if (noLoss[t]) { noLossData[t].all++; if (qSet.has(t)) noLossData[t].qual++; }
+    }
+  }
+
+  const icons = { classified:'✅', no_loss:'🟡', needs_wins:'🟡', draw_partial:'🟡', needs_help:'🟠', very_hard:'🔴', eliminated:'❌' };
+  return {
+    roundsLeft,
+    qualify,
+    teams: st2.map(s => {
+      const t = s.team, c = qualCount[t], sw = swData[t], nl = noLossData[t];
+      const rem = unplayed.filter(m => m.home === t || m.away === t).length;
+      const noLossControls = nl.all > 0 && nl.qual === nl.all;
+      const winsControls   = sw.all > 0 && sw.qual === sw.all;
+      const drawSometimes  = nl.qual > 0 && nl.qual < nl.all; // empate ajuda em parte dos cenários
+      const canWin = sw.qual > 0;
+      let status, detail;
+      if (c === total)              { status = 'classified';   detail = 'Classificado garantido'; }
+      else if (c === 0)             { status = 'eliminated';   detail = 'Eliminado matematicamente'; }
+      else if (noLossControls && rem === 0) { status = 'classified'; detail = 'Classificado garantido'; }
+      else if (noLossControls)      { status = 'no_loss';      detail = rem === 1 ? 'Empate basta' : 'Não pode perder'; }
+      else if (winsControls && drawSometimes && rem > 0) {
+                                      status = 'draw_partial'; detail = rem === 1 ? 'Vencer garante · empate pode bastar' : 'Precisa vencer (empate pode bastar)'; }
+      else if (winsControls)        { status = 'needs_wins';   detail = rem === 0 ? 'Depende de outros' : rem === 1 ? 'Precisa vencer o próximo' : `Precisa vencer os ${rem} jogos`; }
+      else if (canWin)              { status = 'needs_help';   detail = rem === 0 ? 'Depende de outros resultados' : 'Precisa vencer e torcer'; }
+      else                          { status = 'very_hard';    detail = 'Só com combinação favorável'; }
+      return { team: t, status, detail, icon: icons[status], count: c, total };
+    })
+  };
+}
+
+function setStatsFilter(key, val) {
+  st.statsFilter[key] = key==='minTitles' ? +val : val;
+  if (key==='player' && val) st.statsFilter.minTitles=0;
+  if (key==='minTitles' && +val>0) st.statsFilter.player='';
+  render();
+}
+function setShowInactive(val) { st.showInactive=val; render(); }
+function activeOnlySet() {
+  const base = st.players.filter(p=>!p.somenteChurrasco);
+  if (st.showInactive) return new Set(base.map(p=>p.name));
+  return new Set(base.filter(p=>p.active!==false).map(p=>p.name));
+}
+function intersectSets(a,b) {
+  if (!a) return b; if (!b) return a;
+  return new Set([...a].filter(x=>b.has(x)));
+}
+
+/* ── stats view ─────────────────────────────────────────────── */
+function vStats() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  const done = st.champs.filter(c=>c.status==='completed');
+  if (!done.length) return `<div class="empty"><div class="ei">📊</div><h3>Sem dados ainda</h3><p>Conclua campeonatos para ver as estatísticas.</p></div>`;
+
+  const f = st.statsFilter;
+  const posC = ['#F0A500','#C0C0C0','#CD7F32'];
+  const COLORS = ['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+
+  const allWithTitles = st.ranks.filter(r=>r.titles>0);
+  const activeSet = activeOnlySet();
+  let eligibleNames = null;
+  if (f.player) {
+    eligibleNames = new Set([f.player]);
+  } else if (f.minTitles>0) {
+    eligibleNames = intersectSets(activeSet, new Set(allWithTitles.filter(r=>r.titles>=f.minTitles).map(r=>r.name)));
+  } else {
+    eligibleNames = activeSet;
+  }
+
+  const streaks        = computeStreaks(eligibleNames);
+  const droughts       = computeDroughts(eligibleNames).slice(0,5);
+  const activeStreaks  = computeActiveStreaks(eligibleNames);
+  const activeDroughts = computeActiveDroughts(eligibleNames);
+  const {full,half} = computeFullHalf(eligibleNames);
+  const goalDroughts   = computeGoalDroughts();
+  const singleRecs     = computeSingleChampGoalRecords();
+
+  const chartTop = eligibleNames
+    ? st.ranks.filter(r=>eligibleNames.has(r.name)).slice(0,6)
+    : st.ranks.slice(0,6);
+
+  const hasFilter = f.player || f.minTitles>0;
+  const selInp = `style="width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px"`;
+  const numInp = `style="width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px"`;
+  const playerOpts = allWithTitles.map(r=>`<option value="${esc(r.name)}"${f.player===r.name?' selected':''}>${esc(r.name)} (${r.titles%1===0?r.titles:Math.floor(r.titles)+'½'})</option>`).join('');
+
+  function row(label, val, color, suffix='') {
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+      <span style="font-weight:700;color:${color};width:22px;font-size:13px">${label}</span>
+      <span style="flex:1;font-weight:600;font-size:14px">${val}</span>`;
+  }
+
+  return `
+  <div class="card" style="padding:12px 14px">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+        <label style="font-size:11px;color:var(--text3);font-weight:600">Jogador específico</label>
+        <select onchange="setStatsFilter('player',this.value)" ${selInp}>
+          <option value="">Todos os jogadores</option>
+          ${playerOpts}
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:110px">
+        <label style="font-size:11px;color:var(--text3);font-weight:600">Mín. títulos</label>
+        <input type="number" min="0" max="99" value="${f.minTitles||''}" placeholder="Ex: 3"
+          oninput="setStatsFilter('minTitles',this.value)" ${numInp}/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
+        <label style="font-size:11px;color:var(--text3);font-weight:600">Jogadores</label>
+        <div style="display:flex;gap:6px">
+          ${['Todos','Ativos'].map((lbl,i)=>{const act=st.showInactive===(i===0);return`<button onclick="setShowInactive(${i===0})"
+            style="padding:5px 12px;border-radius:20px;border:1px solid ${act?'var(--accent)':'var(--border)'};
+                   background:${act?'#00d67f18':'none'};color:${act?'var(--accent)':'var(--text2)'};
+                   font-size:12px;font-weight:600;cursor:pointer">${lbl}</button>`;}).join('')}
+        </div>
+      </div>
+      ${hasFilter?`<button class="btn-ghost" style="padding:7px 14px;border-radius:8px;font-size:13px;height:36px;align-self:flex-end" onclick="st.statsFilter={minTitles:0,player:''};render()">Limpar</button>`:''}
+    </div>
+    ${eligibleNames&&eligibleNames.size===0?`<p style="margin:10px 0 0;font-size:13px;color:var(--text3)">Nenhum jogador com esse filtro.</p>`:''}
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-lbl">Maior Sequência de Vitórias</span></div>
+    ${streaks.length?streaks.map((s,i)=>{
+      const fmtD=d=>{if(!d)return'';const[,m,dy]=d.split('-');return`${dy}/${m}`;};
+      const interval=s.startDate&&s.endDate?`${fmtD(s.startDate)} – ${fmtD(s.endDate)}`:'';
+      return `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+        <span style="font-weight:700;color:${posC[i]||'#6e7681'};width:22px;font-size:13px">${i+1}°</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px">${esc(s.name)}</div>
+          ${interval?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${interval}</div>`:''}
+        </div>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent)">${s.streak%1===0?s.streak:Math.floor(s.streak)+'½'}</span>
+        <span style="font-size:11px;color:var(--text3)">seguidas</span>
+      </div>`;}).join('')
+    :`<p style="padding:12px 14px;font-size:13px;color:var(--text3)">Sem dados para o filtro selecionado.</p>`}
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-lbl">Maior Jejum (campeonatos sem ganhar)</span></div>
+    ${droughts.length?droughts.map((s,i)=>{
+      const fmtD=d=>{if(!d)return'';const[,m,dy]=d.split('-');return`${dy}/${m}`;};
+      const interval=s.startDate&&s.endDate?`${fmtD(s.startDate)} – ${fmtD(s.endDate)}`:'';
+      return `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+        <span style="font-weight:700;color:${posC[i]||'#6e7681'};width:22px;font-size:13px">${i+1}°</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px">${esc(s.name)}</div>
+          ${interval?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${interval}</div>`:''}
+        </div>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#9EA7B3">${s.drought}</span>
+        <span style="font-size:11px;color:var(--text3)">${s.drought===s.current?'atual':'máx'}</span>
+      </div>`;}).join('')
+    :`<p style="padding:12px 14px;font-size:13px;color:var(--text3)">Sem dados para o filtro selecionado.</p>`}
+  </div>
+
+  ${goalDroughts.length?`<div class="card">
+    <div class="card-hdr"><span class="card-lbl">⚽ Jejum de Gols (desde 08/09)</span></div>
+    ${goalDroughts.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+      <span style="font-weight:700;color:${posC[i]||'#6e7681'};width:22px;font-size:13px">${i+1}°</span>
+      <span style="flex:1;font-weight:600;font-size:14px">${esc(s.name)}</span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#9EA7B3">${s.drought}</span>
+      <span style="font-size:11px;color:var(--text3)">sem gol</span>
+    </div>`).join('')}
+  </div>`:''}
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div class="card">
+      <div class="card-hdr" style="padding:10px 12px 8px"><span class="card-lbl">Sequência Ativa</span></div>
+      ${activeStreaks.length?activeStreaks.map((s,i)=>{
+        const fmtD=d=>{if(!d)return'';const[,m,dy]=d.split('-');return`${dy}/${m}`;};
+        const interval=s.startDate&&s.endDate?`${fmtD(s.startDate)} – ${fmtD(s.endDate)}`:'';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+          <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+          <div style="flex:1;min-width:0;overflow:hidden">
+            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.name)}</div>
+            ${interval?`<div style="font-size:10px;color:var(--text3)">${interval}</div>`:''}
+          </div>
+          <span style="font-weight:800;color:var(--accent);font-size:15px">${s.streak%1===0?s.streak:Math.floor(s.streak)+'½'}</span>
+        </div>`;}).join('')
+      :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+    </div>
+    <div class="card">
+      <div class="card-hdr" style="padding:10px 12px 8px"><span class="card-lbl">Jejum Atual</span></div>
+      ${activeDroughts.length?activeDroughts.map((s,i)=>{
+        const fmtD=d=>{if(!d)return'';const[,m,dy]=d.split('-');return`${dy}/${m}`;};
+        const interval=s.startDate&&s.endDate?`${fmtD(s.startDate)} – ${fmtD(s.endDate)}`:'';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+          <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+          <div style="flex:1;min-width:0;overflow:hidden">
+            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.name)}</div>
+            ${interval?`<div style="font-size:10px;color:var(--text3)">${interval}</div>`:''}
+          </div>
+          <span style="font-weight:800;color:#9EA7B3;font-size:15px">${s.drought}</span>
+        </div>`;}).join('')
+      :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div class="card">
+      <div class="card-hdr" style="padding:10px 12px 8px"><span class="card-lbl">Títulos Inteiros</span></div>
+      ${full.length?full.map(([name,n],i)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+          <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+          <span style="flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</span>
+          <span style="font-weight:800;color:var(--gold);font-size:15px">${n}</span>
+        </div>`).join('')
+      :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+    </div>
+    <div class="card">
+      <div class="card-hdr" style="padding:10px 12px 8px"><span class="card-lbl">Meios Títulos</span></div>
+      ${half.length?half.map(([name,n],i)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
+          <span style="font-size:11px;color:${posC[i]||'#6e7681'};font-weight:700;width:18px">${i+1}°</span>
+          <span style="flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</span>
+          <span style="font-weight:800;color:#f0883e;font-size:15px">${n}</span>
+        </div>`).join('')
+      :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
+    </div>
+  </div>
+
+  ${(()=>{
+    const gpt=computeGoalsPerTitle();
+    if(!gpt.length) return '';
+    return `<div class="card">
+      <div class="card-hdr"><span class="card-lbl">⚽ Gols por Título — campeões desde 02/09/2026</span></div>
+      <table class="rank-table">
+        <thead><tr><th>#</th><th>Jogador</th><th>Gols</th><th>Títulos</th><th>G/T</th></tr></thead>
+        <tbody>
+          ${gpt.map((p,i)=>`<tr class="${i<3?'top3':''}">
+            <td class="td-pos"><span class="pos-num" style="color:${posC[i]||'#6e7681'}">${i+1}°</span></td>
+            <td style="font-weight:600;font-size:14px">${esc(p.name)}</td>
+            <td style="text-align:center;font-size:13px;color:var(--text2)">${p.goals}</td>
+            <td style="text-align:center;font-size:13px;color:var(--text2)">${p.titles%1===0?p.titles:Math.floor(p.titles)+'½'}</td>
+            <td style="text-align:right;padding-right:14px;font-weight:800;font-size:15px;color:#4DB8FF">${p.ratio.toFixed(1)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  })()}
+
+  ${singleRecs.length?`<div class="card">
+    <div class="card-hdr"><span class="card-lbl">⚽ Mais Gols em Um Campeonato</span></div>
+    ${singleRecs.map(({name,goals,date},i)=>{const[,m,d]=date.split('-');return`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+      <span style="font-weight:700;color:${posC[i]||'#6e7681'};width:22px;font-size:13px">${i+1}°</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px">${esc(name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${d}/${m}</div>
+      </div>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4DB8FF">${goals}</span>
+      <span style="font-size:11px;color:var(--text3)">gols</span>
+    </div>`}).join('')}
+  </div>`:''}
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-lbl">Evolução dos Campeões</span></div>
+    <div style="padding:12px 14px 4px;overflow-x:auto;position:relative">
+      <canvas id="evo-chart" height="200" style="display:block;width:100%;cursor:crosshair"></canvas>
+      <div id="chart-tooltip" hidden style="position:absolute;background:var(--s0);border:1px solid var(--border);
+           border-radius:8px;padding:8px 10px;pointer-events:none;z-index:10;min-width:130px;box-shadow:0 4px 12px #0008"></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;padding:6px 14px 14px">
+      ${chartTop.map((p,i)=>`<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)">
+        <span style="width:14px;height:3px;border-radius:2px;background:${COLORS[i]};display:inline-block"></span>${esc(p.name)}
+      </span>`).join('')}
+    </div>
+  </div>
+
+  ${[
+    {id:'art-chart',    tip:'art-tooltip',    leg:'art-legend',    label:'🥇 Evolução Artilharia'},
+    {id:'art-final-chart', tip:'art-final-tooltip', leg:'art-final-legend', label:'🏆 Evolução Artilharia Final'},
+    {id:'goals-chart',  tip:'goals-tooltip',  leg:'goals-legend',  label:'⚽ Evolução Gols'},
+    {id:'goals-final-chart',tip:'goals-final-tooltip',leg:'goals-final-legend',label:'⚽ Evolução Gols Finais'},
+  ].map(({id,tip,leg,label})=>`<div class="card" style="margin-top:10px">
+    <div class="card-hdr"><span class="card-lbl">${label}</span></div>
+    <div style="padding:12px 14px 4px;overflow-x:auto;position:relative">
+      <canvas id="${id}" height="180" style="display:block;width:100%;cursor:crosshair"></canvas>
+      <div id="${tip}" hidden style="position:absolute;background:var(--s0);border:1px solid var(--border);border-radius:8px;padding:8px 10px;pointer-events:none;z-index:10;min-width:130px;box-shadow:0 4px 12px #0008"></div>
+    </div>
+    <div id="${leg}" style="display:flex;flex-wrap:wrap;gap:8px 14px;padding:6px 14px 14px"></div>
+  </div>`).join('')}`;
+}
+
+function drawEvoChart() {
+  const canvas = document.getElementById('evo-chart');
+  if (!canvas) return;
+  const done = st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  if (!done.length) return;
+
+  const COLORS = ['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+  const f = st.statsFilter;
+  const eligibleNames = f.player ? new Set([f.player])
+    : f.minTitles>0 ? new Set(st.ranks.filter(r=>r.titles>=f.minTitles).map(r=>r.name))
+    : null;
+  const topRanks = eligibleNames
+    ? st.ranks.filter(r=>eligibleNames.has(r.name)).slice(0,6)
+    : st.ranks.slice(0,6);
+  const top = topRanks.map(r=>r.name);
+  const cum = Object.fromEntries(top.map(n=>[n,0]));
+  const pts = done.map(champ => {
+    for (const p of (champ.champion_players||[])) {
+      const n=p.name.trim(); if(cum[n]!==undefined) cum[n]+=p.weight;
+    }
+    return {date:champ.date, ...cum};
+  });
+
+  const maxVal = Math.max(...top.map(n=>cum[n]),1);
+  const W = canvas.parentElement.clientWidth - 28;
+  canvas.width = W;
+  const H=200, PAD={t:10,r:8,b:28,l:28};
+  const cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
+  const n=pts.length, xStep=n>1?cW/(n-1):cW;
+
+  function draw(hi=-1) {
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,W,H);
+    // Grid
+    ctx.lineWidth=1;
+    for(let i=0;i<=4;i++){
+      const y=PAD.t+(cH/4)*i;
+      ctx.strokeStyle='#21262d'; ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(PAD.l+cW,y); ctx.stroke();
+      ctx.fillStyle='#6e7681'; ctx.font='10px Inter,system-ui'; ctx.textAlign='right';
+      ctx.fillText(Math.round(maxVal-(maxVal/4)*i),PAD.l-4,y+3);
+    }
+    // Vertical highlight
+    if (hi>=0) {
+      const hx=PAD.l+(n>1?xStep*hi:cW/2);
+      ctx.strokeStyle='#ffffff18'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(hx,PAD.t); ctx.lineTo(hx,PAD.t+cH); ctx.stroke();
+    }
+    // Lines + dots
+    top.forEach((player,ci)=>{
+      ctx.strokeStyle=COLORS[ci]; ctx.lineWidth=2; ctx.beginPath();
+      pts.forEach((pt,i)=>{
+        const x=PAD.l+(n>1?xStep*i:cW/2);
+        const y=PAD.t+cH-((pt[player]||0)/maxVal)*cH;
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      [n-1,hi].filter((v,i,a)=>v>=0&&a.indexOf(v)===i).forEach(di=>{
+        const x=PAD.l+(n>1?xStep*di:cW/2);
+        const y=PAD.t+cH-((pts[di][player]||0)/maxVal)*cH;
+        ctx.fillStyle=COLORS[ci]; ctx.beginPath(); ctx.arc(x,y,di===hi?4:3,0,Math.PI*2); ctx.fill();
+      });
+    });
+    // X labels
+    ctx.fillStyle='#6e7681'; ctx.font='9px Inter,system-ui'; ctx.textAlign='center';
+    const ls=Math.ceil(n/6);
+    pts.forEach((pt,i)=>{
+      if(i%ls===0||i===n-1){
+        const x=PAD.l+(n>1?xStep*i:cW/2);
+        const[,m,d]=pt.date.split('-');
+        ctx.fillText(`${d}/${m}`,x,H-8);
+      }
+    });
+  }
+
+  draw();
+
+  const tooltip = document.getElementById('chart-tooltip');
+  if (!tooltip) return;
+
+  function showAt(clientX) {
+    const rect=canvas.getBoundingClientRect();
+    let idx=Math.round((clientX-rect.left-PAD.l)/xStep);
+    idx=Math.max(0,Math.min(n-1,idx));
+    draw(idx);
+    const pt=pts[idx];
+    const[yr,mo,dy]=pt.date.split('-');
+    let html=`<div style="font-weight:700;font-size:12px;margin-bottom:5px;color:var(--text)">${dy}/${mo}/${yr}</div>`;
+    top.forEach((player,ci)=>{
+      const val=pt[player]||0; if(!val) return;
+      const fv=val%1===0?val:Math.floor(val)+'½';
+      html+=`<div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${COLORS[ci]};flex-shrink:0"></span>
+        <span style="flex:1;font-size:11px;color:var(--text2)">${player}</span>
+        <span style="font-weight:700;font-size:12px;color:${COLORS[ci]}">${fv}</span>
+      </div>`;
+    });
+    tooltip.innerHTML=html; tooltip.hidden=false;
+    const hx=PAD.l+(n>1?xStep*idx:cW/2);
+    const conW=canvas.parentElement.clientWidth;
+    let left=hx+12; if(left+150>conW-14) left=hx-154;
+    tooltip.style.left=Math.max(0,left)+'px';
+    tooltip.style.top='8px';
+  }
+
+  canvas.onmousemove=e=>showAt(e.clientX);
+  canvas.ontouchmove=e=>{e.preventDefault();showAt(e.touches[0].clientX);};
+  canvas.onmouseleave=()=>{tooltip.hidden=true;draw();};
+  canvas.ontouchend=()=>{tooltip.hidden=true;draw();};
+}
+
+function drawLineChart(canvasId, tooltipId, legendId, players, pts, colors) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !pts.length || !players.length) return;
+  const tooltip = tooltipId ? document.getElementById(tooltipId) : null;
+  const legendEl = legendId ? document.getElementById(legendId) : null;
+  const maxVal = Math.max(...players.map(n=>pts[pts.length-1]?.[n]||0), 1);
+  const W = canvas.parentElement.clientWidth - 28;
+  if (W <= 0) return;
+  canvas.width = W;
+  const H = canvas.height, PAD={t:10,r:8,b:28,l:28};
+  const cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
+  const n=pts.length, xStep=n>1?cW/(n-1):cW;
+  function draw(hi=-1) {
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,W,H);
+    for(let i=0;i<=4;i++){
+      const y=PAD.t+(cH/4)*i;
+      ctx.strokeStyle='#21262d'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(PAD.l+cW,y); ctx.stroke();
+      ctx.fillStyle='#6e7681'; ctx.font='10px Inter,system-ui'; ctx.textAlign='right';
+      ctx.fillText(String(Math.round(maxVal-(maxVal/4)*i)),PAD.l-4,y+3);
+    }
+    if (hi>=0) {
+      const hx=PAD.l+(n>1?xStep*hi:cW/2);
+      ctx.strokeStyle='#ffffff18'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(hx,PAD.t); ctx.lineTo(hx,PAD.t+cH); ctx.stroke();
+    }
+    players.forEach((player,ci)=>{
+      ctx.strokeStyle=colors[ci]; ctx.lineWidth=2; ctx.beginPath();
+      pts.forEach((pt,i)=>{
+        const x=PAD.l+(n>1?xStep*i:cW/2);
+        const y=PAD.t+cH-((pt[player]||0)/maxVal)*cH;
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      [n-1,hi].filter((v,j,a)=>v>=0&&a.indexOf(v)===j).forEach(di=>{
+        const x=PAD.l+(n>1?xStep*di:cW/2);
+        const y=PAD.t+cH-((pts[di]?.[player]||0)/maxVal)*cH;
+        ctx.fillStyle=colors[ci]; ctx.beginPath(); ctx.arc(x,y,di===hi?4:3,0,Math.PI*2); ctx.fill();
+      });
+    });
+    ctx.fillStyle='#6e7681'; ctx.font='9px Inter,system-ui'; ctx.textAlign='center';
+    const ls=Math.ceil(n/6);
+    pts.forEach((pt,i)=>{
+      if(i%ls===0||i===n-1){
+        const x=PAD.l+(n>1?xStep*i:cW/2);
+        const[,m,d]=pt.date.split('-');
+        ctx.fillText(`${d}/${m}`,x,H-8);
+      }
+    });
+  }
+  draw();
+  if (legendEl) legendEl.innerHTML=players.map((name,i)=>`<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)"><span style="width:14px;height:3px;border-radius:2px;background:${colors[i]};display:inline-block"></span>${esc(name)}</span>`).join('');
+  if (!tooltip) return;
+  function showAt(clientX) {
+    const rect=canvas.getBoundingClientRect();
+    let idx=Math.round((clientX-rect.left-PAD.l)/xStep);
+    idx=Math.max(0,Math.min(n-1,idx));
+    draw(idx);
+    const pt=pts[idx];
+    const[yr,mo,dy]=pt.date.split('-');
+    let html=`<div style="font-weight:700;font-size:12px;margin-bottom:5px;color:var(--text)">${dy}/${mo}/${yr}</div>`;
+    players.forEach((player,ci)=>{
+      const val=pt[player]||0; if(!val) return;
+      html+=`<div style="display:flex;align-items:center;gap:5px;margin-top:2px"><span style="width:7px;height:7px;border-radius:50%;background:${colors[ci]};flex-shrink:0"></span><span style="flex:1;font-size:11px;color:var(--text2)">${player}</span><span style="font-weight:700;font-size:12px;color:${colors[ci]}">${val}</span></div>`;
+    });
+    tooltip.innerHTML=html; tooltip.hidden=false;
+    const hx=PAD.l+(n>1?xStep*idx:cW/2);
+    const conW=canvas.parentElement.clientWidth;
+    let left=hx+12; if(left+150>conW-14) left=hx-154;
+    tooltip.style.left=Math.max(0,left)+'px'; tooltip.style.top='8px';
+  }
+  canvas.onmousemove=e=>showAt(e.clientX);
+  canvas.ontouchmove=e=>{e.preventDefault();showAt(e.touches[0].clientX);};
+  canvas.onmouseleave=()=>{tooltip.hidden=true;draw();};
+  canvas.ontouchend=()=>{tooltip.hidden=true;draw();};
+}
+
+function _buildChartPts(done, top, accumFn) {
+  const cum=Object.fromEntries(top.map(n=>[n,0]));
+  return done.map(champ=>{accumFn(champ,cum);return{date:champ.date,...cum};});
+}
+
+function drawArtChart() {
+  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  if (!done.length) return;
+  const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+  const {artTitles}=computeGoalsRanking();
+  const top=Object.entries(artTitles).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+  if (!top.length) return;
+  const pts=_buildChartPts(done,top,(champ,cum)=>{
+    const t=champGoalTally(champ);
+    const maxG=Object.values(t).reduce((a,b)=>Math.max(a,b),0);
+    if(maxG>0) for(const[n,g]of Object.entries(t)) if(g===maxG&&cum[n]!==undefined) cum[n]++;
+  });
+  drawLineChart('art-chart','art-tooltip','art-legend',top,pts,COLORS);
+}
+
+function drawArtFinalChart() {
+  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  if (!done.length) return;
+  const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+  const at=computeFinalsArtilheiroRanking();
+  const top=Object.entries(at).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+  if (!top.length) return;
+  const pts=_buildChartPts(done,top,(champ,cum)=>{
+    const fm=(champ.matches||[]).find(m=>m.phase==='final'&&m.played);
+    if(!fm) return;
+    const goals=(fm.finalGoals?.length?fm.finalGoals:fm.goals)||[];
+    const t={};
+    for(const g of goals) if(g.player) t[g.player]=(t[g.player]||0)+1;
+    const maxG=Math.max(...Object.values(t),0);
+    if(maxG>0) for(const[n,g]of Object.entries(t)) if(g===maxG&&cum[n]!==undefined) cum[n]++;
+  });
+  drawLineChart('art-final-chart','art-final-tooltip','art-final-legend',top,pts,COLORS);
+}
+
+function drawGoalsChart() {
+  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  if (!done.length) return;
+  const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+  const {tally}=computeGoalsRanking();
+  const top=Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+  if (!top.length) return;
+  const pts=_buildChartPts(done,top,(champ,cum)=>{
+    const t=champGoalTally(champ);
+    for(const[n,g]of Object.entries(t)) if(cum[n]!==undefined) cum[n]+=g;
+  });
+  drawLineChart('goals-chart','goals-tooltip','goals-legend',top,pts,COLORS);
+}
+
+function drawGoalsFinalChart() {
+  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  if (!done.length) return;
+  const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
+  const {tally}=computeFinalsGoalTally();
+  const top=Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+  if (!top.length) return;
+  const pts=_buildChartPts(done,top,(champ,cum)=>{
+    const fm=(champ.matches||[]).find(m=>m.phase==='final'&&m.played);
+    if(!fm) return;
+    const goals=(fm.finalGoals?.length?fm.finalGoals:fm.goals)||[];
+    for(const g of goals) if(g.player&&cum[g.player]!==undefined) cum[g.player]++;
+  });
+  drawLineChart('goals-final-chart','goals-final-tooltip','goals-final-legend',top,pts,COLORS);
+}
+
+/* ── financeiro ──────────────────────────────────────────────── */
+
+function getPaid(pagamentos, playerName, type) {
+  const p = pagamentos[playerName];
+  if (!p) return false;
+  if (typeof p === 'boolean') return type === 'mensalidade' ? p : false;
+  return !!(p[type]);
+}
+
+function daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
+}
+
+function getWeekdayOccurrences(y, m, diaSemana) {
+  const dates = [];
+  const dim = daysInMonth(y, m);
+  for (let d = 1; d <= dim; d++) {
+    if (new Date(y, m-1, d).getDay() === diaSemana)
+      dates.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+  }
+  return dates;
+}
+
+function getDespMes(month) {
+  const [y, mon] = month.split('-').map(Number);
+  const entries = [];
+  for (const d of (st.finDesp||[])) {
+    if (!d.recorrencia) {
+      if ((d.data||'').startsWith(month)) entries.push({...d, occKey: null});
+    } else if (d.recorrencia === 'mensal') {
+      const day = Math.min(d.diaDoMes||1, daysInMonth(y, mon));
+      const data = `${month}-${String(day).padStart(2,'0')}`;
+      const paga = (d.pagamentos||{})[month] === true;
+      entries.push({...d, data, paga, occKey: month});
+    } else if (d.recorrencia === 'semanal') {
+      for (const date of getWeekdayOccurrences(y, mon, d.diaSemana||0)) {
+        const paga = (d.pagamentos||{})[date] === true;
+        entries.push({...d, data: date, paga, occKey: date});
+      }
+    }
+  }
+  return entries.sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+}
+
+
+function vFinanceiro() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+  const cfg = st.finCfg || {valorMensalidade:50, valorChurrasco:0, saldoInicial:0, reserva:300};
+  const valM = cfg.valorMensalidade || 0;
+  const valC = cfg.valorChurrasco || 0;
+  const reserva = cfg.reserva || 0;
+  const fmtR = v => 'R$ ' + Number(v||0).toFixed(2).replace('.',',');
+
+  let totalMens = 0, totalChurr = 0;
+  for (const data of Object.values(st.finMens||{})) {
+    const pags = data?.pagamentos || {};
+    for (const pName of Object.keys(pags)) {
+      if (getPaid(pags, pName, 'mensalidade')) totalMens += valM;
+      if (getPaid(pags, pName, 'churrasco'))   totalChurr += valC;
+    }
+  }
+  const totalAvulso = (st.finAvulsos||[]).filter(a=>a.paga!==false).reduce((s,a)=>s+(a.valor||0),0);
+  const totalRec = totalMens + totalChurr + totalAvulso;
+  const avulsosMes      = (st.finAvulsos||[]).filter(a=>(a.mes||'')==st.finMonth||(a.data||'').startsWith(st.finMonth));
+  const avulsosMesPagas = avulsosMes.filter(a=>a.paga!==false).reduce((s,a)=>s+(a.valor||0),0);
+  const avulsosMesPend  = avulsosMes.filter(a=>a.paga===false).reduce((s,a)=>s+(a.valor||0),0);
+
+  const despOneTimePagas = (st.finDesp||[]).filter(d=>!d.recorrencia&&d.paga!==false).reduce((s,d)=>s+(d.valor||0),0);
+  const despOneTimePend  = (st.finDesp||[]).filter(d=>!d.recorrencia&&d.paga===false).reduce((s,d)=>s+(d.valor||0),0);
+  const curMon = new Date().toISOString().slice(0,7);
+  let despRecPagas = 0, despRecPend = 0;
+  for (const _d of (st.finDesp||[])) {
+    if (!_d.recorrencia) continue;
+    let [sy,sm] = ((_d.data||curMon).slice(0,7)).split('-').map(Number);
+    const [ey,em] = curMon.split('-').map(Number);
+    while (sy < ey || (sy===ey && sm<=em)) {
+      const mon2 = `${sy}-${String(sm).padStart(2,'0')}`;
+      if (_d.recorrencia==='mensal') {
+        const paid=(_d.pagamentos||{})[mon2]===true;
+        if(paid) despRecPagas+=_d.valor||0; else despRecPend+=_d.valor||0;
+      } else if (_d.recorrencia==='semanal') {
+        for (const dt of getWeekdayOccurrences(sy,sm,_d.diaSemana||0)) {
+          const paid=(_d.pagamentos||{})[dt]===true;
+          if(paid) despRecPagas+=_d.valor||0; else despRecPend+=_d.valor||0;
+        }
+      }
+      sm++; if(sm>12){sm=1;sy++;}
+    }
+  }
+  const despPagas    = despOneTimePagas + despRecPagas;
+  const despPendentes = despOneTimePend  + despRecPend;
+
+  const saldo = (cfg.saldoInicial||0) + totalRec - despPagas;
+  const disponivel = saldo - reserva;
+  const previsao = disponivel - despPendentes;
+
+  const month = st.finMonth;
+  const [y,m] = month.split('-').map(Number);
+  const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const monthLabel = MONTHS[m-1]+'/'+String(y).slice(2);
+  const pagamentos = st.finMens[month]?.pagamentos || {};
+  const activePlayers = st.players.filter(p=>p.active!==false).sort((a,b)=>a.name.localeCompare(b.name,'pt'));
+  const mensPayers  = activePlayers.filter(p=>!p.somenteChurrasco);
+  const paidMens  = mensPayers.filter(p=>getPaid(pagamentos,p.name,'mensalidade')).length;
+  const paidChurr = activePlayers.filter(p=>getPaid(pagamentos,p.name,'churrasco')).length;
+  const canNext = month < new Date().toISOString().slice(0,7);
+
+  const despMesAll   = getDespMes(month);
+  const despMesPagas = despMesAll.filter(d=>d.paga!==false).reduce((s,d)=>s+(d.valor||0), 0);
+  const despMesPend  = despMesAll.filter(d=>d.paga===false).reduce((s,d)=>s+(d.valor||0), 0);
+
+  const _recMons = [];
+  const _curMon = new Date().toISOString().slice(0,7);
+  for (const _rd of (st.finDesp||[])) {
+    if (!_rd.recorrencia) continue;
+    let [_ry,_rm] = ((_rd.data||_curMon).slice(0,7)).split('-').map(Number);
+    const [_ey,_em] = _curMon.split('-').map(Number);
+    while (_ry<_ey||(_ry===_ey&&_rm<=_em)) {
+      _recMons.push(`${_ry}-${String(_rm).padStart(2,'0')}`);
+      _rm++; if(_rm>12){_rm=1;_ry++;}
+    }
+  }
+  const allMonths = [...new Set([
+    ...Object.keys(st.finMens||{}),
+    ...(st.finDesp||[]).map(d=>d.recorrencia?'':(d.data||'').slice(0,7)).filter(Boolean),
+    ...(st.finAvulsos||[]).map(a=>(a.mes||(a.data||'').slice(0,7))).filter(Boolean),
+    ..._recMons,
+  ])].sort();
+  let runBal = cfg.saldoInicial || 0;
+  const evoRows = allMonths.map(mon => {
+    const pags2 = st.finMens[mon]?.pagamentos || {};
+    let mRec = 0, cRec = 0;
+    for (const pn of Object.keys(pags2)) {
+      if (getPaid(pags2, pn, 'mensalidade')) mRec += valM;
+      if (getPaid(pags2, pn, 'churrasco'))   cRec += valC;
+    }
+    const avulsoMon = (st.finAvulsos||[]).filter(a=>a.paga!==false&&((a.mes||'')==mon||(a.data||'').startsWith(mon))).reduce((s,a)=>s+(a.valor||0),0);
+    const rec  = mRec + cRec + avulsoMon;
+    const desp = getDespMes(mon).filter(d=>d.paga!==false).reduce((s,d)=>s+(d.valor||0),0);
+    runBal += rec - desp;
+    const [my,mm] = mon.split('-').map(Number);
+    return {mon, label: MONTHS[mm-1]+'/'+String(my).slice(2), rec, desp, saldo: runBal};
+  });
+
+  const catC = {'Bola':'#4DB8FF','Colete':'#00d67f','Arbitragem':'#F5C842','Campo/Aluguel':'#FF8A3C','Churrasco':'#FF6B35','Outro':'#9EA7B3'};
+  const btnS = (active) => `padding:5px 11px;border-radius:20px;border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'#00d67f18':'none'};color:${active?'var(--accent)':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer`;
+  const pctD = saldo > 0 ? Math.min(100, Math.max(0, disponivel/saldo*100)) : 0;
+  const pctR = saldo > 0 ? Math.min(100-Math.max(0,pctD), reserva/saldo*100) : 0;
+
+  return `
+  <div class="card" style="padding:20px 14px 16px">
+    <div style="text-align:center">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Saldo em Caixa</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;line-height:1;color:${saldo>=0?'var(--accent)':'var(--danger)'}">${fmtR(saldo)}</div>
+    </div>
+    <div style="margin-top:14px;border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="padding:10px 12px;border-right:1px solid var(--border2)">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Disponível</div>
+          <div style="font-size:18px;font-weight:700;color:${disponivel>=0?'var(--accent)':'var(--danger)'};margin-top:2px">${fmtR(disponivel)}</div>
+        </div>
+        <div style="padding:10px 12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">🔒 Reserva Quadra</div>
+          <div style="font-size:18px;font-weight:700;color:#F0A500;margin-top:2px">${fmtR(reserva)}</div>
+        </div>
+      </div>
+      <div style="display:flex;height:5px">
+        <div style="width:${pctD}%;background:var(--accent)"></div>
+        <div style="width:${pctR}%;background:#F0A500"></div>
+        <div style="flex:1;background:var(--border2)"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;margin-top:10px;border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+      <div style="padding:8px 10px;border-right:1px solid var(--border2);border-bottom:1px solid var(--border2)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">💵 Mensalidades</div>
+        <div style="font-size:13px;font-weight:700;color:#00d67f;margin-top:1px">${fmtR(totalMens)}</div>
+      </div>
+      <div style="padding:8px 10px;border-bottom:1px solid var(--border2)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">🍖 Churrascos</div>
+        <div style="font-size:13px;font-weight:700;color:#FF8A3C;margin-top:1px">${fmtR(totalChurr)}</div>
+      </div>
+      <div style="padding:8px 10px;border-right:1px solid var(--border2)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">✅ Desp. pagas</div>
+        <div style="font-size:13px;font-weight:700;color:var(--danger);margin-top:1px">${fmtR(despPagas)}</div>
+      </div>
+      <div style="padding:8px 10px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">⏳ Desp. Pendentes</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text2);margin-top:1px">${fmtR(despPendentes)}</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--s1);border:1px solid var(--border2)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Saldo Previsto Final do Mês</div>
+        <button onclick="st.finPrevisaoOculta=!st.finPrevisaoOculta;render()"
+          style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px;line-height:1">${st.finPrevisaoOculta?'👁':'🙈'}</button>
+      </div>
+      ${st.finPrevisaoOculta
+        ? `<div style="font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:2px">••••••</div>`
+        : `<div style="font-size:16px;font-weight:700;color:${previsao>=0?'var(--accent)':'var(--danger)'};margin-top:3px">${fmtR(previsao)}</div>`}
+    </div>
+    <button onclick="st.modal={type:'finConfig',valorMensalidade:${valM},valorChurrasco:${valC},reserva:${reserva},saldoInicial:${cfg.saldoInicial||0},valorAvulso:${cfg.valorAvulso||20}};render()"
+      style="margin-top:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer">⚙️ Configurar valores</button>
+  </div>
+
+  ${evoRows.length > 1 ? `<div class="card" style="padding:0">
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border2);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3)">Evolução Mensal</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border2)">
+          <th style="padding:7px 12px;text-align:left;font-weight:600;color:var(--text3)">Mês</th>
+          <th style="padding:7px 8px;text-align:right;font-weight:600;color:var(--text3)">Receitas</th>
+          <th style="padding:7px 8px;text-align:right;font-weight:600;color:var(--text3)">Despesas</th>
+          <th style="padding:7px 12px;text-align:right;font-weight:600;color:var(--text3)">Saldo</th>
+        </tr></thead>
+        <tbody>${evoRows.map(r=>`
+          <tr style="border-bottom:1px solid var(--border2);background:${r.mon===month?'var(--s1)':'none'}">
+            <td style="padding:7px 12px;font-weight:${r.mon===month?'700':'400'}">${r.label}</td>
+            <td style="padding:7px 8px;text-align:right;color:#00d67f;font-variant-numeric:tabular-nums">${r.rec>0?fmtR(r.rec):'-'}</td>
+            <td style="padding:7px 8px;text-align:right;color:var(--danger);font-variant-numeric:tabular-nums">${r.desp>0?fmtR(r.desp):'-'}</td>
+            <td style="padding:7px 12px;text-align:right;font-weight:700;color:${r.saldo>=0?'var(--accent)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtR(r.saldo)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>` : ''}
+
+  <div class="card">
+    <div style="display:flex;align-items:center;padding:8px 6px 4px">
+      <button onclick="prevFinMonth()" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:4px 10px;line-height:1">‹</button>
+      <span style="flex:1;text-align:center;font-size:14px;font-weight:700">${monthLabel} · Contribuições</span>
+      <button onclick="nextFinMonth()" style="background:none;border:none;cursor:pointer;color:${canNext?'var(--text2)':'var(--border2)'};font-size:22px;padding:4px 10px;line-height:1" ${canNext?'':'disabled'}>›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border2)">
+      <div style="padding:8px 14px;border-right:1px solid var(--border2)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">💵 Mensalidade</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${paidMens}/${mensPayers.length} · ${fmtR(paidMens*valM)}</div>
+      </div>
+      <div style="padding:8px 14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">🍖 Churrasco</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${paidChurr}/${activePlayers.length} · ${fmtR(paidChurr*valC)}</div>
+      </div>
+    </div>
+    ${activePlayers.length?activePlayers.map(p=>{
+      const isCO=!!p.somenteChurrasco;
+      const pM=getPaid(pagamentos,p.name,'mensalidade');
+      const pC=getPaid(pagamentos,p.name,'churrasco');
+      const tot=(isCO?0:(pM?valM:0))+(pC?valC:0);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+        <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isCO?` <span style="font-size:10px;color:#FF8A3C">🍖</span>`:''}  </span>
+        ${tot?`<span style="font-size:12px;color:var(--accent);font-weight:600">${fmtR(tot)}</span>`:`<span style="font-size:12px;color:var(--text3)">pendente</span>`}
+        ${isCO?'':`<button data-player="${esc(p.name)}" data-type="mensalidade" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
+          style="${btnS(pM)}">💵${pM?' ✓':''}</button>`}
+        <button data-player="${esc(p.name)}" data-type="churrasco" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
+          style="${btnS(pC)}">🍖${pC?' ✓':''}</button>
+        ${isCO?'':`<button data-player="${esc(p.name)}" onclick="togglePagamentoBoth(this.dataset.player)"
+          style="${btnS(pM&&pC)}">Ambos${pM&&pC?' ✓':''}</button>`}
+      </div>`;
+    }).join(''):`<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhum jogador ativo.</p>`}
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;padding:8px 6px 4px">
+      <button onclick="prevFinMonth()" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:4px 10px;line-height:1">‹</button>
+      <span style="flex:1;text-align:center;font-size:14px;font-weight:700">${monthLabel} · Despesas</span>
+      <button onclick="nextFinMonth()" style="background:none;border:none;cursor:pointer;color:${canNext?'var(--text2)':'var(--border2)'};font-size:22px;padding:4px 10px;line-height:1" ${canNext?'':'disabled'}>›</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px 8px;border-bottom:1px solid var(--border2)">
+      <span style="font-size:12px;color:#00d67f">✅ ${fmtR(despMesPagas)}</span>
+      <button onclick="st.modal={type:'finDespesa',descricao:'',valor:'',data:'${today()}',categoria:'Outro'};render()"
+        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Nova</button>
+      <span style="font-size:12px;color:var(--text3)">⏳ ${fmtR(despMesPend)}</span>
+    </div>
+    ${despMesAll.length
+      ? despMesAll.map(d=>{
+          const [dy,dm,dd]=(d.data||today()).split('-');
+          const cat=d.categoria||'Outro';
+          const paga = d.paga!==false;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:${paga?1:.5}">${esc(d.descricao||'')}${d.recorrencia==='mensal'?' 🔁':d.recorrencia==='semanal'?' 🔄':''}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">${dd}/${dm}/${dy} · <span style="color:${catC[cat]||'#9EA7B3'}">${cat}</span></div>
+            </div>
+            <span style="font-weight:700;font-size:14px;color:${paga?'var(--danger)':'var(--text3)'};white-space:nowrap">${fmtR(d.valor)}</span>
+            <button data-id="${d.id}" data-paga="${paga}" data-occ="${d.occKey||''}" onclick="toggleDespesaPaga(this.dataset.id,this.dataset.paga==='true',this.dataset.occ||null)"
+              style="padding:4px 10px;border-radius:16px;border:1px solid ${paga?'var(--accent)':'var(--border)'};background:${paga?'#00d67f18':'none'};color:${paga?'var(--accent)':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">
+              ${paga?'✓ Paga':'Pagar'}
+            </button>
+            ${(()=>{
+                const expiredComp = d.comprovante && d.comprovanteAt &&
+                  (new Date() - new Date(d.comprovanteAt)) > 39 * 86400000;
+                if (expiredComp) {
+                  DB.doc(`financeiro_despesas/${d.id}`).update({
+                    comprovante: firebase.firestore.FieldValue.delete(),
+                    comprovanteAt: firebase.firestore.FieldValue.delete(),
+                  });
+                  return '';
+                }
+                if (d.comprovante) {
+                  return `<span style="display:inline-flex;align-items:center;gap:1px;flex-shrink:0">
+                    <a href="${d.comprovante}" target="_blank" rel="noopener"
+                       style="font-size:15px;padding:2px 3px;text-decoration:none" title="Ver comprovante">📎</a>
+                    <label style="cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Trocar comprovante">
+                      🔄<input type="file" accept="image/*,application/pdf" style="display:none"
+                        onchange="uploadComprovante('${d.id}',this.files[0])">
+                    </label>
+                    <button data-id="${d.id}" onclick="deleteComprovante(this.dataset.id)"
+                      style="background:none;border:none;cursor:pointer;font-size:11px;padding:2px 3px;color:var(--text3)" title="Excluir comprovante">✕</button>
+                  </span>`;
+                }
+                return `<label style="cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0;color:var(--border)" title="Anexar comprovante">
+                  📎<input type="file" accept="image/*,application/pdf" style="display:none"
+                    onchange="uploadComprovante('${d.id}',this.files[0])">
+                </label>`;
+              })()}
+            <button data-id="${d.id}" onclick="deleteDespesa(this.dataset.id)"
+              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>
+          </div>`;
+        }).join('')
+      : `<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhuma despesa em ${monthLabel}.</p>`}
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;padding:8px 6px 4px">
+      <button onclick="prevFinMonth()" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:4px 10px;line-height:1">‹</button>
+      <span style="flex:1;text-align:center;font-size:14px;font-weight:700">${monthLabel} · Avulsos</span>
+      <button onclick="nextFinMonth()" style="background:none;border:none;cursor:pointer;color:${canNext?'var(--text2)':'var(--border2)'};font-size:22px;padding:4px 10px;line-height:1" ${canNext?'':'disabled'}>›</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px 8px;border-bottom:1px solid var(--border2)">
+      <span style="font-size:12px;color:#00d67f">✅ ${fmtR(avulsosMesPagas)}</span>
+      <button onclick="st.modal={type:'finAvulso',nome:'',valor:${cfg.valorAvulso||20}};render()"
+        style="padding:5px 13px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">+ Avulso</button>
+      <span style="font-size:12px;color:var(--text3)">⏳ ${fmtR(avulsosMesPend)}</span>
+    </div>
+    ${avulsosMes.length
+      ? avulsosMes.map(a=>{
+          const paga=a.paga!==false;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
+            <span style="flex:1;font-size:14px;font-weight:600;opacity:${paga?1:.5}">${esc(a.nome||'')}</span>
+            <span style="font-weight:700;font-size:14px;color:${paga?'var(--accent)':'var(--text3)'};white-space:nowrap">${fmtR(a.valor)}</span>
+            <button data-id="${a.id}" data-paga="${paga}" onclick="toggleAvulsoPaga(this.dataset.id,this.dataset.paga==='true')"
+              style="padding:4px 10px;border-radius:16px;border:1px solid ${paga?'var(--accent)':'var(--border)'};background:${paga?'#00d67f18':'none'};color:${paga?'var(--accent)':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">
+              ${paga?'✓ Pago':'Receber'}
+            </button>
+            <button data-id="${a.id}" onclick="deleteAvulso(this.dataset.id)"
+              style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>
+          </div>`;
+        }).join('')
+      : `<p style="padding:14px;font-size:13px;color:var(--text3)">Nenhum avulso em ${monthLabel}.</p>`}
+  </div>`;
+}
+
+async function addAvulso() {
+  const m = st.modal;
+  if (!m || !DB) return;
+  if (!m.nome?.trim()) { toast('Informe o nome'); return; }
+  if (!m.valor || +m.valor<=0) { toast('Informe um valor válido'); return; }
+  try {
+    await DB.collection('financeiro_avulsos').add({
+      nome: m.nome.trim(),
+      valor: +m.valor,
+      data: today(),
+      mes: st.finMonth,
+      paga: false,
+    });
+    st.modal = null;
+    render();
+    toast('Avulso registrado!', 'ok');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function toggleAvulsoPaga(id, current) {
+  if (!DB) return;
+  try {
+    await DB.doc(`financeiro_avulsos/${id}`).update({paga: !current});
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function deleteAvulso(id) {
+  if (!DB) return;
+  try { await DB.doc(`financeiro_avulsos/${id}`).delete(); }
+  catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+function mFinAvulso() {
+  const m = st.modal;
+  if (!m || m.type!=='finAvulso') return '';
+  const inp = `width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:15px;font-weight:600`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px">🎟️ Novo Avulso</div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Nome</label>
+        <input type="text" placeholder="Nome do jogador" value="${esc(m.nome||'')}"
+          oninput="st.modal.nome=this.value" onkeydown="if(event.key==='Enter')addAvulso()" style="${inp}" autofocus>
+      </div>
+      <div style="margin-bottom:24px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Valor (R$)</label>
+        <input type="number" min="0" step="0.01" value="${m.valor||20}"
+          oninput="st.modal.valor=+this.value" style="${inp}">
+      </div>
+      <button onclick="addAvulso()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+      <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:10px;border:none;background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;margin-top:8px">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function mFinDespesa() {
+  const m = st.modal;
+  if (!m || m.type!=='finDespesa') return '';
+  const cats = ['Bola','Colete','Arbitragem','Campo/Aluguel','Churrasco','Outro'];
+  const inp = `width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px`;
+  const rec = m.recorrencia || 'unica';
+  const DIAS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const rbtn = (r, lbl) => `<button onclick="st.modal.recorrencia='${r}';render()"
+    style="padding:5px 11px;border-radius:20px;border:1px solid ${rec===r?'var(--accent)':'var(--border)'};
+           background:${rec===r?'#00d67f18':'none'};color:${rec===r?'var(--accent)':'var(--text2)'};
+           font-size:12px;font-weight:600;cursor:pointer">${lbl}</button>`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px">Nova Despesa</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Descrição</label>
+        <input type="text" placeholder="Ex: Bola nova" value="${esc(m.descricao||'')}"
+          oninput="st.modal.descricao=this.value" style="${inp}">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Valor (R$)</label>
+          <input type="number" min="0" step="0.01" placeholder="0,00" value="${m.valor||''}"
+            oninput="st.modal.valor=this.value" style="${inp}">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">${rec==='unica'?'Data':'A partir de'}</label>
+          <input type="date" value="${m.data||today()}"
+            onchange="st.modal.data=this.value" style="${inp}">
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:8px">Recorrência</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${rbtn('unica','Única')}${rbtn('mensal','Fixa mensal')}${rbtn('semanal','Semanal')}
+        </div>
+      </div>
+      ${rec==='mensal'?`<div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Dia do mês (1–28)</label>
+        <input type="number" min="1" max="28" value="${m.diaDoMes||1}"
+          oninput="st.modal.diaDoMes=+this.value" style="${inp}">
+      </div>`:''}
+      ${rec==='semanal'?`<div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:8px">Dia da semana</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${DIAS.map((dl,i)=>`<button onclick="st.modal.diaSemana=${i};render()"
+            style="padding:5px 10px;border-radius:20px;border:1px solid ${(m.diaSemana??-1)===i?'var(--accent)':'var(--border)'};
+                   background:${(m.diaSemana??-1)===i?'#00d67f18':'none'};color:${(m.diaSemana??-1)===i?'var(--accent)':'var(--text2)'};
+                   font-size:12px;font-weight:600;cursor:pointer">${dl}</button>`).join('')}
+        </div>
+      </div>`:''}
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:8px">Categoria</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${cats.map(c=>`<button onclick="st.modal.categoria='${c}';render()"
+            style="padding:5px 12px;border-radius:20px;border:1px solid ${m.categoria===c?'var(--accent)':'var(--border)'};
+                   background:${m.categoria===c?'#00d67f18':'none'};color:${m.categoria===c?'var(--accent)':'var(--text2)'};
+                   font-size:12px;font-weight:600;cursor:pointer">${c}</button>`).join('')}
+        </div>
+      </div>
+      ${rec==='unica'?`<div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:6px">📎 Comprovante / Nota (opcional)</label>
+        <label style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;border:1px dashed var(--border);cursor:pointer;color:var(--text2);font-size:13px">
+          <span id="comp-label">${m._fileName||'Selecionar arquivo...'}</span>
+          <input type="file" accept="image/*,application/pdf" style="display:none"
+            onchange="st.modal._file=this.files[0];st.modal._fileName=this.files[0]?.name||'';document.getElementById('comp-label').textContent=this.files[0]?.name||'Selecionar arquivo...'">
+        </label>
+      </div>`:''}
+      <button onclick="addDespesa()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer">Salvar Despesa</button>
+    </div>
+  </div>`;
+}
+
+function mFinConfig() {
+  const m = st.modal;
+  if (!m || m.type!=='finConfig') return '';
+  const inp = `width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:15px;font-weight:600`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px">⚙️ Financeiro</div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Mensalidade — quadra/campo (R$)</label>
+        <input type="number" min="0" step="0.01" value="${m.valorMensalidade||0}"
+          oninput="st.modal.valorMensalidade=+this.value" style="${inp}">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Churrasco (R$)</label>
+        <input type="number" min="0" step="0.01" value="${m.valorChurrasco||0}"
+          oninput="st.modal.valorChurrasco=+this.value" style="${inp}">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">🔒 Reserva quadra (R$)</label>
+        <input type="number" min="0" step="0.01" value="${m.reserva||0}"
+          oninput="st.modal.reserva=+this.value" style="${inp}">
+        <p style="margin:5px 0 0;font-size:11px;color:var(--text3)">Valor reservado para garantir o pagamento da quadra.</p>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">🎟️ Valor Avulso (R$)</label>
+        <input type="number" min="0" step="0.01" value="${m.valorAvulso||20}"
+          oninput="st.modal.valorAvulso=+this.value" style="${inp}">
+        <p style="margin:5px 0 0;font-size:11px;color:var(--text3)">Valor cobrado de jogadores avulsos (não cadastrados).</p>
+      </div>
+      <div style="margin-bottom:24px">
+        <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Saldo Inicial (R$)</label>
+        <input type="number" step="0.01" value="${m.saldoInicial||0}"
+          oninput="st.modal.saldoInicial=+this.value" style="${inp}">
+        <p style="margin:5px 0 0;font-size:11px;color:var(--text3)">Dinheiro já existente antes de começar a usar o app.</p>
+      </div>
+      <button onclick="saveFinConfig()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+    </div>
+  </div>`;
+}
+
+function prevFinMonth() {
+  const [y,m] = st.finMonth.split('-').map(Number);
+  const pm = m===1?12:m-1, py = m===1?y-1:y;
+  st.finMonth = `${py}-${String(pm).padStart(2,'0')}`;
+  render();
+}
+
+function nextFinMonth() {
+  const [y,m] = st.finMonth.split('-').map(Number);
+  const nm = m===12?1:m+1, ny = m===12?y+1:y;
+  const next = `${ny}-${String(nm).padStart(2,'0')}`;
+  if (next <= new Date().toISOString().slice(0,7)) { st.finMonth=next; render(); }
+}
+
+function togglePagamento(playerName, type) {
+  if (!DB) return;
+  const month = st.finMonth;
+  const pags = st.finMens[month]?.pagamentos || {};
+  const current = getPaid(pags, playerName, type);
+  const existing = pags[playerName];
+  let newVal;
+  if (existing && typeof existing === 'object') {
+    newVal = {...existing, [type]: !current};
+  } else {
+    newVal = {
+      mensalidade: type==='mensalidade' ? !current : (existing===true),
+      churrasco: type==='churrasco' ? !current : false,
+    };
+  }
+  DB.doc(`financeiro_mensalidades/${month}`)
+    .set({pagamentos:{[playerName]: newVal}},{merge:true})
+    .catch(e=>toast('Erro: '+(e?.message||e)));
+}
+
+function togglePagamentoBoth(playerName) {
+  if (!DB) return;
+  const month = st.finMonth;
+  const pags = st.finMens[month]?.pagamentos || {};
+  const bothPaid = getPaid(pags, playerName, 'mensalidade') && getPaid(pags, playerName, 'churrasco');
+  DB.doc(`financeiro_mensalidades/${month}`)
+    .set({pagamentos:{[playerName]: {mensalidade: !bothPaid, churrasco: !bothPaid}}},{merge:true})
+    .catch(e=>toast('Erro: '+(e?.message||e)));
+}
+
+async function uploadComprovante(id, file) {
+  if (!file || !DB) return;
+  try {
+    toast('Enviando comprovante...');
+    const url = await cloudinaryUpload(file);
+    await DB.doc(`financeiro_despesas/${id}`).update({comprovante: url, comprovanteAt: today()});
+    toast('Comprovante salvo!', 'ok');
+  } catch(e) { toast('Erro: ' + (e?.message||e)); }
+}
+
+async function addDespesa() {
+  const m = st.modal;
+  if (!m) return;
+  if (!m.descricao?.trim()) { toast('Informe a descrição'); return; }
+  if (!m.valor || +m.valor<=0) { toast('Informe um valor válido'); return; }
+  if (!DB) return;
+  const rec = m.recorrencia || 'unica';
+  if (rec==='semanal' && m.diaSemana==null) { toast('Selecione o dia da semana'); return; }
+  try {
+    const base = {
+      descricao: m.descricao.trim(),
+      valor: +m.valor,
+      data: m.data || today(),
+      categoria: m.categoria || 'Outro',
+    };
+    if (rec==='unica') {
+      base.paga = false;
+      if (m._file) {
+        try {
+          base.comprovante = await cloudinaryUpload(m._file);
+          base.comprovanteAt = today();
+        } catch(e) { toast('Aviso: comprovante não enviado — ' + (e?.message||e)); }
+      }
+    } else if (rec==='mensal') {
+      base.recorrencia = 'mensal';
+      base.diaDoMes = +m.diaDoMes || new Date(m.data||today()).getDate();
+      base.pagamentos = {};
+    } else if (rec==='semanal') {
+      base.recorrencia = 'semanal';
+      base.diaSemana = +m.diaSemana;
+      base.pagamentos = {};
+    }
+    await DB.collection('financeiro_despesas').add(base);
+    st.modal = null;
+    render();
+    toast('Despesa salva!', 'ok');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function deleteDespesa(id) {
+  if (!DB) return;
+  if (!confirm('Excluir esta despesa? Esta ação não pode ser desfeita.')) return;
+  try {
+    await DB.doc(`financeiro_despesas/${id}`).delete();
+    toast('Despesa removida');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function deleteComprovante(id) {
+  if (!DB) return;
+  if (!confirm('Excluir o comprovante?')) return;
+  try {
+    await DB.doc(`financeiro_despesas/${id}`).update({
+      comprovante: firebase.firestore.FieldValue.delete(),
+      comprovanteAt: firebase.firestore.FieldValue.delete(),
+    });
+    toast('Comprovante removido.', 'ok');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function saveFinConfig() {
+  const m = st.modal;
+  if (!m || !DB) return;
+  try {
+    await DB.doc('financeiro_config/main').set({
+      valorMensalidade: +m.valorMensalidade || 0,
+      valorChurrasco: +m.valorChurrasco || 0,
+      reserva: +m.reserva || 0,
+      saldoInicial: +m.saldoInicial || 0,
+      valorAvulso: +m.valorAvulso || 0,
+    });
+    st.modal = null;
+    render();
+    toast('Configuração salva!', 'ok');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+async function toggleDespesaPaga(id, current, occKey) {
+  if (!DB) return;
+  try {
+    if (occKey) {
+      await DB.doc(`financeiro_despesas/${id}`).update({[`pagamentos.${occKey}`]: !current});
+    } else {
+      await DB.doc(`financeiro_despesas/${id}`).update({paga: !current});
+    }
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+/* ── event handlers ─────────────────────────────────────────── */
+function nav(view) { st.view=view; st.histId=null; st.confirmDelete=null; render(); }
+
+function onTkChg() {
+  const ck=[...document.querySelectorAll('.tck:checked')].map(c=>c.value);
+  document.querySelectorAll('.team-chk-label').forEach(el=>{
+    const inp=el.querySelector('input'), id=inp.value;
+    if(inp.checked){ el.style.borderColor=T[id].c; el.style.background=T[id].c+'18'; }
+    else { el.style.borderColor=''; el.style.background=''; }
+  });
+  const hint=document.getElementById('fmthint'), btn=document.getElementById('dobtn');
+  const desc={
+    3:'🔄 <strong>Vira</strong> — quem ganha fica. Ao final, os 2 primeiros fazem a final.',
+    4:'🔁 <strong>Todos contra todos</strong> em 2 turnos (12 jogos) + Final.',
+    5:'📋 <strong>Fase de grupos</strong> 1 turno (10 jogos) + Semifinais + Final.',
+  };
+  const quick = document.getElementById('quick-reg')?.checked;
+  const assignWrap = document.getElementById('player-assign-wrap');
+  const assignInner = document.getElementById('player-assign-inner');
+  if(ck.length>=3&&ck.length<=5){
+    hint.innerHTML=desc[ck.length]; hint.style.display='block';
+    btn.style.display='block';
+    btn.textContent = quick ? `Registrar Campeonato` : `Criar com ${ck.length} Times`;
+    const sel=document.getElementById('champ-team-sel');
+    if(sel) sel.innerHTML=ck.map(t=>`
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;
+                    border:1.5px solid ${T[t].c}30;background:${T[t].c}0d;cursor:pointer;margin-bottom:6px">
+        <input type="radio" name="champteam" value="${t}" style="accent-color:${T[t].c};width:16px;height:16px;cursor:pointer">
+        <span style="width:10px;height:10px;border-radius:50%;background:${T[t].c};flex-shrink:0"></span>
+        <span style="color:${T[t].c};font-weight:600;font-size:14px">${T[t].l}</span>
+      </label>`).join('');
+    if(assignWrap) assignWrap.style.display='block';
+    if(assignInner) assignInner.innerHTML=renderPlayerAssignInner(ck);
+  } else {
+    hint.style.display='none'; btn.style.display='none';
+    if(assignWrap) assignWrap.style.display='none';
+    if(assignInner) assignInner.innerHTML='';
+  }
+}
+
+function onQuickChg() {
+  const checked = document.getElementById('quick-reg')?.checked;
+  const qd = document.getElementById('quick-champ');
+  if(qd) qd.style.display = checked ? 'block' : 'none';
+  const ck=[...document.querySelectorAll('.tck:checked')];
+  const btn = document.getElementById('dobtn');
+  if(btn && ck.length>=3 && ck.length<=5)
+    btn.textContent = checked ? 'Registrar Campeonato' : `Criar com ${ck.length} Times`;
+}
+
+function doCreate() {
+  const ck=[...document.querySelectorAll('.tck:checked')].map(c=>c.value);
+  if(ck.length<3||ck.length>5) return;
+  const date = document.getElementById('champ-date')?.value || today();
+  const quick = document.getElementById('quick-reg')?.checked;
+  if(quick) {
+    const champTeam = document.querySelector('input[name="champteam"]:checked')?.value;
+    if(!champTeam){ toast('Selecione o time campeão.'); return; }
+    createHistoricalChamp(ck, date, champTeam);
+  } else {
+    createChampionship(ck, date);
+  }
+}
+
+function openScore(matchId) {
+  const c=activeChamp(); if(!c) return;
+  const m=c.matches.find(x=>x.id===matchId); if(!m||m.played) return;
+  st.modal={type:'score',id:matchId,home:m.home,away:m.away,phase:m.phase,hs:0,as:0,homeGoals:[],awayGoals:[]};
+  render();
+}
+
+function editScore(matchId) {
+  const c=activeChamp(); if(!c) return;
+  const m=c.matches.find(x=>x.id===matchId); if(!m||!m.played) return;
+  const homeGoals=(m.goals||[]).filter(g=>g.team==='home').map(g=>g.player);
+  const awayGoals=(m.goals||[]).filter(g=>g.team==='away').map(g=>g.player);
+  st.modal={type:'score',id:matchId,home:m.home,away:m.away,phase:m.phase,
+            hs:m.hs,as:m.as,homeGoals,awayGoals,editing:true};
+  render();
+}
+
+function adj(field, delta) {
+  if(st.modal?.type!=='score') return;
+  const newVal=Math.max(0,st.modal[field]+delta);
+  if(field==='hs'){
+    if(newVal>st.modal.hs) st.modal.homeGoals.push('');
+    else if(newVal<st.modal.hs) st.modal.homeGoals.pop();
+  } else {
+    if(newVal>st.modal.as) st.modal.awayGoals.push('');
+    else if(newVal<st.modal.as) st.modal.awayGoals.pop();
+  }
+  st.modal[field]=newVal;
+  const el=document.getElementById(`sv-${field}`);
+  if(el) el.textContent=newVal;
+  const gs=document.getElementById('goals-section');
+  if(gs) gs.innerHTML=renderGoalsInputs();
+}
+
+function renderGoalsInputs() {
+  const m=st.modal;
+  if(!m||m.type!=='score'||(!m.hs&&!m.as)) return '';
+  const ht=T[m.home]||{l:m.home,c:'#8B949E'};
+  const at=T[m.away]||{l:m.away,c:'#8B949E'};
+  let h=`<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:4px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Gols (opcional)</div>`;
+  if(m.homeGoals.length){
+    h+=`<div style="font-size:12px;color:${ht.c};font-weight:700;margin-bottom:6px">${ht.l}</div>`;
+    m.homeGoals.forEach((g,i)=>{
+      h+=`<input class="player-input" type="text" list="playerlist-home" placeholder="Artilheiro ${i+1}" value="${esc(g)}"
+        oninput="st.modal.homeGoals[${i}]=this.value" style="margin-bottom:6px">`;
+    });
+  }
+  if(m.awayGoals.length){
+    h+=`<div style="font-size:12px;color:${at.c};font-weight:700;margin-bottom:6px${m.homeGoals.length?';margin-top:10px':''}">${at.l}</div>`;
+    m.awayGoals.forEach((g,i)=>{
+      h+=`<input class="player-input" type="text" list="playerlist-away" placeholder="Artilheiro ${i+1}" value="${esc(g)}"
+        oninput="st.modal.awayGoals[${i}]=this.value" style="margin-bottom:6px">`;
+    });
+  }
+  h+='</div>';
+  return h;
+}
+
+function confirmScore() {
+  const m=st.modal; if(m?.type!=='score') return;
+  if((m.phase==='final'||m.phase==='semifinal')&&m.hs===m.as){
+    toast('Nas fases eliminatórias é preciso um vencedor. Ajuste o placar.'); return;
+  }
+  const goals=[
+    ...(m.homeGoals||[]).filter(g=>g.trim()).map(g=>({player:g.trim(),team:'home'})),
+    ...(m.awayGoals||[]).filter(g=>g.trim()).map(g=>({player:g.trim(),team:'away'})),
+  ];
+  submitScore(m.id,m.hs,m.as,goals);
+}
+
+function openFinalGoalsEdit(champId, matchId) {
+  const champ = st.champs.find(c => c.id === champId);
+  if (!champ) return;
+  const m = champ.matches.find(x => x.id === matchId);
+  if (!m || m.phase !== 'final' || !m.played) return;
+  const existing = (m.finalGoals && m.finalGoals.length ? m.finalGoals : m.goals) || [];
+  const homeGoals = existing.filter(g => g.team === 'home').map(g => g.player||'');
+  const awayGoals = existing.filter(g => g.team === 'away').map(g => g.player||'');
+  while (homeGoals.length < (m.hs||0)) homeGoals.push('');
+  while (awayGoals.length < (m.as||0)) awayGoals.push('');
+  st.modal = {type:'finalGoals', champId, matchId, home:m.home, away:m.away, hs:m.hs||0, as:m.as||0, homeGoals, awayGoals};
+  render();
+}
+
+async function submitFinalGoals() {
+  const m = st.modal; if (m?.type !== 'finalGoals') return;
+  const goals = [
+    ...(m.homeGoals||[]).filter(n=>n.trim()).map(n=>({player:n.trim(),team:'home'})),
+    ...(m.awayGoals||[]).filter(n=>n.trim()).map(n=>({player:n.trim(),team:'away'})),
+  ];
+  if (!DB) return;
+  const champ = st.champs.find(c => c.id === m.champId); if (!champ) return;
+  try {
+    const matches = champ.matches.map(x => x.id === m.matchId ? {...x, finalGoals: goals} : {...x});
+    await DB.doc(`championships/${m.champId}`).update({matches});
+    st.modal = null; render(); toast('Gols da final salvos!', 'ok');
+  } catch(e) { toast('Erro ao salvar: ' + (e?.message||e)); }
+}
+
+function mFinalGoals() {
+  const m = st.modal; if (m?.type !== 'finalGoals') return '';
+  const ht = T[m.home]||{l:m.home,c:'#8B949E'};
+  const at = T[m.away]||{l:m.away,c:'#8B949E'};
+  const champ = st.champs.find(c => c.id === m.champId);
+  const rosters = champ?.teamRosters || {};
+  const allActive = st.players.filter(p=>p.active!==false).map(p=>p.name);
+  const buildList = (teamId, others) => {
+    const team = rosters[teamId] || [];
+    const rest = allActive.filter(n=>!team.includes(n));
+    return `<datalist id="fg-${teamId}">${[...team,...rest].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+  };
+  let rows = '';
+  if (m.homeGoals.length) {
+    rows += `<div style="font-size:12px;color:${ht.c};font-weight:700;margin-bottom:6px">${ht.l}</div>`;
+    m.homeGoals.forEach((g,i) => {
+      rows += `<input class="player-input" type="text" list="fg-${m.home}" placeholder="Marcador ${i+1}" value="${esc(g)}"
+        oninput="st.modal.homeGoals[${i}]=this.value" style="margin-bottom:6px">`;
+    });
+  }
+  if (m.awayGoals.length) {
+    rows += `<div style="font-size:12px;color:${at.c};font-weight:700;margin-bottom:6px${m.homeGoals.length?';margin-top:10px':''}">${at.l}</div>`;
+    m.awayGoals.forEach((g,i) => {
+      rows += `<input class="player-input" type="text" list="fg-${m.away}" placeholder="Marcador ${i+1}" value="${esc(g)}"
+        oninput="st.modal.awayGoals[${i}]=this.value" style="margin-bottom:6px">`;
+    });
+  }
+  if (!m.homeGoals.length && !m.awayGoals.length)
+    rows = `<p style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">Placar 0 × 0 — nenhum marcador</p>`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      ${buildList(m.home)} ${buildList(m.away)}
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px">⚽ Gols da Final</div>
+        <div style="font-size:11px;color:var(--text3)">Salvo em artilharia das finais apenas — não altera artilharia geral</div>
+        <div style="font-size:13px;margin-top:6px"><span style="color:${ht.c};font-weight:700">${ht.l}</span> <strong>${m.hs}</strong> × <strong>${m.as}</strong> <span style="color:${at.c};font-weight:700">${at.l}</span></div>
+      </div>
+      <div style="border-top:1px solid var(--border2);padding-top:10px;margin-bottom:10px">${rows}</div>
+      <button class="btn btn-primary" onclick="submitFinalGoals()">Salvar Gols da Final</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function closeModal() { st.modal=null; render(); }
+
+function confirmEnd() { endRegular(); }
+
+function openChampModal() {
+  const c=activeChamp(); if(!c) return;
+  const chmpTeam=champion(c.matches); if(!chmpTeam) return;
+  st.modal={type:'champion',champion:chmpTeam,players:defPlayers()};
+  render();
+}
+
+function upP(i,field,val) {
+  if(!st.modal?.players) return;
+  st.modal.players[i][field]=val;
+  if(field==='name') return;
+  const r=document.getElementById('modal-root');
+  if(r) r.innerHTML=mScore()+mChamp();
+}
+
+function addP() {
+  if(!st.modal?.players) return;
+  st.modal.players.push({name:'',weight:1});
+  const r=document.getElementById('modal-root');
+  if(r) r.innerHTML=mScore()+mChamp();
+}
+
+function nextPlayerInput(i) {
+  const inputs = document.querySelectorAll('#plist .player-input');
+  if (i + 1 < inputs.length) {
+    inputs[i+1].focus();
+  } else {
+    addP();
+    requestAnimationFrame(() => {
+      const all = document.querySelectorAll('#plist .player-input');
+      if (all.length) all[all.length-1].focus();
+    });
+  }
+}
+
+/* ── init ────────────────────────────────────────────────────── */
+buildShell();
+render();
+initDB();
+</script>
+</body>
+</html>
