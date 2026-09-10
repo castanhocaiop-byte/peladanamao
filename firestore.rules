@@ -1,8 +1,80 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function isActiveUser() {
+      return isSignedIn() && (userRole() == 'admin' || userRole() == 'player');
+    }
+
+    // Users collection: users manage their own doc, admins manage all
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == uid
+        && request.resource.data.role == resource.data.role); // users can't self-promote
+      allow delete: if isAdmin();
+    }
+
+    // Invite tokens: only admins create, anyone signed-in can read/use
+    match /invite_tokens/{token} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isSignedIn(); // marking as used
+    }
+
+    // App config (createAuthorized flag): admins write, active users read
+    match /app_config/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    // Game data: active users read, admins write
+    match /championships/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isActiveUser(); // players can create/update scores
+    }
+
+    match /player_titles/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /player_registry/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    // Financial: active users read, admins write
+    match /financeiro_config/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /financeiro_mensalidades/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /financeiro_despesas/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    match /financeiro_avulsos/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
     }
   }
 }
