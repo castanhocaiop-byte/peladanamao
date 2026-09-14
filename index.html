@@ -461,7 +461,7 @@ const FMT = { 3:'Vira (3 times)', 4:'Todos contra todos', 5:'Fase de grupos + Se
 
 /* ── state ──────────────────────────────────────────────────── */
 const st = {
-  view: 'home',
+  view: 'meuJogador',
   champs: [],
   ranks: [],
   players: [],
@@ -2280,6 +2280,185 @@ function vPending() {
   </div>`;
 }
 
+function vMeuJogador() {
+  if (!st.ready) return `<div class="loading"><div class="spinner"></div></div>`;
+
+  const myKey = st.userDoc?.playerKey;
+  if (!myKey) {
+    return `<div class="empty">
+      <div class="ei">👤</div>
+      <h3>Perfil não configurado</h3>
+      <p>Peça a um administrador para vincular sua conta a um jogador do elenco.</p>
+    </div>`;
+  }
+
+  const myPlayer = st.players.find(p => playerKey(p.name) === myKey);
+  const myName = myPlayer?.name || myKey;
+  const initials = myName.trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+  const CUTOFF = '2026-09-08';
+  const doneAll = st.champs.filter(c => c.status === 'completed').sort((a,b) => b.date.localeCompare(a.date));
+  const last = doneAll[0];
+  const done = doneAll.filter(c => c.date >= CUTOFF);
+
+  // last championship result (all completed, no cutoff)
+  let lastResult = null;
+  if (last) {
+    const isChamp = (last.champion_players||[]).some(p => p.name.trim() === myName);
+    if (isChamp) {
+      lastResult = 'champion';
+    } else {
+      const fin = (last.matches||[]).find(m => m.phase==='final' && m.played);
+      if (fin) {
+        const ruTeam = fin.hs > fin.as ? fin.away : fin.home;
+        if ((last.teamRosters?.[ruTeam]||[]).includes(myName)) lastResult = 'runner-up';
+      }
+      if (!lastResult) {
+        const inAny = last.teamRosters && Object.values(last.teamRosters).some(pl => pl.includes(myName));
+        lastResult = inAny ? 'participant' : 'absent';
+      }
+    }
+  }
+
+  const rankEntry = st.ranks.find(r => r.id === myKey);
+  const titles = rankEntry?.titles || 0;
+
+  // global stats maps from cutoff championships
+  const goalsByPlayer = {};
+  const finalGoalsByPlayer = {};
+  const artMap = {};
+  const artFinMap = {};
+
+  for (const champ of done) {
+    const cg = {}, cfg = {};
+    for (const m of (champ.matches||[])) {
+      const isFinal = m.phase === 'final';
+      const gs = (isFinal && m.finalGoals?.length) ? m.finalGoals : (m.goals||[]);
+      for (const g of gs) {
+        goalsByPlayer[g.player] = (goalsByPlayer[g.player]||0) + 1;
+        cg[g.player] = (cg[g.player]||0) + 1;
+        if (isFinal) {
+          finalGoalsByPlayer[g.player] = (finalGoalsByPlayer[g.player]||0) + 1;
+          cfg[g.player] = (cfg[g.player]||0) + 1;
+        }
+      }
+    }
+    if (Object.keys(cg).length) {
+      const mx = Math.max(...Object.values(cg));
+      for (const [p,v] of Object.entries(cg)) if (v===mx) artMap[p]=(artMap[p]||0)+1;
+    }
+    if (Object.keys(cfg).length) {
+      const mx = Math.max(...Object.values(cfg));
+      for (const [p,v] of Object.entries(cfg)) if (v===mx) artFinMap[p]=(artFinMap[p]||0)+1;
+    }
+  }
+
+  const totalGoals = goalsByPlayer[myName] || 0;
+  const totalFinalGoals = finalGoalsByPlayer[myName] || 0;
+  const myArt = artMap[myName] || 0;
+  const myArtFin = artFinMap[myName] || 0;
+  const champsPlayed = done.filter(c =>
+    c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
+  ).length;
+
+  // titles map from st.ranks for ranking context
+  const titlesMap = {};
+  for (const r of (st.ranks||[])) { if (r.name) titlesMap[r.name] = r.titles||0; }
+
+  function rankCtx(map, name) {
+    const sorted = Object.entries(map)
+      .filter(([,v]) => v > 0)
+      .map(([n,v]) => ({n,v}))
+      .sort((a,b) => b.v-a.v || a.n.localeCompare(b.n));
+    if (!sorted.length) return '';
+    const pos = sorted.findIndex(r => r.n === name);
+    if (pos === -1) return '';
+    const s = Math.max(0, pos-2), e = Math.min(sorted.length-1, pos+2);
+    let rows = '';
+    for (let i=s; i<=e; i++) {
+      const r = sorted[i], isMe = i===pos;
+      rows += `<div style="display:flex;justify-content:space-between;padding:2px 5px;border-radius:5px;
+        ${isMe?'background:var(--accent);color:#000;font-weight:700':'color:var(--text2)'}">
+        <span>${i+1}. ${esc(r.n)}</span><span>${r.v}</span></div>`;
+    }
+    return `<div style="margin-top:8px;font-size:11px;border-top:1px solid var(--border2);padding-top:5px">${rows}</div>`;
+  }
+
+  const stat = (val, lbl, sub, ctx='') => `
+    <div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px">
+      <div style="text-align:center">
+        <div style="font-size:28px;font-weight:800;color:var(--text);line-height:1">${val}</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-top:4px">${lbl}</div>
+        ${sub?`<div style="font-size:10px;color:var(--text3);margin-top:2px">${sub}</div>`:''}
+      </div>
+      ${ctx}
+    </div>`;
+
+  const lastTitleMsg = titles > 0 && rankEntry?.last_date
+    ? `Seu último título foi em ${fdt(rankEntry.last_date)}.`
+    : titles === 0
+    ? `Você ainda não foi campeão — mas cada campo disputado te aproxima disso. 💪`
+    : '';
+
+  let banner = '';
+  if (!last) {
+    banner = `<div style="background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;color:var(--text3)">Nenhum campeonato realizado ainda.</div>`;
+  } else if (lastResult === 'champion') {
+    const n = Math.round(titles);
+    const ord = n===1?'1º':n===2?'2º':n===3?'3º':`${n}º`;
+    banner = `<div style="background:linear-gradient(135deg,#1a1400,#2d2200);border:1px solid #a0720060;border-radius:14px;padding:20px;text-align:center">
+      <div style="font-size:52px;margin-bottom:8px">🏆</div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#f0b429;text-transform:uppercase;margin-bottom:6px">Campeão</div>
+      <div style="font-size:16px;font-weight:700;color:#fff;line-height:1.4">Parabéns! Você conquistou seu <span style="color:#f0b429">${ord} título</span><br>no campeonato do dia ${fdt(last.date)}.</div>
+    </div>`;
+  } else if (lastResult === 'runner-up') {
+    banner = `<div style="background:linear-gradient(135deg,#111418,#1e2530);border:1px solid #60708060;border-radius:14px;padding:20px;text-align:center">
+      <div style="font-size:52px;margin-bottom:8px">🥈</div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#8b949e;text-transform:uppercase;margin-bottom:6px">Vice-Campeão</div>
+      <div style="font-size:16px;font-weight:700;color:#fff;line-height:1.4">Você quase foi campeão no torneio do dia ${fdt(last.date)}.<br>
+        <span style="color:#8b949e;font-size:14px;font-weight:500">O próximo não escapa! 💪</span></div>
+      ${lastTitleMsg?`<div style="font-size:12px;color:#8b949e;margin-top:10px">${lastTitleMsg}</div>`:''}
+    </div>`;
+  } else if (lastResult === 'participant') {
+    const msgs = [`Boa peleja no torneio do dia ${fdt(last.date)}, mas a taça ficou pra próxima! 😤`,
+      `No torneio do dia ${fdt(last.date)} a taça escapou — mas a garra permanece. 🔥`,
+      `Sem título no dia ${fdt(last.date)}, mas sem desculpa pro próximo. 😤`];
+    banner = `<div style="background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center">
+      <div style="font-size:40px;margin-bottom:8px">⚽</div>
+      <div style="font-size:14px;color:var(--text2);line-height:1.5">${msgs[myName.length%msgs.length]}</div>
+      ${lastTitleMsg?`<div style="font-size:12px;color:var(--text3);margin-top:8px">${lastTitleMsg}</div>`:''}
+    </div>`;
+  } else {
+    banner = `<div style="background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center">
+      <div style="font-size:40px;margin-bottom:8px">🛋️</div>
+      <div style="font-size:14px;color:var(--text3)">Você não participou do último torneio (${fdt(last.date)}).</div>
+      ${lastTitleMsg?`<div style="font-size:12px;color:var(--text3);margin-top:8px">${lastTitleMsg}</div>`:''}
+    </div>`;
+  }
+
+  const subtitle = titles > 0 ? `${Math.round(titles)}× campeão` : 'Ainda sem título';
+
+  return `<div style="padding:14px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="width:48px;height:48px;border-radius:50%;background:var(--accent);display:flex;align-items:center;
+                  justify-content:center;font-size:18px;font-weight:800;color:#000;flex-shrink:0">${initials}</div>
+      <div>
+        <div style="font-size:20px;font-weight:800;color:var(--text)">${esc(myName)}</div>
+        <div style="font-size:12px;color:var(--text3)">${subtitle}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">${banner}</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+      ${stat(Math.round(titles), 'Títulos', '', rankCtx(titlesMap, myName))}
+      ${stat(totalGoals, 'Gols', 'a partir de 08/09/2026', rankCtx(goalsByPlayer, myName))}
+      ${stat(totalFinalGoals, 'Gols em Finais', 'a partir de 08/09/2026', rankCtx(finalGoalsByPlayer, myName))}
+      ${stat(myArt, 'Artilharia', '', rankCtx(artMap, myName))}
+      ${stat(myArtFin, 'Art. de Finais', '', rankCtx(artFinMap, myName))}
+      ${stat(champsPlayed, 'Campeonatos', 'a partir de 08/09/2026', '')}
+    </div>
+  </div>`;
+}
+
 function mAdminPanel() {
   const m = st.modal;
   if (!m || m.type !== 'adminPanel') return '';
@@ -2348,6 +2527,9 @@ function mAdminPanel() {
         <button onclick="linkUserToPlayer('${u.uid}',document.getElementById('asel_${u.uid}').value)" title="Vincular"
           style="padding:5px 8px;background:var(--s2);border:1px solid var(--border);border-radius:6px;
                  font-size:12px;cursor:pointer">🔗</button>
+        ${u.role!=='admin'?`<button onclick="promoteToAdmin('${u.uid}')" title="Tornar admin"
+          style="padding:5px 8px;background:var(--s2);border:1px solid var(--border);border-radius:6px;
+                 font-size:11px;font-weight:600;cursor:pointer;color:var(--text2)">▲</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2417,6 +2599,7 @@ function render() {
 
   let content='';
   switch(st.view){
+    case 'meuJogador': content=vMeuJogador(); break;
     case 'home':    content=vHome(); break;
     case 'create':  content=vCreate(); break;
     case 'players': content=vPlayers(); break;
@@ -2454,7 +2637,8 @@ function buildShell() {
     </header>
     <main id="main"></main>
     <nav>
-      <button class="nav-btn active" data-view="home" onclick="nav('home')"><span class="ni">⚽</span>Jogo</button>
+      <button class="nav-btn active" data-view="meuJogador" onclick="nav('meuJogador')"><span class="ni">👤</span>Eu</button>
+      <button class="nav-btn" data-view="home" onclick="nav('home')"><span class="ni">⚽</span>Jogo</button>
       <button class="nav-btn" data-view="create" onclick="nav('create')"><span class="ni">➕</span>Novo</button>
       <button class="nav-btn" data-view="players" onclick="nav('players')"><span class="ni">👥</span>Elenco</button>
       <button class="nav-btn" data-view="ranking" onclick="nav('ranking')"><span class="ni">🏆</span>Ranking</button>
