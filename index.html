@@ -2357,7 +2357,7 @@ function vMeuJogador() {
   const totalFinalGoals = finalGoalsByPlayer[myName] || 0;
   const myArt = artMap[myName] || 0;
   const myArtFin = artFinMap[myName] || 0;
-  const champsPlayed = done.filter(c =>
+  const champsPlayed = doneAll.filter(c =>
     c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
   ).length;
 
@@ -2454,7 +2454,7 @@ function vMeuJogador() {
       ${stat(totalFinalGoals, 'Gols em Finais', 'a partir de 08/09/2026', rankCtx(finalGoalsByPlayer, myName))}
       ${stat(myArt, 'Artilharia', '', rankCtx(artMap, myName))}
       ${stat(myArtFin, 'Art. de Finais', '', rankCtx(artFinMap, myName))}
-      ${stat(champsPlayed, 'Campeonatos', 'a partir de 08/09/2026', '')}
+      ${stat(champsPlayed, 'Campeonatos', '', '')}
     </div>
   </div>`;
 }
