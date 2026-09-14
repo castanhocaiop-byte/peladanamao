@@ -2360,10 +2360,18 @@ function vMeuJogador() {
   const champsPlayed = doneAll.filter(c =>
     c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
   ).length;
+  const champsPlayedCutoff = done.filter(c =>
+    c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
+  ).length;
+  const titlesFromCutoff = done.filter(c =>
+    (c.champion_players||[]).some(p => p.name.trim() === myName)
+  ).length;
+  const winRate = champsPlayedCutoff > 0 ? Math.round(titlesFromCutoff / champsPlayedCutoff * 100) : 0;
 
-  // titles map from st.ranks for ranking context
+  // titles map filtered to active players only
+  const activePlayers = new Set((st.players||[]).map(p => p.name));
   const titlesMap = {};
-  for (const r of (st.ranks||[])) { if (r.name) titlesMap[r.name] = r.titles||0; }
+  for (const r of (st.ranks||[])) { if (r.name && activePlayers.has(r.name)) titlesMap[r.name] = r.titles||0; }
 
   function rankCtx(map, name) {
     const sorted = Object.entries(map)
@@ -2454,7 +2462,7 @@ function vMeuJogador() {
       ${stat(totalFinalGoals, 'Gols em Finais', 'a partir de 08/09/2026', rankCtx(finalGoalsByPlayer, myName))}
       ${stat(myArt, 'Artilharia', '', rankCtx(artMap, myName))}
       ${stat(myArtFin, 'Art. de Finais', '', rankCtx(artFinMap, myName))}
-      ${stat(champsPlayed, 'Campeonatos', '', '')}
+      ${stat(champsPlayed, 'Campeonatos', winRate > 0 ? `${winRate}% de títulos (pós 08/09)` : '', '')}
     </div>
   </div>`;
 }
