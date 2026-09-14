@@ -2357,9 +2357,11 @@ function vMeuJogador() {
   const totalFinalGoals = finalGoalsByPlayer[myName] || 0;
   const myArt = artMap[myName] || 0;
   const myArtFin = artFinMap[myName] || 0;
-  const champsPlayed = doneAll.filter(c =>
-    c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
-  ).length;
+  const ROSTER_CUTOFF = '2026-09-01';
+  const champsPlayed = doneAll.filter(c => {
+    if (c.date < ROSTER_CUTOFF) return true;
+    return c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName));
+  }).length;
   const champsPlayedCutoff = done.filter(c =>
     c.teamRosters && Object.values(c.teamRosters).some(pl => pl.includes(myName))
   ).length;
