@@ -1,3 +1,16 @@
 .vercel
 .claude/
+node_modules/
+
+# Exports pontuais do Firestore (dados de jogadores, WhatsApp, financeiro — nunca versionar).
 backup_*.json
+backup_multitenant_*/
+
+# Chave de administrador do Firebase, usada só localmente pelos scripts de migração avulsos
+# (do-backup.mjs, migrate-*.js). Nunca deve ser commitada — dá acesso total ao projeto.
+serviceAccountKey.json
+
+# Cópias de segurança soltas e segredos locais.
+*.bak
+.env
+.env.*

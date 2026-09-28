@@ -6,75 +6,189 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userRole() {
+    function userGlobalRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    function isAdmin() {
-      return isSignedIn() && userRole() == 'admin';
+    function userLeagueRole(leagueId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        .get('leagues', {}).get(leagueId, {}).get('role', 'none');
     }
 
-    function isActiveUser() {
-      return isSignedIn() && (userRole() == 'admin' || userRole() == 'player');
+    function isGlobalAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'castanho.caiop@gmail.com' ||
+        userGlobalRole() == 'admin'
+      );
     }
 
-    // Users collection: users manage their own doc, admins manage all
+    function isLeagueAdmin(leagueId) {
+      return isSignedIn() && (
+        request.auth.token.email == 'castanho.caiop@gmail.com' ||
+        userLeagueRole(leagueId) == 'admin'
+      );
+    }
+
+    function isLeagueActiveUser(leagueId) {
+      return isSignedIn() && (
+        userLeagueRole(leagueId) == 'admin' ||
+        userLeagueRole(leagueId) == 'player'
+      );
+    }
+
+    function userPlayerKey(leagueId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        .get('leagues', {}).get(leagueId, {}).get('playerKey',
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('playerKey', ''));
+    }
+
+    function userTopPlayerKey() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('playerKey', '');
+    }
+
+    // Dono do sistema: precisa do e-mail VERIFICADO (conta Google); o texto do e-mail sozinho não vale.
+    function isOwnerVerified() {
+      return isSignedIn()
+        && request.auth.token.email == 'castanho.caiop@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    // Verdadeiro quando o documento NÃO ganha nem muda o campo "whatsapp": apagar o campo, ou deixá-lo
+    // como já estava num documento antigo ainda não migrado, é permitido. Vale só para create/update.
+    function keepsWhatsappOut() {
+      return !('whatsapp' in request.resource.data)
+        || (resource != null && request.resource.data.whatsapp == resource.data.get('whatsapp', null));
+    }
+
+    function validPhotoDoc() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['url', 'uid', 'updatedAt'])
+        && d.url is string
+        && d.url.size() < 300
+        && d.url.matches('^https://res\\.cloudinary\\.com/fwtyio7l/.*')
+        && d.uid is string;
+    }
+
+    // ── Global collections ───────────────────────────────────────
+
+    // Papel, ligas e vínculo com jogador NÃO são gravados pelo app: só as Cloud Functions
+    // (joinLeague, createLeague, leaveLeague, manageMember, saveEarnedBadges) mexem nesses
+    // campos, com permissão de servidor. O usuário só cria o próprio documento "vazio"
+    // (sem papel e sem ligas) e edita os campos de notificação dele.
+    //
+    // Privacidade (LGPD): cada conta lê SÓ o próprio cadastro. Nome, e-mail e vínculo de outras
+    // pessoas chegam ao admin da liga pela função listMembers, que devolve apenas o que o
+    // Painel Admin usa (sem tokens de notificação e sem dados de outras ligas).
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid && (
+        isOwnerVerified() ||
+        (request.resource.data.keys().hasOnly(['email', 'displayName', 'role', 'createdAt', 'leagues'])
+          && request.resource.data.role == 'pending'
+          && request.resource.data.leagues is map
+          && request.resource.data.leagues.size() == 0
+          && request.resource.data.email == request.auth.token.get('email', ''))
+      );
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['fcmTokens', 'notifEnabled', 'linkRequestSent']);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/badgeNotifs/{docId} {
       allow create: if isSignedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == uid
-        && request.resource.data.role == resource.data.role); // users can't self-promote
-      allow delete: if isAdmin();
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // Invite tokens: only admins create, anyone signed-in can read/use
-    match /invite_tokens/{token} {
+    // ── League data (/leagues/{leagueId}/) ───────────────────────
+
+    match /leagues/{leagueId} {
       allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); // marking as used
+      // Ligas novas nascem na função createLeague (que também torna o criador admin dela).
+      allow create: if false;
+      allow update: if isLeagueAdmin(leagueId);
+      allow delete: if isGlobalAdmin();
     }
 
-    // App config (createAuthorized flag): admins write, active users read
-    match /app_config/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    match /leagues/{leagueId}/championships/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueActiveUser(leagueId);
     }
 
-    // Game data: active users read, admins write
-    match /championships/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isActiveUser(); // players can create/update scores
+    match /leagues/{leagueId}/player_titles/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueAdmin(leagueId);
     }
 
-    match /player_titles/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    // O WhatsApp NÃO fica no cadastro do elenco (todo membro lê): vai para "contacts", só do admin.
+    match /leagues/{leagueId}/player_registry/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow create, update: if isLeagueAdmin(leagueId) && keepsWhatsappOut();
+      allow delete: if isLeagueAdmin(leagueId);
     }
 
-    match /player_registry/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    // Contatos (WhatsApp) de jogadores e avulsos: só o admin lê e grava.
+    // Jogador: id do cadastro. Avulso: "avulso_" + chave do nome.
+    match /leagues/{leagueId}/contacts/{docId} {
+      allow read, write: if isLeagueAdmin(leagueId);
     }
 
-    // Financial: active users read, admins write
-    match /financeiro_config/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    // Foto de perfil: docId = playerKey (nome normalizado). O próprio jogador
+    // grava/apaga a sua; o admin grava/apaga qualquer uma.
+    match /leagues/{leagueId}/player_photos/{photoKey} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow create, update: if validPhotoDoc() && (
+        isLeagueAdmin(leagueId) ||
+        (isLeagueActiveUser(leagueId)
+          && request.resource.data.uid == request.auth.uid
+          && (userPlayerKey(leagueId) == photoKey || userTopPlayerKey() == photoKey))
+      );
+      allow delete: if isLeagueAdmin(leagueId) ||
+        (isLeagueActiveUser(leagueId) && resource.data.uid == request.auth.uid);
     }
 
-    match /financeiro_mensalidades/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    match /leagues/{leagueId}/financeiro_config/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueAdmin(leagueId);
     }
 
-    match /financeiro_despesas/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    match /leagues/{leagueId}/financeiro_mensalidades/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueAdmin(leagueId);
     }
 
-    match /financeiro_avulsos/{docId} {
-      allow read: if isActiveUser();
-      allow write: if isAdmin();
+    match /leagues/{leagueId}/financeiro_despesas/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueAdmin(leagueId);
+    }
+
+    match /leagues/{leagueId}/financeiro_avulsos/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow create, update: if isLeagueAdmin(leagueId) && keepsWhatsappOut();
+      allow delete: if isLeagueAdmin(leagueId);
+    }
+
+    match /leagues/{leagueId}/mensalidade_lembretes/{docId} {
+      allow create: if isLeagueAdmin(leagueId);
+      allow read, delete: if isLeagueAdmin(leagueId);
+    }
+
+    match /leagues/{leagueId}/app_config/{docId} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if isLeagueAdmin(leagueId);
+    }
+
+    match /leagues/{leagueId}/link_requests/{uid} {
+      allow read: if isLeagueAdmin(leagueId) || (isSignedIn() && request.auth.uid == uid);
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if isLeagueAdmin(leagueId);
+    }
+
+    // Convites: só o admin cria, lista e apaga. Quem entra por convite passa pela função
+    // joinLeague, que lê e consome o convite com permissão de servidor.
+    match /leagues/{leagueId}/invite_tokens/{token} {
+      allow read, create, delete: if isLeagueAdmin(leagueId);
+      allow update: if false;
     }
   }
 }

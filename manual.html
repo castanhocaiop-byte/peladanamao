@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual — Aceoma Série B</title>
+<meta name="theme-color" content="#0d1117">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap">
+
+<style>
+/* ── tokens (light-first) ─────────────────────────────────────── */
+:root {
+  --bg:        #f6f8fa;
+  --surface:   #ffffff;
+  --surface2:  #f0f2f5;
+  --border:    #d1d5db;
+  --border2:   #e4e7eb;
+  --text:      #1c2128;
+  --text2:     #57606a;
+  --text3:     #8c959f;
+  --accent:    #1a7f4b;
+  --accent-bg: #1a7f4b14;
+  --gold:      #9a6700;
+  --gold-bg:   #9a670014;
+  --blue:      #0550ae;
+  --blue-bg:   #0550ae10;
+  --warn:      #bc4c00;
+  --warn-bg:   #bc4c0010;
+  --tag-bg:    #1c21280d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #1c2333;
+    --border:    #30363d;
+    --border2:   #21262d;
+    --text:      #e6edf3;
+    --text2:     #8b949e;
+    --text3:     #6e7681;
+    --accent:    #00d67f;
+    --accent-bg: #00d67f18;
+    --gold:      #f0a500;
+    --gold-bg:   #f0a50018;
+    --blue:      #4DB8FF;
+    --blue-bg:   #4DB8FF10;
+    --warn:      #f0883e;
+    --warn-bg:   #f0883e18;
+    --tag-bg:    #ffffff0d;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  padding-inline: 20px;
+  padding-block: 36px 64px;
+}
+
+/* ── layout ───────────────────────────────────────────────────── */
+.page {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1060px) {
+  body { padding-inline: 40px; }
+  .page {
+    max-width: 1020px;
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0 56px;
+    align-items: start;
+  }
+  .page-header { grid-column: 1 / -1; }
+  .toc-sidebar { display: block; grid-column: 1; grid-row: 2; position: sticky; top: 32px; }
+  .content { grid-column: 2; grid-row: 2; }
+  .toc-inline { display: none; }
+}
+
+.toc-sidebar { display: none; }
+
+/* ── header ───────────────────────────────────────────────────── */
+.page-header {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header-text { flex: 1; }
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.back-btn:hover { background: var(--surface2); color: var(--text); }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.doc-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(40px, 8vw, 60px);
+  line-height: 0.95;
+  color: var(--text);
+  letter-spacing: 0.3px;
+  text-wrap: balance;
+}
+
+.doc-title span { color: var(--accent); }
+
+.doc-lead {
+  font-size: 14px;
+  color: var(--text2);
+  max-width: 56ch;
+  margin-top: 12px;
+  line-height: 1.6;
+}
+
+/* ── TOC ──────────────────────────────────────────────────────── */
+.toc-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 0 8px 10px;
+}
+
+.toc-list { list-style: none; }
+.toc-list li + li { margin-top: 1px; }
+
+.toc-list a {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+  line-height: 1.35;
+}
+.toc-list a:hover { background: var(--surface2); color: var(--text); }
+.toc-list a .num { font-size: 10px; color: var(--text3); margin-right: 4px; }
+
+.toc-inline {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 28px;
+}
+.toc-inline .toc-label { padding: 0 0 10px; }
+.toc-inline .toc-list { columns: 2; column-gap: 12px; }
+@media (max-width: 400px) { .toc-inline .toc-list { columns: 1; } }
+
+/* ── section ──────────────────────────────────────────────────── */
+.section { margin-bottom: 44px; scroll-margin-top: 24px; }
+
+.section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.4px;
+  color: var(--text);
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--border2);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.section-title .sn {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.4px;
+}
+
+h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 20px 0 6px; }
+
+p { color: var(--text2); margin-bottom: 10px; max-width: 62ch; }
+p strong { color: var(--text); font-weight: 600; }
+
+/* ── callout blocks ───────────────────────────────────────────── */
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg);
+  padding: 12px 14px;
+  border-radius: 0 8px 8px 0;
+  margin: 14px 0;
+  font-size: 13.5px;
+  color: var(--text2);
+}
+.callout.gold { border-color: var(--gold);  background: var(--gold-bg); }
+.callout.blue { border-color: var(--blue);  background: var(--blue-bg); }
+.callout.warn { border-color: var(--warn);  background: var(--warn-bg); }
+
+.callout-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.callout-label.gold { color: var(--gold); }
+.callout-label.blue { color: var(--blue); }
+.callout-label.warn { color: var(--warn); }
+
+/* ── formula ──────────────────────────────────────────────────── */
+.formula {
+  display: inline-block;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+  color: var(--blue);
+  background: var(--blue-bg);
+  border: 1px solid var(--blue);
+  border-radius: 7px;
+  padding: 8px 14px;
+  margin: 8px 0;
+}
+
+/* ── tag chips ────────────────────────────────────────────────── */
+.tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--tag-bg);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.tag.green { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.tag.gold  { background: var(--gold-bg);   border-color: var(--gold);   color: var(--gold); }
+.tag.blue  { background: var(--blue-bg);   border-color: var(--blue);   color: var(--blue); }
+.tag.warn  { background: var(--warn-bg);   border-color: var(--warn);   color: var(--warn); }
+
+/* ── data table ───────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin: 14px 0;
+}
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--text3);
+  border-bottom: 2px solid var(--border);
+}
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border2);
+  color: var(--text2);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.data-table td:first-child { font-weight: 600; color: var(--text); white-space: nowrap; }
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ── indicator grid ───────────────────────────────────────────── */
+.ind-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0;
+}
+@media (max-width: 480px) { .ind-grid { grid-template-columns: 1fr; } }
+
+.ind-card {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.ind-name {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 3px;
+}
+.ind-desc { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.ind-desc strong { color: var(--text); font-weight: 600; }
+
+/* ── example ──────────────────────────────────────────────────── */
+.example {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text2);
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.example strong { color: var(--text); font-weight: 600; }
+.example .ex-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+
+@media (max-width: 520px) {
+  body { padding-inline: 16px; padding-block: 24px 48px; }
+  .page-header { flex-direction: column-reverse; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-header">
+    <div class="header-text">
+      <div class="eyebrow">Série B — Aceoma</div>
+      <h1 class="doc-title">MANUAL DO <span>SISTEMA</span></h1>
+      <p class="doc-lead">Regras de cálculo, origens dos indicadores e critérios de presença usados em todas as abas do aplicativo.</p>
+    </div>
+    <a href="/" class="back-btn">← Voltar ao app</a>
+  </header>
+
+  <nav class="toc-sidebar" aria-label="Índice">
+    <div class="toc-label">Índice</div>
+    <ul class="toc-list">
+      <li><a href="#cortes"><span class="num">1</span> Datas de Corte</a></li>
+      <li><a href="#presenca"><span class="num">2</span> Regra de Presença</a></li>
+      <li><a href="#titulos"><span class="num">3</span> Títulos e ½ Título</a></li>
+      <li><a href="#sequencias"><span class="num">4</span> Sequências</a></li>
+      <li><a href="#jejuns"><span class="num">5</span> Jejuns</a></li>
+      <li><a href="#gols"><span class="num">6</span> Gols e Artilharia</a></li>
+      <li><a href="#medias"><span class="num">7</span> Médias de Gols</a></li>
+      <li><a href="#taxa"><span class="num">8</span> Taxa de Vitória</a></li>
+      <li><a href="#aba-eu"><span class="num">9</span> Aba EU</a></li>
+      <li><a href="#aba-stats"><span class="num">10</span> Aba Stats</a></li>
+    </ul>
+  </nav>
+
+  <nav class="toc-inline" aria-label="Índice">
+    <div class="toc-label">Nesta página</div>
+    <ul class="toc-list">
+      <li><a href="#cortes"><span class="num">1</span> Datas de Corte</a></li>
+      <li><a href="#presenca"><span class="num">2</span> Regra de Presença</a></li>
+      <li><a href="#titulos"><span class="num">3</span> Títulos e ½ Título</a></li>
+      <li><a href="#sequencias"><span class="num">4</span> Sequências</a></li>
+      <li><a href="#jejuns"><span class="num">5</span> Jejuns</a></li>
+      <li><a href="#gols"><span class="num">6</span> Gols e Artilharia</a></li>
+      <li><a href="#medias"><span class="num">7</span> Médias de Gols</a></li>
+      <li><a href="#taxa"><span class="num">8</span> Taxa de Vitória</a></li>
+      <li><a href="#aba-eu"><span class="num">9</span> Aba EU</a></li>
+      <li><a href="#aba-stats"><span class="num">10</span> Aba Stats</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <!-- 1. Datas de Corte -->
+    <section class="section" id="cortes">
+      <h2 class="section-title"><span class="sn">01</span> Datas de Corte</h2>
+      <p>O sistema usa duas datas que delimitam quando cada grupo de estatísticas passa a ser contabilizado. Entender esses limites é essencial para interpretar qualquer indicador.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Constante</th><th>Data</th><th>O que delimita</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="tag">ROSTER_CUTOFF</span></td>
+            <td>02/09/2026</td>
+            <td>A partir desta data, a presença de um jogador em um campeonato só é reconhecida se ele estiver no elenco registrado. Afeta jejuns, campeonatos disputados e o contador "sem título desde".</td>
+          </tr>
+          <tr>
+            <td><span class="tag blue">CUTOFF</span></td>
+            <td>08/09/2026</td>
+            <td>Ponto de partida para toda estatística de gols: total de gols, artilharia, gols em finais, médias e taxa de vitória. Campeonatos anteriores são ignorados nessas contagens.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Atenção</div>
+        Os dois cortes são independentes. Um campeonato realizado em 05/09/2026 aplica a regra de presença (pós <span class="tag">ROSTER_CUTOFF</span>) mas <strong>não</strong> entra nas estatísticas de gols (anterior ao <span class="tag blue">CUTOFF</span>).
+      </div>
+    </section>
+
+    <!-- 2. Regra de Presença -->
+    <section class="section" id="presenca">
+      <h2 class="section-title"><span class="sn">02</span> Regra de Presença</h2>
+      <p>Determina se um campeonato "conta" para um jogador em cálculos que dependem de participação — jejuns, campeonatos disputados, contador de campeonatos sem título.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Período</th><th>Critério para contar</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Antes de 02/09/2026</td>
+            <td>O campeonato <strong>sempre conta</strong> para todos os jogadores, independente de elenco registrado.</td>
+          </tr>
+          <tr>
+            <td>A partir de 02/09/2026</td>
+            <td>Só conta se o jogador estiver listado no elenco registrado do campeonato. Se não estiver em nenhum time, o campeonato é ignorado para ele.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Regra</div>
+        Um jogador que <strong>ficou de fora</strong> de um campeonato recente não tem seu jejum aumentado por isso — aquele campeonato simplesmente não existe para ele na contagem de participações.
+      </div>
+
+      <h3>Onde a regra é aplicada</h3>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">Jejum</strong> — a sequência de participações usada no cálculo aplica esse filtro</li>
+        <li><strong style="color: var(--text)">Campeonatos disputados</strong> — card "Campeonatos" na aba EU</li>
+        <li><strong style="color: var(--text)">Sem título desde</strong> — contagem de campeonatos desde o último título</li>
+        <li><strong style="color: var(--text)">Taxa de vitória</strong> — denominador calculado com presença (pós CUTOFF)</li>
+      </ul>
+    </section>
+
+    <!-- 3. Títulos e ½ Título -->
+    <section class="section" id="titulos">
+      <h2 class="section-title"><span class="sn">03</span> Títulos e ½ Título</h2>
+      <p>Cada campeão tem um <strong>peso</strong> associado à sua conquista, que define se foi um título inteiro ou meio título.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Tipo</th><th>Peso</th><th>Quando ocorre</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Título inteiro</td>
+            <td><span class="tag green">1.0</span></td>
+            <td>Jogador estava no elenco e jogou a final normalmente pelo time campeão.</td>
+          </tr>
+          <tr>
+            <td>Meio título</td>
+            <td><span class="tag gold">0.5</span></td>
+            <td>Jogador pertence ao time campeão, mas sua participação na final foi parcial ou indireta. Ver os dois casos abaixo.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Quando um jogador recebe ½ título</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Emprestado na final</div>
+          <div class="ind-desc">O jogador estava no elenco do time A, mas <strong>jogou a final pelo time B</strong> (emprestado) e o time B venceu.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Não jogou a final</div>
+          <div class="ind-desc">Estava no elenco do time campeão, mas <strong>não entrou em campo na final</strong> — por lesão, ausência ou qualquer outro motivo.</div>
+        </div>
+      </div>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Critério</div>
+        O ½ título é sobre a <strong>participação individual</strong> do jogador na decisão, não sobre o resultado do jogo. O peso é atribuído manualmente pelo admin ao registrar os campeões.
+      </div>
+
+      <h3>Exibição</h3>
+      <p>O total é exibido com fração quando necessário: <strong>2½</strong> significa qualquer combinação de inteiros e meios que some 2.5.</p>
+
+      <div class="example">
+        <div class="ex-label">Exemplo</div>
+        Jogador ganhou 3 finais jogando normalmente + foi campeão numa edição em que não atuou na final → total <strong>3½</strong>. Na aba EU: <strong>3 Títulos Inteiros</strong> / <strong>1 Meio Título</strong>.
+      </div>
+
+      <h3>Ranking geral</h3>
+      <p>O ranking de títulos usa o total acumulado (somando os pesos) de todos os campeonatos, sem restrição de data.</p>
+    </section>
+
+    <!-- 4. Sequências -->
+    <section class="section" id="sequencias">
+      <h2 class="section-title"><span class="sn">04</span> Sequências de Vitórias</h2>
+      <p>Mede campeonatos consecutivos em que o jogador foi campeão. Meio título contribui proporcionalmente.</p>
+
+      <h3>Como calcula</h3>
+      <p>O sistema percorre todos os campeonatos em ordem cronológica:</p>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2.2;">
+        <li>Se o jogador foi campeão: <code style="color: var(--blue)">sequência += peso</code> (0.5 ou 1.0)</li>
+        <li>Se não foi campeão: <code style="color: var(--warn)">sequência = 0</code> (reinicia)</li>
+      </ul>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Importante</div>
+        A sequência <strong>não aplica a regra de presença</strong>. Um campeonato em que o jogador não participou quebra a sequência normalmente.
+      </div>
+
+      <div class="ind-grid" style="margin-top: 16px;">
+        <div class="ind-card">
+          <div class="ind-name">Maior Sequência</div>
+          <div class="ind-desc">Recorde histórico de vitórias consecutivas, com o período (data início – data fim).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Sequência Atual</div>
+          <div class="ind-desc">Sequência de vitórias ainda em aberto até o último campeonato realizado.</div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="ex-label">Exemplo</div>
+        Jogador vence 3 seguidos (2 inteiros + 1 meio título) → sequência = <strong>2½</strong>. Na 4ª edição não é campeão → reinicia. Na 5ª vence → sequência = <strong>1</strong>.
+      </div>
+    </section>
+
+    <!-- 5. Jejuns -->
+    <section class="section" id="jejuns">
+      <h2 class="section-title"><span class="sn">05</span> Jejuns</h2>
+      <p>Mede quantos campeonatos seguidos o jogador <em>participou</em> sem ser campeão. Diferente da sequência, o jejum <strong>aplica a regra de presença</strong> — campeonatos em que o jogador não estava no elenco são ignorados.</p>
+
+      <h3>Como calcula</h3>
+      <p>O sistema monta uma lista filtrada com apenas os campeonatos em que o jogador esteve presente. O jejum é calculado <em>dentro</em> dessa lista, contando os intervalos entre vitórias:</p>
+      <div class="formula">JEJUM = índice_vitória_B − índice_vitória_A − 1</div>
+
+      <div class="ind-grid" style="margin-top: 16px;">
+        <div class="ind-card">
+          <div class="ind-name">Maior Jejum</div>
+          <div class="ind-desc">Maior intervalo registrado entre duas vitórias (ou entre a última vitória e o fim do histórico), com o período.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Jejum Atual</div>
+          <div class="ind-desc">Campeonatos participados desde a última vitória. Zero se o último campeonato participado resultou em título.</div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="ex-label">Exemplo com presença</div>
+        Jogador ganhou o 3º e o 8º campeonatos em que participou. Entre eles há 4 participações sem título → maior jejum = <strong>4</strong>. Após o 8º, participou de 2 sem ganhar → jejum atual = <strong>2</strong>.
+        <br><br>
+        Se depois do 8º título ficou de fora de 3 campeonatos (sem elenco), esses 3 <strong>não contam</strong> para o jejum atual.
+      </div>
+    </section>
+
+    <!-- 6. Gols e Artilharia -->
+    <section class="section" id="gols">
+      <h2 class="section-title"><span class="sn">06</span> Gols e Artilharia</h2>
+      <p>Toda estatística de gols usa o <span class="tag blue">CUTOFF</span> <strong>08/09/2026</strong> como ponto de partida. Campeonatos anteriores não entram em nenhuma contagem de gols.</p>
+
+      <h3>Gols em finais empatadas</h3>
+      <p>Em finais decididas nos pênaltis, apenas os gols marcados <em>no tempo normal e prorrogação</em> são contabilizados. Os pênaltis não contam como gols.</p>
+
+      <h3>Indicadores</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Total de Gols</div>
+          <div class="ind-desc">Soma de todos os gols marcados em campeonatos a partir de 08/09/2026.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Gols em Finais</div>
+          <div class="ind-desc">Total de gols marcados em partidas de final (pós 08/09).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Artilharia</div>
+          <div class="ind-desc">Número de campeonatos em que foi o maior artilheiro daquele campeonato.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Artilharia de Finais</div>
+          <div class="ind-desc">Número de finais em que foi o maior artilheiro da partida.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Recorde Pessoal</div>
+          <div class="ind-desc">Maior número de gols em um único campeonato, em toda a história (sem restrição de data).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Jejum de Gols</div>
+          <div class="ind-desc">Campeonatos seguidos (pós 08/09) sem marcar nenhum gol.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. Médias de Gols -->
+    <section class="section" id="medias">
+      <h2 class="section-title"><span class="sn">07</span> Médias de Gols</h2>
+      <p>Calculadas apenas para campeonatos a partir de <strong>08/09/2026</strong>.</p>
+
+      <h3>Gols por Campeonato (G/Camp)</h3>
+      <div class="formula">G/Camp = total de gols ÷ campeonatos no elenco</div>
+      <p>Denominador: campeonatos pós 08/09 em que o jogador estava registrado em algum time. Se não esteve em nenhum elenco mas marcou gols, aquele campeonato também entra no denominador.</p>
+
+      <h3>Gols por Jogo (G/Jogo)</h3>
+      <div class="formula">G/Jogo = total de gols ÷ partidas disputadas</div>
+      <p>O cálculo de "partidas disputadas" depende da situação em cada campeonato:</p>
+
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>Partidas contadas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Registrado em um time</td>
+            <td>Todas as partidas disputadas pelo time registrado.</td>
+          </tr>
+          <tr>
+            <td>Emprestado a outro time</td>
+            <td>Partidas do time registrado + cada partida <em>fora</em> desse time onde o jogador marcou gol. Se foi emprestado mas não marcou, aquelas partidas não são contadas — não há como confirmar que jogou.</td>
+          </tr>
+          <tr>
+            <td>Fora de qualquer elenco</td>
+            <td>Somente as partidas onde marcou gol. Partidas sem gol são ignoradas pelo mesmo motivo.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Lógica do empréstimo</div>
+        Se um jogador está no elenco do <strong>time vermelho</strong> mas marcou na final jogando pelo <strong>time amarelo</strong>, essa partida extra é adicionada automaticamente às suas partidas disputadas.
+      </div>
+
+      <h3>Gols por Título</h3>
+      <div class="formula">G/Título = gols em campeonatos ganhos ÷ títulos (pós 08/09)</div>
+      <p>Contabiliza apenas os gols marcados dentro de campeonatos que o jogador venceu, dividido pelos títulos conquistados após o corte.</p>
+    </section>
+
+    <!-- 8. Taxa de Vitória -->
+    <section class="section" id="taxa">
+      <h2 class="section-title"><span class="sn">08</span> Taxa de Vitória</h2>
+      <div class="formula">% Vitórias = títulos (pós 08/09) ÷ campeonatos no elenco (pós 08/09) × 100</div>
+      <p>Exibida na aba EU como sub-legenda do card "Campeonatos". Só é calculada se o jogador disputou ao menos um campeonato após o <span class="tag blue">CUTOFF</span>.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Numerador e denominador</div>
+        Ambos usam a mesma janela temporal (pós 08/09/2026) e a mesma regra de presença. Um título antes do corte não entra no numerador; um campeonato sem elenco não entra no denominador.
+      </div>
+    </section>
+
+    <!-- 9. Aba EU -->
+    <section class="section" id="aba-eu">
+      <h2 class="section-title"><span class="sn">09</span> Aba EU</h2>
+      <p>Visão personalizada para o jogador logado. Todos os indicadores são calculados individualmente e atualizados em tempo real.</p>
+
+      <h3>Cards principais</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Títulos</div>
+          <div class="ind-desc">Total acumulado com pesos, posição no ranking entre jogadores ativos e evolução temporal.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Gols</div>
+          <div class="ind-desc">Total pós 08/09, posição no ranking e evolução por campeonato.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Gols em Finais</div>
+          <div class="ind-desc">Gols marcados em finais pós 08/09.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Artilharia</div>
+          <div class="ind-desc">Campeonatos em que foi o maior artilheiro.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Art. de Finais</div>
+          <div class="ind-desc">Finais em que foi o maior artilheiro.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Campeonatos</div>
+          <div class="ind-desc">Total disputado (com regra de presença) e taxa de vitória pós 08/09.</div>
+        </div>
+      </div>
+
+      <h3>Card — Sequências &amp; Jejuns</h3>
+      <p>Exibe maior sequência, sequência ativa, maior jejum e jejum atual — cada um com o período correspondente. Aparece somente se houver ao menos um registro relevante.</p>
+
+      <h3>Card — Títulos Inteiros / Meios Títulos</h3>
+      <p>Detalha a composição do total de títulos. Exibido somente para quem tem ao menos 1 título.</p>
+
+      <h3>Card — Recordes Pessoais</h3>
+      <p>Agrega: recorde de gols num único campeonato, gols por título, média G/Camp, média G/Jogo e jejum de gols. Linhas ocultadas quando o valor é zero ou não aplicável.</p>
+
+      <h3>Banner de status</h3>
+      <p>Reflete o resultado no campeonato mais recente: campeão, vice-campeão, participante ou ausente. Quando há título passado, exibe também a contagem de campeonatos sem título desde então.</p>
+    </section>
+
+    <!-- 10. Aba Stats -->
+    <section class="section" id="aba-stats">
+      <h2 class="section-title"><span class="sn">10</span> Aba Stats</h2>
+      <p>Rankings comparativos entre jogadores ativos, com filtros para análise segmentada.</p>
+
+      <h3>Filtros</h3>
+      <table class="data-table">
+        <thead><tr><th>Filtro</th><th>Efeito</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Jogador específico</td>
+            <td>Limita todos os rankings a um único jogador.</td>
+          </tr>
+          <tr>
+            <td>Mínimo de títulos</td>
+            <td>Exibe apenas jogadores com pelo menos N títulos.</td>
+          </tr>
+          <tr>
+            <td>Ativos / Todos</td>
+            <td>"Ativos" oculta jogadores marcados como inativos no cadastro. Padrão: Ativos.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Blocos de ranking</h3>
+      <div class="ind-grid">
+        <div class="ind-card"><div class="ind-name">Maior Sequência</div><div class="ind-desc">Top 5 histórico de vitórias consecutivas.</div></div>
+        <div class="ind-card"><div class="ind-name">Maior Jejum</div><div class="ind-desc">Top 5 histórico de participações sem título (com presença aplicada).</div></div>
+        <div class="ind-card"><div class="ind-name">Sequência Ativa</div><div class="ind-desc">Quem está em sequência de vitórias agora.</div></div>
+        <div class="ind-card"><div class="ind-name">Jejum Atual</div><div class="ind-desc">Top 5 de quem está há mais tempo sem ganhar (com presença).</div></div>
+        <div class="ind-card"><div class="ind-name">Títulos Inteiros</div><div class="ind-desc">Ranking por quantidade de títulos com peso 1.0.</div></div>
+        <div class="ind-card"><div class="ind-name">Meios Títulos</div><div class="ind-desc">Ranking por quantidade de meios títulos (emprestado ou ausente na final do time campeão).</div></div>
+        <div class="ind-card"><div class="ind-name">Gols por Título</div><div class="ind-desc">Média de gols por campeonato vencido, para campeões pós 02/09/2026.</div></div>
+        <div class="ind-card"><div class="ind-name">Médias de Gols</div><div class="ind-desc">Tabela com G/Camp e G/Jogo para jogadores com gols pós 08/09/2026.</div></div>
+        <div class="ind-card"><div class="ind-name">Mais Gols num Camp.</div><div class="ind-desc">Recorde de gols num único campeonato, histórico.</div></div>
+        <div class="ind-card"><div class="ind-name">Jejum de Gols</div><div class="ind-desc">Campeonatos seguidos sem marcar, pós 08/09/2026.</div></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>

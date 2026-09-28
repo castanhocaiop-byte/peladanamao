@@ -1,8 +1,12 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // O app não usa o Firebase Storage (fotos e comprovantes vão para o Cloudinary); este
+    // bucket nunca chegou a ser ativado no projeto. Fica travado por padrão — se um dia for
+    // usado para algo, a regra certa deve ser escrita e publicada antes de habilitar qualquer
+    // acesso, nunca liberada por padrão como estava aqui.
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
