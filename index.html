@@ -489,9 +489,10 @@ const st = {
   drawAbsent: [],
   drawResult: null,
   drawTeamColors: [],
-  drawOpen: false,
   createPresetTeams: [],
   createRosters: {},
+  createMode: 'draw', // 'draw' (sortear) ou 'manual' (montar à mão) — a tela "Novo Campeonato" alterna entre os dois
+  createTeamsSource: null, // 'draw' quando os times marcados vieram de um sorteio aplicado (só de exibição: muda o rótulo da aba "Manual" pra não parecer escolha manual)
   playerTeamMap: {},
   finCfg: {valorMensalidade: 50, valorChurrasco: 0, valorSomenteChurrasco: 0, saldoInicial: 0, reserva: 300, valorAvulso: 20, vencimentoDia: 10, chavePix: ''},
   finMens: {},
@@ -1653,6 +1654,7 @@ async function activatePresetChamp() {
   // pre-select absent players for the draw card (those NOT confirmed)
   st.drawAbsent = eligible.filter(p=>!confirmed.has(playerKey(p.name))).map(p=>p.id);
   st.drawExtras = (preset.avulsos||[]).map(a=>a.name);
+  st.createMode = 'draw'; // sempre cai no sorteio ao fechar inscrições, mesmo que a tela tenha ficado em "manual" antes
   await ldoc(`championships/${preset.id}`).delete();
   st.view = 'create'; render();
   toast('Inscrições fechadas. Configure os times!', 'ok');
@@ -3340,6 +3342,8 @@ function applyDrawToForm() {
   });
   st.createPresetTeams = colors;
   st.createRosters = rosters;
+  st.createMode = 'manual'; // times decididos: passa para a tela de revisão (já vem pré-preenchida)
+  st.createTeamsSource = 'draw'; // só pra rotular certo: os times vieram do sorteio, não de escolha manual
   render();
   requestAnimationFrame(() => {
     onTkChg();
@@ -3351,7 +3355,16 @@ function vCreate() {
   const hasActive = !!activeChamp();
   const hasPreset = !!presetChamp();
   const playerBlocked = !isAdmin() && hasActive && !st.createAuthorized;
-  return `${renderDrawCard()}<div class="card">
+  const drawBody = playerBlocked ? '' : renderDrawCard();
+  const hasDrawOption = !!drawBody; // só existe sorteio se houver jogador elegível
+  const mode = hasDrawOption ? (st.createMode || 'draw') : 'manual';
+  const manualFromDraw = mode === 'manual' && st.createTeamsSource === 'draw';
+  const modeBtn = (m, lbl, onclick) => `<button onclick="${onclick}"
+    style="flex:1;padding:10px;border-radius:10px;border:1.5px solid ${mode===m?'var(--accent)':'var(--border)'};
+           background:${mode===m?'#00d67f18':'var(--s2)'};color:${mode===m?'var(--accent)':'var(--text2)'};
+           font-size:13px;font-weight:700;cursor:pointer;transition:all .15s">${lbl}</button>`;
+
+  return `<div class="card">
     <div class="card-hdr"><span class="card-lbl">Novo Campeonato</span></div>
     ${playerBlocked ? `<div class="warn-box">⚠️ Campeonato em andamento. Solicite autorização ao administrador para criar um novo.</div>` : ''}
     ${!playerBlocked && hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
@@ -3369,13 +3382,12 @@ function vCreate() {
     </div>` : ''}
     ${isAdmin() && hasPreset ? `<div class="warn-box">⚠️ Já existe uma convocação em aberto. <a href="#" onclick="nav('home')" style="color:var(--accent)">Ver na Home</a>.</div>` : ''}
     ${playerBlocked ? '' : `
-    <div style="padding:12px 14px 4px">
-      <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Data</label>
-      <input type="date" id="champ-date" value="${today()}"
-        style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;
-               padding:9px 12px;color:var(--text);font-family:inherit;font-size:14px;
-               outline:none;color-scheme:dark">
-    </div>
+    ${hasDrawOption ? `<div style="display:flex;gap:8px;padding:12px 14px 4px">
+      ${modeBtn('draw', '⚖️ Sortear Times', "st.createMode='draw';render()")}
+      ${modeBtn('manual', manualFromDraw ? '🎲 Times do Sorteio' : '✋ Montar Manualmente', "st.createMode='manual';st.createTeamsSource=null;render()")}
+    </div>` : ''}
+
+    ${mode === 'draw' ? drawBody : `
     <p class="hint" style="padding-top:10px">Times participantes (3 a 5):</p>
     <div class="team-grid">
       ${enabledColors().map(([id,t])=>{
@@ -3394,6 +3406,15 @@ function vCreate() {
       </summary>
       <div id="player-assign-inner"></div>
     </details>
+    `}
+
+    <div style="padding:14px 14px 4px;border-top:1px solid var(--border2);margin-top:4px">
+      <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px">Data</label>
+      <input type="date" id="champ-date" value="${today()}"
+        style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;
+               padding:9px 12px;color:var(--text);font-family:inherit;font-size:14px;
+               outline:none;color-scheme:dark">
+    </div>
     ${isAdmin()?`<label style="display:flex;align-items:center;gap:9px;padding:4px 14px 12px;cursor:pointer">
       <input type="checkbox" id="quick-reg" onchange="onQuickChg()"
         style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
@@ -3527,13 +3548,10 @@ function renderDrawCard() {
   const presentCount = active.length - absentSet.size + extraCount;
   const canDraw = presentCount >= st.drawNumTeams;
 
-  return `<div class="card" style="margin-bottom:10px">
-    <details id="draw-details" ${st.drawOpen?'open':''} ontoggle="st.drawOpen=this.open">
-      <summary style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;list-style:none;user-select:none">
-        <span style="font-size:14px;font-weight:700">🎲 Sortear Times</span>
-        <span class="det-arrow" style="font-size:11px;color:var(--text3)">▼</span>
-      </summary>
-      <div style="padding:0 14px 10px;display:flex;gap:0;background:var(--s2);border-radius:20px;width:fit-content;margin:0 14px 10px">
+  // Conteúdo do modo "Sortear" dentro do card único de Novo Campeonato (sem card/details
+  // próprios — quem alterna entre sortear e montar manualmente é o botão em vCreate()).
+  return `
+      <div style="padding:10px 14px 10px;display:flex;gap:0;background:var(--s2);border-radius:20px;width:fit-content">
         ${['balanced','random'].map(mode => {
           const act = st.drawMode === mode;
           const lbl = mode === 'balanced' ? '⚖️ Equilibrado' : '🎲 Aleatório';
@@ -3569,9 +3587,7 @@ function renderDrawCard() {
         </button>
         ${!canDraw?`<p style="font-size:12px;color:var(--text3);margin-top:8px;text-align:center">Mínimo ${st.drawNumTeams} jogadores presentes</p>`:''}
       </div>
-      <div id="draw-result">${resultHtml}</div>
-    </details>
-  </div>`;
+      <div id="draw-result">${resultHtml}</div>`;
 }
 
 function vPlayers() {
