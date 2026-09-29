@@ -602,6 +602,7 @@ const BADGE_CATALOG = [
   { id:'decisivo',       emoji:'💡', label:'Decisivo',             desc:'Artilheiro da final e campeão em 3 campeonatos', check: s => s.myArtFinChamp >= 3,        fieldOnly: true },
   { id:'sempre_decisivo',emoji:'🔑', label:'Sempre Decisivo',      desc:'Artilheiro da final e campeão em 5 campeonatos', check: s => s.myArtFinChamp >= 5,        fieldOnly: true },
   { id:'decide_todas',   emoji:'🦸', label:'Decide Todas',         desc:'Artilheiro da final e campeão em 10 campeonatos',check: s => s.myArtFinChamp >= 10,       fieldOnly: true },
+  { id:'noite_magica',   emoji:'🪄', get label() { const p = magicalDayPeriod(); return `${p.word} Mágic${p.fem?'a':'o'}`; }, desc:'Artilheiro do campeonato, artilheiro da final, campeão e destaque positivo no mesmo campeonato', check: s => s.hasMagicalDay, fieldOnly: true, visible: () => votingUsed('pos') },
   // partidas e records — campo
   { id:'doblete',        emoji:'⚽', label:'Doblete',              desc:'2 gols em uma única partida',                   check: s => s.maxGoalsSingleGame >= 2,   fieldOnly: true, minGoalsMatch:2, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="6.5" cy="12" r="5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.8"/><path d="M6.5 8L8.4 10.2L7.9 12.7L6.5 13.5L5.1 12.7L4.6 10.2Z" fill="#1e293b"/><circle cx="17.5" cy="12" r="5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.8"/><path d="M17.5 8L19.4 10.2L18.9 12.7L17.5 13.5L16.1 12.7L15.6 10.2Z" fill="#1e293b"/></svg>' },
   { id:'hat_trick',      emoji:'🔥', label:'Hat-trick',            desc:'3+ gols em uma única partida',                  check: s => s.hatTricks >= 1,            fieldOnly: true, minGoalsMatch:3 },
@@ -4382,6 +4383,7 @@ function vMeuJogador() {
   const artMap = {};
   const artFinMap = {};
   const artFinChampMap = {};
+  let hasMagicalDay = false;
 
   for (const champ of done) {
     const cg = {}, cfg = {};
@@ -4397,17 +4399,25 @@ function vMeuJogador() {
         }
       }
     }
+    const champWinners = (champ.champion_players||[]).map(cp => cp.name.trim());
+    let wasArtGeral = false, wasArtFinal = false;
     if (Object.keys(cg).length) {
       const mx = Math.max(...Object.values(cg));
       for (const [p,v] of Object.entries(cg)) if (v===mx) artMap[p]=(artMap[p]||0)+1;
+      wasArtGeral = (cg[myName]||0) === mx;
     }
     if (Object.keys(cfg).length) {
       const mx = Math.max(...Object.values(cfg));
-      const champWinners = (champ.champion_players||[]).map(cp => cp.name.trim());
       for (const [p,v] of Object.entries(cfg)) if (v===mx) {
         artFinMap[p]=(artFinMap[p]||0)+1;
         if (champWinners.includes(p)) artFinChampMap[p]=(artFinChampMap[p]||0)+1;
       }
+      wasArtFinal = (cfg[myName]||0) === mx;
+    }
+    // "Dia/Tarde/Noite Mágica": artilheiro do campeonato + da final + campeão + destaque
+    // positivo (Bola Cheia), tudo no MESMO campeonato — ver magicalDayPeriod() pro nome exibido.
+    if (wasArtGeral && wasArtFinal && champWinners.includes(myName) && getChampAwards(champ)?.pos?.winners?.includes(myName)) {
+      hasMagicalDay = true;
     }
   }
 
@@ -4774,7 +4784,7 @@ function vMeuJogador() {
       if (late3) { hasDevendoLuxando = true; break; }
     }
   }
-  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, ...computeAwardStats(myName, doneAll), myName };
+  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), myName };
   const earnedBadges = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && b.check(_bStats));
   const lockedBadges  = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && !b.check(_bStats));
 
@@ -5792,6 +5802,17 @@ function votingCacheKey() {
     .map(c=>c.id+':'+(isVotingClosed(c)?'c':'o')+Object.keys(c.votes||{}).length).join(',');
 }
 
+// Período do dia usado no nome da badge "Dia/Tarde/Noite Mágica" — a liga só tem UM horário
+// de jogo configurado (st.appCfg.matchTime, o mesmo usado na previsão do tempo), não um horário
+// por campeonato, então o rótulo da badge segue esse horário padrão da liga.
+function magicalDayPeriod() {
+  const hhmm = st.appCfg?.matchTime || '16:00';
+  const h = parseInt(hhmm.split(':')[0], 10) || 0;
+  if (h < 12) return { word: 'Dia', fem: false };
+  if (h < 18) return { word: 'Tarde', fem: true };
+  return { word: 'Noite', fem: true };
+}
+
 function getChampAwards(champ) {
   if (!champ?.voting || !isVotingClosed(champ)) return null;
   const roster = votingRoster(champ);
@@ -5867,7 +5888,8 @@ function computePlayerBadgeStats(name) {
   const done=doneAll.filter(c=>c.date>=CUT);
   const doneChron=[...doneAll].reverse();
   const goalsByPlayer={},artMap={},artFinMap={},artFinChampMap={};
-  for(const champ of done){const cg={},cfg={};for(const m of(champ.matches||[])){const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs){goalsByPlayer[g.player]=(goalsByPlayer[g.player]||0)+1;cg[g.player]=(cg[g.player]||0)+1;if(isFin)cfg[g.player]=(cfg[g.player]||0)+1;}}if(Object.keys(cg).length){const mx=Math.max(...Object.values(cg));for(const[p,v]of Object.entries(cg))if(v===mx)artMap[p]=(artMap[p]||0)+1;}if(Object.keys(cfg).length){const mx=Math.max(...Object.values(cfg));const wn=(champ.champion_players||[]).map(cp=>cp.name.trim());for(const[p,v]of Object.entries(cfg))if(v===mx){artFinMap[p]=(artFinMap[p]||0)+1;if(wn.includes(p))artFinChampMap[p]=(artFinChampMap[p]||0)+1;}}}
+  let hasMagicalDay=false;
+  for(const champ of done){const cg={},cfg={};for(const m of(champ.matches||[])){const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs){goalsByPlayer[g.player]=(goalsByPlayer[g.player]||0)+1;cg[g.player]=(cg[g.player]||0)+1;if(isFin)cfg[g.player]=(cfg[g.player]||0)+1;}}const wn=(champ.champion_players||[]).map(cp=>cp.name.trim());let wasArtGeral=false,wasArtFinal=false;if(Object.keys(cg).length){const mx=Math.max(...Object.values(cg));for(const[p,v]of Object.entries(cg))if(v===mx)artMap[p]=(artMap[p]||0)+1;wasArtGeral=(cg[name]||0)===mx;}if(Object.keys(cfg).length){const mx=Math.max(...Object.values(cfg));for(const[p,v]of Object.entries(cfg))if(v===mx){artFinMap[p]=(artFinMap[p]||0)+1;if(wn.includes(p))artFinChampMap[p]=(artFinChampMap[p]||0)+1;}wasArtFinal=(cfg[name]||0)===mx;}if(wasArtGeral&&wasArtFinal&&wn.includes(name)&&getChampAwards(champ)?.pos?.winners?.includes(name))hasMagicalDay=true;}
   const totalGoals=goalsByPlayer[name]||0,myArt=artMap[name]||0,myArtFin=artFinMap[name]||0,myArtFinChamp=artFinChampMap[name]||0;
   const champsPlayed=doneAll.filter(c=>c.date<RCUT||(c.teamRosters&&Object.values(c.teamRosters).some(pl=>pl.includes(name)))).length;
   const champsPlayedCutoff=done.filter(c=>c.teamRosters&&Object.values(c.teamRosters).some(pl=>pl.includes(name))).length;
@@ -5914,7 +5936,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,...computeAwardStats(name,doneAll),myName:name};
+  return {champsPlayed,champsPlayedCutoff,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
 }
 
 function getBadgeCache() {
