@@ -2218,7 +2218,11 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Ainda não há cobrança implementada</div>
-        Por enquanto, isto é só a régua entre o que conta e o que não conta — ainda não existe uma forma de a liga voltar a ser paga (nenhum meio de pagamento foi integrado). A verificação de "campo de gols aparece ou não" também é feita hoje só na tela (cliente); ainda não há uma trava correspondente nas regras de segurança do servidor.
+        Por enquanto, isto é só a régua entre o que conta e o que não conta — ainda não existe uma forma de a liga voltar a ser paga (nenhum meio de pagamento foi integrado).
+      </div>
+      <div class="callout">
+        <div class="callout-label">Trava também no servidor, não só na tela</div>
+        A tela esconde o campo de gols no plano free, mas isso sozinho não impediria alguém de tentar escrever esse dado direto no banco por fora do app. Existe uma função no servidor (<code>enforceFreeModeNoGoals</code>) que roda a cada gravação num campeonato do plano free e apaga qualquer dado de gol que apareça ali, então a régua vale mesmo que a tela seja contornada.
       </div>
     </section>
 

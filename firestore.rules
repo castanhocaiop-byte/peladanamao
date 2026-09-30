@@ -190,5 +190,11 @@ service cloud.firestore {
       allow read, create, delete: if isLeagueAdmin(leagueId);
       allow update: if false;
     }
+
+    // Contadores internos de limite de chamadas (rate limiting) das Cloud Functions.
+    // Só o servidor (Admin SDK, que ignora estas regras) lê e escreve aqui.
+    match /rate_limits/{docId} {
+      allow read, write: if false;
+    }
   }
 }

@@ -1,9 +1,11 @@
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const crypto = require("crypto");
 const admin = require("firebase-admin");
+const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -166,6 +168,35 @@ exports.onChampionshipChange = onDocumentWritten(
         : `Lembrete: ${dateStr ? `campeonato de ${dateStr} — ` : ""}vote ${cats}. Vale até ${deadline}.`;
 
       await sendToTokens(tokens, { title: `🗳️ Votação aberta — ${leagueName}`, body }, { leagueId, view: "eu" }, `votacao-${champId}`);
+    }
+  }
+);
+
+// ── 1b. Impõe o plano free: campeonatos freeMode não podem ter dados de gol ────
+// Rede de segurança do lado do servidor. A tela já esconde o campo de gols para
+// campeonatos freeMode, mas isso sozinho não impede alguém de escrever esses
+// campos direto no Firestore (ex.: pelo DevTools). Roda depois de qualquer
+// escrita em um campeonato freeMode e apaga goals/finalGoals/participants de
+// qualquer partida que os tenha; se nada mudar, não reescreve (evita loop).
+exports.enforceFreeModeNoGoals = onDocumentWritten(
+  "leagues/{leagueId}/championships/{champId}",
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return;
+    const data = after.data();
+    if (!data.freeMode || !Array.isArray(data.matches)) return;
+
+    let changed = false;
+    const cleaned = data.matches.map(m => {
+      const hasGoalData = m.goals?.length || m.finalGoals?.length || m.participants?.length;
+      if (!hasGoalData) return m;
+      changed = true;
+      const { goals, finalGoals, participants, ...rest } = m;
+      return rest;
+    });
+    if (changed) {
+      await after.ref.update({ matches: cleaned });
+      logger.warn(`Removidos dados de gol de campeonato freeMode ${event.params.champId} na liga ${event.params.leagueId}`);
     }
   }
 );
@@ -369,6 +400,25 @@ function requireAuth(request) {
   return request.auth;
 }
 
+// Limite simples de chamadas por usuário numa janela de tempo, para funções
+// mais expostas a abuso (tentativas repetidas de adivinhar token, spam de
+// ações administrativas). Não usa transação — uma pequena imprecisão na
+// contagem é aceitável, o objetivo é só cortar rajadas óbvias.
+async function checkRateLimit(uid, action, maxCalls, windowMs = 60000) {
+  const ref = db.doc(`rate_limits/${uid}_${action}`);
+  const snap = await ref.get();
+  const now = Date.now();
+  const data = snap.exists ? snap.data() : null;
+  if (!data || now - data.windowStart > windowMs) {
+    await ref.set({ count: 1, windowStart: now });
+    return;
+  }
+  if (data.count >= maxCalls) {
+    throw fail("resource-exhausted", "Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.");
+  }
+  await ref.update({ count: FieldValue.increment(1) });
+}
+
 const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 // Identificadores nunca são cortados em silêncio: passou do limite, vira vazio (e é recusado).
 const idText = (v, max) => (typeof v === "string" && v.trim().length <= max ? v.trim() : "");
@@ -402,6 +452,7 @@ const newUserDoc = (auth, now, leagues = {}) => ({
 // Entrar numa liga com um convite. Só o servidor lê e consome o convite.
 exports.joinLeague = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "joinLeague", 10);
   const liga = leagueIdOf(request.data);
   const token = idText(request.data?.token, 100);
   if (!TOKEN_RE.test(token)) throw fail("invalid-argument", "Link de convite inválido.");
@@ -473,6 +524,7 @@ exports.leaveLeague = onCall(CALLABLE, async request => {
 // vincular a um jogador e responder pedidos de vínculo.
 exports.manageMember = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "manageMember", 30);
   const liga = leagueIdOf(request.data);
   const action = text(request.data?.action, 20);
   const targetUid = idText(request.data?.uid, 128);
@@ -924,3 +976,27 @@ exports.anonymizeMyName = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
   logger.info("anonymizeMyName concluída", { liga });
   return { ok: true, newKey, newName };
 });
+
+// ── Backup agendado do Firestore ────────────────────────────────────────────
+// Roda todo dia de madrugada e exporta o banco inteiro para o bucket padrão do
+// projeto, em uma pasta separada por data. Exige que a service account das
+// Cloud Functions tenha o papel "Cloud Datastore Import Export Admin" no
+// projeto (IAM do Google Cloud) — sem isso, o export falha com permissão negada.
+exports.scheduledFirestoreBackup = onSchedule(
+  { schedule: "0 5 * * *", timeZone: "America/Sao_Paulo", region: "us-east1" },
+  async () => {
+    const client = new firestoreAdminV1.FirestoreAdminClient();
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID;
+    const databaseName = client.databasePath(projectId, "(default)");
+    const bucketName = admin.storage().bucket().name;
+    const dateFolder = new Date().toISOString().slice(0, 10);
+    const outputUriPrefix = `gs://${bucketName}/firestore-backups/${dateFolder}`;
+
+    const [operation] = await client.exportDocuments({
+      name: databaseName,
+      outputUriPrefix,
+      collectionIds: [], // vazio = todas as coleções, de todas as ligas
+    });
+    logger.info(`Backup do Firestore iniciado em ${outputUriPrefix}`, { operationName: operation.name });
+  }
+);
