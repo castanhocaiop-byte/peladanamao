@@ -376,6 +376,8 @@ details[open] .det-arrow { transform: rotate(180deg); }
 .loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 60px; color: var(--text2); }
 .spinner { width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.pnm-highlight { animation: pnmPulse 1.1s ease-out 2; border-radius: 10px; }
+@keyframes pnmPulse { 0% { box-shadow: 0 0 0 0 var(--accent); } 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
@@ -4337,14 +4339,14 @@ function checklistCard() {
 
   const items = isAdm ? [
     { label:'Configure o horário e local dos jogos', done: !!(st.appCfg?.matchTime && st.appCfg?.weatherLat != null),
-      action:`st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
+      action:`st._hlTarget='weather-config';st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
     { label:'Convide os jogadores da sua pelada', done: (st.players||[]).length > 1,
-      action:`st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
+      action:`st._hlTarget='invite-btn';st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
     { label:'Crie o primeiro campeonato', done: (st.champs||[]).length > 0,
       action:`nav('create')` },
   ] : [
     { label:'Confirme presença na próxima convocação', done: (st.champs||[]).some(c=>c.attendances && Object.prototype.hasOwnProperty.call(c.attendances, st.userDoc?.playerKey)),
-      action:`nav('home')` },
+      action:`if(presetChamp()){st._hlTarget='attendance-card';render();}else{toast('Nenhuma convocação aberta no momento.');}` },
     { label:'Confira o elenco da sua liga', done: seen('players'),
       action:`try{localStorage.setItem('${lsBase}_players','1')}catch(_){};nav('players')` },
     { label:'Veja o ranking da liga', done: seen('ranking'),
@@ -4949,7 +4951,7 @@ function vMeuJogador() {
       const _pk = playerKey(myName);
       const _ans = (_preset.attendances||{})[_pk];
       const _btnBase = 'padding:8px 18px;border-radius:20px;border:1.5px solid;font-size:13px;font-weight:700;cursor:pointer';
-      if (_ans === true) return `<div style="background:#00d67f18;border:1px solid #00d67f40;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      if (_ans === true) return `<div id="attendance-card" style="background:#00d67f18;border:1px solid #00d67f40;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
         <span style="font-size:16px">✅</span>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700;color:#00d67f">Presença confirmada</div>
@@ -4957,7 +4959,7 @@ function vMeuJogador() {
         </div>
         <button onclick="confirmAttendance(false)" style="${_btnBase};border-color:var(--border);background:none;color:var(--text3)">✗ Não vou</button>
       </div>`;
-      if (_ans === false) return `<div style="background:#ff4d4f18;border:1px solid #ff4d4f40;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      if (_ans === false) return `<div id="attendance-card" style="background:#ff4d4f18;border:1px solid #ff4d4f40;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
         <span style="font-size:16px">❌</span>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700;color:#ff4d4f">Presença não confirmada</div>
@@ -4965,7 +4967,7 @@ function vMeuJogador() {
         </div>
         <button onclick="confirmAttendance(true)" style="${_btnBase};border-color:var(--accent);background:none;color:var(--accent)">✓ Vou</button>
       </div>`;
-      return `<div style="background:var(--s2);border:1.5px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      return `<div id="attendance-card" style="background:var(--s2);border:1.5px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:4px">📅 Campeonato em ${fdt(_preset.date)}</div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Você vai participar?</div>
         <div style="display:flex;gap:8px">
@@ -5311,7 +5313,7 @@ function mAdminPanel() {
           ${rejected.map(u=>`<div style="font-size:12px;color:var(--text3);padding:4px 0">${esc(u.email||u.uid)}</div>`).join('')}
         ` : ''}
         <div class="sec-lbl">Ações</div>
-        <button onclick="generateInviteLink()" class="btn btn-ghost" style="margin-top:0;text-align:left;font-size:14px">
+        <button id="invite-btn" onclick="generateInviteLink()" class="btn btn-ghost" style="margin-top:0;text-align:left;font-size:14px">
           🔗 Gerar link de convite
         </button>
         <button onclick="setCreateAuthorized(!st.createAuthorized)" class="btn" style="margin-top:8px;text-align:left;font-size:14px;
@@ -5395,7 +5397,7 @@ function mAdminPanel() {
             </div>
             <div style="font-size:11px;color:var(--text3)">Encerra pelo tempo ou pelos gols, o que ocorrer primeiro. 0 gols = sem limite.</div>
           </div>
-          <div style="margin-top:14px">
+          <div id="weather-config" style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">🌤 Previsão do tempo</div>
             <div style="margin-bottom:10px">
               <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Horário padrão dos jogos</div>
@@ -5534,6 +5536,18 @@ function render() {
   if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
+  if(st._hlTarget){
+    const hlId=st._hlTarget;
+    requestAnimationFrame(()=>{
+      const el=document.getElementById(hlId);
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.classList.add('pnm-highlight');
+        setTimeout(()=>el.classList.remove('pnm-highlight'),2400);
+        st._hlTarget=null;
+      }
+    });
+  }
   if(st.view==='stats') requestAnimationFrame(()=>{drawEvoChart();drawArtChart();drawArtFinalChart();drawGoalsChart();drawGoalsFinalChart();});
   if(st.view==='meuJogador') requestAnimationFrame(()=>{
     if(st.mjTitlesExpanded) drawMjEvoChart();
