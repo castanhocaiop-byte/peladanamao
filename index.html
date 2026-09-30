@@ -4338,7 +4338,9 @@ function checklistCard() {
   try { if (localStorage.getItem(`${lsBase}_dismissed`)) return ''; } catch(_) {}
 
   const items = isAdm ? [
-    { label:'Configure o horário e local dos jogos', done: !!(st.appCfg?.matchTime && st.appCfg?.weatherLat != null),
+    { label:'Configure o horário dos jogos', done: !!st.appCfg?.matchTime,
+      action:`st._hlTarget='weather-config';st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
+    { label:'Configure o local dos jogos', done: st.appCfg?.weatherLat != null,
       action:`st._hlTarget='weather-config';st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
     { label:'Convide os jogadores da sua pelada', done: (st.players||[]).length > 1,
       action:`st._hlTarget='invite-btn';st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()` },
