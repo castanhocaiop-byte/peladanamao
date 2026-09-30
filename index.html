@@ -66,7 +66,7 @@ header {
   display: flex; align-items: center;
   padding: 0 16px; gap: 10px;
 }
-.hdr-logo { font-size: 22px; }
+.hdr-logo { height: 30px; width: auto; flex-shrink: 0; }
 .hdr-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
 .hdr-sub { font-size: 11px; color: var(--text3); }
 
@@ -4285,7 +4285,7 @@ function vSelectLeague() {
   const roleLabel = r => r === 'admin' ? 'Admin' : r === 'player' ? 'Jogador' : 'Pendente';
   return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:var(--bg)">
     <div style="text-align:center;max-width:340px;width:100%">
-      <div style="font-size:48px;margin-bottom:16px">⚽</div>
+      <img src="/logo.webp" alt="Pelada na Mão" style="width:130px;max-width:50vw;height:auto;margin-bottom:16px">
       <div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:6px">Escolha a liga</div>
       <div style="font-size:13px;color:var(--text3);margin-bottom:28px">Você faz parte de ${leagues.length} liga${leagues.length!==1?'s':''}</div>
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -5452,12 +5452,12 @@ function render() {
 
   if (!st.authUser) {
     if (document.getElementById('main')) app.innerHTML='';
-    app.innerHTML = st.ready ? vLogin() : `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><div style="font-size:52px">⚽</div></div>`;
+    app.innerHTML = st.ready ? vLogin() : `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><img src="/logo.webp" alt="Pelada na Mão" style="width:120px;max-width:50vw;height:auto"></div>`;
     return;
   }
   if (!st.leagueId) {
     if (document.getElementById('main')) app.innerHTML='';
-    if (!st.ready) { app.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><div style="font-size:52px">⚽</div></div>`; return; }
+    if (!st.ready) { app.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><img src="/logo.webp" alt="Pelada na Mão" style="width:120px;max-width:50vw;height:auto"></div>`; return; }
     app.innerHTML = (st.availableLeagues.length >= 1 && !st._obStep) ? vSelectLeague() : vOnboarding();
     return;
   }
@@ -5579,7 +5579,7 @@ function buildShell() {
   const leagueName = st.availableLeagues.find(l=>l.id===st.leagueId)?.name || st.leagueId || 'Pelada na Mão';
   document.getElementById('app').innerHTML=`
     <header>
-      <span class="hdr-logo">⚽</span>
+      <img class="hdr-logo" src="/logo.webp" alt="Pelada na Mão">
       <div style="flex:1;min-width:0">
         <div class="hdr-title" style="display:flex;align-items:center;gap:6px">
           <span id="hdr-league-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(leagueName)}</span>
