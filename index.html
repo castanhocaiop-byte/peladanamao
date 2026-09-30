@@ -784,6 +784,11 @@ function col(name) { return DB.collection(`leagues/${st.leagueId}/${name}`); }
 function ldoc(path) { return DB.doc(`leagues/${st.leagueId}/${path}`); }
 
 function isAdmin() { return st.userRole === 'admin'; }
+// Liga "free" = trial de 30 dias já vencido. Sem trialEndsAt (ligas antigas) conta como não-free.
+function isLeagueFree() {
+  const trialEndsAt = st.availableLeagues.find(l => l.id === st.leagueId)?.trialEndsAt;
+  return !!trialEndsAt && new Date(trialEndsAt).getTime() < Date.now();
+}
 function isBadgeImpossible(b) {
   if (!b.minGoalsMatch) return false;
   const lim = st.appCfg?.matchGolsLimite || 0;
@@ -991,7 +996,7 @@ function initFirebase() {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -999,6 +1004,7 @@ function initFirebase() {
               id: leagueKeys[i],
               name: d.exists ? d.data().name : leagueKeys[i],
               role: leagues[leagueKeys[i]]?.role,
+              trialEndsAt: d.exists ? (d.data().trialEndsAt || null) : null,
             }));
             st.leagueId = null;
             st.userRole = null;
@@ -1609,6 +1615,7 @@ async function createChampionship(teams, date=today()) {
       date, teams, format: teams.length, status:'active',
       matches: genMatches(teams, teams.length),
       champion:null, champion_players:null, regularEnded:false,
+      freeMode: isLeagueFree(),
       ...(rosters ? {teamRosters: rosters} : {}),
     });
     st.createPresetTeams = []; st.createRosters = {}; st.playerTeamMap = {};
@@ -1624,7 +1631,7 @@ async function createPresetChamp(date) {
   const existing = presetChamp();
   if (existing) { toast('Já existe uma convocação em aberto.'); return; }
   const id = uid();
-  await ldoc(`championships/${id}`).set({ date, status: 'preset', attendances: {} });
+  await ldoc(`championships/${id}`).set({ date, status: 'preset', attendances: {}, freeMode: isLeagueFree() });
   st.view = 'home'; render();
   toast('Convocação criada!', 'ok');
 }
@@ -1971,11 +1978,10 @@ function _vWeatherRow(date) {
 
 // Guarda o nome da liga (para o cabeçalho) quando a pessoa entra nela sem passar pelo login.
 async function rememberLeague(id, role, name) {
-  if (!name) {
-    const doc = await DB.doc(`leagues/${id}`).get().catch(() => null);
-    name = doc?.exists ? doc.data().name : id;
-  }
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role }];
+  const doc = await DB.doc(`leagues/${id}`).get().catch(() => null);
+  if (!name) name = doc?.exists ? doc.data().name : id;
+  const trialEndsAt = doc?.exists ? (doc.data().trialEndsAt || null) : null;
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -2039,6 +2045,7 @@ async function createHistoricalChamp(teams, date, champTeam) {
     await ldoc(`championships/${id}`).set({
       date, teams, format:teams.length, status:'active',
       matches:[], champion:null, champion_players:null, regularEnded:true,
+      freeMode: isLeagueFree(),
     });
     render();
   } catch(e) {
@@ -2202,7 +2209,9 @@ async function saveChampion() {
     }
     await ldoc(`championships/${champId}`).update(upd);
 
-    for (const p of players) {
+    const champDocFresh = await ldoc(`championships/${champId}`).get();
+    const isFreeModeChamp = !!champDocFresh.data()?.freeMode;
+    for (const p of (isFreeModeChamp ? [] : players)) {
       const key = playerKey(p.name.trim());
       if (!key) continue;
       const pref = ldoc(`player_titles/${key}`);
@@ -3915,7 +3924,9 @@ function mScore() {
         </div>
       </div>
       ${!m.editing ? timerRow(m.id) : ''}
-      <div id="goals-section" style="max-height:55vh;overflow-y:auto">${renderGoalPickers()}</div>
+      ${isLeagueFree()
+        ? `<div style="padding:12px 14px;margin-bottom:10px;background:var(--s2);border-radius:10px;font-size:12px;color:var(--text3);line-height:1.5">⚽ Registro de quem fez os gols é um recurso do plano pago. Neste plano, só o placar do jogo é salvo.</div>`
+        : `<div id="goals-section" style="max-height:55vh;overflow-y:auto">${renderGoalPickers()}</div>`}
       <button class="btn btn-primary" onclick="confirmScore()">${m.editing?'Salvar Edição':'Confirmar Resultado'}</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     </div>
@@ -4396,7 +4407,7 @@ function vMeuJogador() {
   const initials = myName.trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 
   const CUTOFF = '2026-09-08';
-  const doneAll = st.champs.filter(c => c.status === 'completed').sort((a,b) => b.date.localeCompare(a.date));
+  const doneAll = st.champs.filter(c => c.status === 'completed' && !c.freeMode).sort((a,b) => b.date.localeCompare(a.date));
   const last = doneAll[0];
   const done = doneAll.filter(c => c.date >= CUTOFF);
 
@@ -5144,7 +5155,7 @@ function vMeuJogador() {
 
 function titlesBeforeDate(playerName, date) {
   return (st.champs||[])
-    .filter(d => d.status==='completed' && d.champion_players?.length && d.date < date)
+    .filter(d => d.status==='completed' && !d.freeMode && d.champion_players?.length && d.date < date)
     .reduce((t, d) => { const cp = (d.champion_players||[]).find(p=>p.name===playerName); return t + (cp?(cp.weight||1):0); }, 0);
 }
 
@@ -5675,12 +5686,12 @@ function fmtMonth(ym) {
   return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2);
 }
 function availableMonths() {
-  return [...new Set(st.champs.filter(c=>c.status==='completed').map(c=>c.date.slice(0,7)))]
+  return [...new Set(st.champs.filter(c=>c.status==='completed'&&!c.freeMode).map(c=>c.date.slice(0,7)))]
     .sort().reverse();
 }
 function filteredDoneChamps() {
   const f = st.rankFilter || {type:'all'};
-  const all = st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  const all = st.champs.filter(c=>c.status==='completed'&&!c.freeMode).sort((a,b)=>a.date.localeCompare(b.date));
   if (f.type==='month' && f.val) return all.filter(c=>c.date.startsWith(f.val));
   if (f.type==='last' && f.val) return all.slice(-f.val);
   return all;
@@ -5688,7 +5699,7 @@ function filteredDoneChamps() {
 
 function computeFilteredRanks(filter) {
   if (!filter||filter.type==='all') return st.ranks;
-  const done=st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode).sort((a,b)=>a.date.localeCompare(b.date));
   let sub;
   if (filter.type==='month') sub=done.filter(c=>c.date.startsWith(filter.val));
   else if (filter.type==='last') sub=done.slice(-filter.val);
@@ -5714,7 +5725,7 @@ function setRankFilter(type,val) {
 
 /* ── stats computations ─────────────────────────────────────── */
 function computeStreaks(eligibleNames) {
-  const done = st.champs.filter(c=>c.status==='completed')
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode)
     .sort((a,b)=>a.date.localeCompare(b.date));
   const all = {};
   for (const champ of done)
@@ -5740,7 +5751,7 @@ function computeStreaks(eligibleNames) {
 
 function computeDroughts(eligibleNames) {
   const ROSTER_CUTOFF = '2026-09-02';
-  const done = st.champs.filter(c=>c.status==='completed')
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode)
     .sort((a,b)=>a.date.localeCompare(b.date));
   const inactiveNames = new Set(st.players.filter(p=>p.active===false).map(p=>p.name.trim().toLowerCase()));
   const names = new Set();
@@ -5764,7 +5775,7 @@ function computeDroughts(eligibleNames) {
 }
 
 function computeActiveStreaks(eligibleNames) {
-  const done = st.champs.filter(c=>c.status==='completed')
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode)
     .sort((a,b)=>a.date.localeCompare(b.date));
   const all = {};
   for (const champ of done)
@@ -5789,7 +5800,7 @@ function computeActiveStreaks(eligibleNames) {
 
 function computeActiveDroughts(eligibleNames) {
   const ROSTER_CUTOFF = '2026-09-02';
-  const done = st.champs.filter(c=>c.status==='completed')
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode)
     .sort((a,b)=>a.date.localeCompare(b.date));
   const inactiveNames = new Set(st.players.filter(p=>p.active===false).map(p=>p.name.trim().toLowerCase()));
   const names = new Set();
@@ -5895,7 +5906,7 @@ function getChampAwards(champ) {
 
 function computeAwardTotals() {
   const pos = {}, neg = {};
-  for (const c of (st.champs||[]).filter(c=>c.status==='completed')) {
+  for (const c of (st.champs||[]).filter(c=>c.status==='completed'&&!c.freeMode)) {
     const aw = getChampAwards(c);
     if (!aw) continue;
     (aw.pos?.winners||[]).forEach(n=>{ pos[n]=(pos[n]||0)+1; });
@@ -5942,7 +5953,7 @@ function computePlayerBadgeStats(name) {
   const CUT='2026-09-08', RCUT='2026-09-02';
   const playerObj=(st.players||[]).find(p=>p.name===name);
   const isGK=!!playerObj?.goleiro;
-  const doneAll=(st.champs||[]).filter(c=>c.status==='completed').sort((a,b)=>b.date.localeCompare(a.date));
+  const doneAll=(st.champs||[]).filter(c=>c.status==='completed'&&!c.freeMode).sort((a,b)=>b.date.localeCompare(a.date));
   const done=doneAll.filter(c=>c.date>=CUT);
   const doneChron=[...doneAll].reverse();
   const goalsByPlayer={},artMap={},artFinMap={},artFinChampMap={};
@@ -6050,7 +6061,7 @@ function getPlayerRarestBadge(name) {
 
 function computeVices(eligibleNames) {
   const viceMap = {};
-  for (const c of st.champs.filter(c=>c.status==='completed')) {
+  for (const c of st.champs.filter(c=>c.status==='completed'&&!c.freeMode)) {
     if (!c.teamRosters) continue;
     const fin = (c.matches||[]).find(m=>m.phase==='final'&&m.played);
     if (!fin || fin.hs === fin.as) continue;
@@ -6344,9 +6355,10 @@ function gerarResumoChamp(champId) {
   const fmtT = t => t%1===0 ? `${t} título${t!==1?'s':''}` : `${Math.floor(t)}½ títulos`;
   const medals = ['🥇','🥈','🥉','4°','5°','6°','7°'];
 
-  // Ranking changes: champion players who moved up
+  // Ranking changes: champion players who moved up (não se aplica a campeonato do plano free,
+  // que não grava título em player_titles — r.titles já não inclui este campeonato)
   const gainers = [];
-  for (const cp of (champ.champion_players||[])) {
+  for (const cp of (champ.freeMode ? [] : (champ.champion_players||[]))) {
     const name = cp.name.trim();
     const r = (st.ranks||[]).find(x=>x.name===name);
     if (!r) continue;
@@ -6428,7 +6440,7 @@ function openWhatsAppSummary(champId) {
 
 function computeFinalsGoalTally(doneChamps) {
   const tally = {}, finalsScored = {};
-  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed'))) {
+  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed' && !c.freeMode))) {
     const fm = (champ.matches || []).find(m => m.phase === 'final' && m.played);
     if (!fm) continue;
     const goals = (fm.finalGoals && fm.finalGoals.length ? fm.finalGoals : fm.goals) || [];
@@ -6445,7 +6457,7 @@ function computeFinalsGoalTally(doneChamps) {
 
 function computeFinalsArtilheiroRanking(doneChamps) {
   const artTitles = {};
-  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed'))) {
+  for (const champ of (doneChamps || st.champs.filter(c => c.status === 'completed' && !c.freeMode))) {
     const fm = (champ.matches || []).find(m => m.phase === 'final' && m.played);
     if (!fm) continue;
     const goals = (fm.finalGoals && fm.finalGoals.length ? fm.finalGoals : fm.goals) || [];
@@ -6460,7 +6472,7 @@ function computeFinalsArtilheiroRanking(doneChamps) {
 
 function computeGoalDroughts() {
   const cutoff = '2026-09-08';
-  const done = st.champs.filter(c=>c.status==='completed' && c.date>=cutoff)
+  const done = st.champs.filter(c=>c.status==='completed' && !c.freeMode && c.date>=cutoff)
     .sort((a,b)=>b.date.localeCompare(a.date));
   if (!done.length) return [];
   const {tally} = computeGoalsRanking();
@@ -6483,7 +6495,7 @@ function computeGoalDroughts() {
 
 function computeSingleChampGoalRecords() {
   const records = [];
-  for (const champ of st.champs.filter(c=>c.status==='completed')) {
+  for (const champ of st.champs.filter(c=>c.status==='completed'&&!c.freeMode)) {
     const tally = champGoalTally(champ);
     for (const [name, goals] of Object.entries(tally)) {
       records.push({name, goals, date: champ.date});
@@ -6494,7 +6506,7 @@ function computeSingleChampGoalRecords() {
 
 function computeGoalsRanking(doneChamps) {
   const tally={}, artTitles={};
-  for (const champ of (doneChamps || st.champs.filter(c=>c.status==='completed'))) {
+  for (const champ of (doneChamps || st.champs.filter(c=>c.status==='completed'&&!c.freeMode))) {
     const ct=champGoalTally(champ);
     for (const [n,g] of Object.entries(ct)) tally[n]=(tally[n]||0)+g;
     const maxG=Object.values(ct).reduce((a,b)=>Math.max(a,b),0);
@@ -6506,7 +6518,7 @@ function computeGoalsRanking(doneChamps) {
 function computeGoalsPerTitle() {
   const cutoff='2026-09-02';
   const data={};
-  for (const champ of st.champs.filter(c=>c.status==='completed'&&c.date>cutoff)) {
+  for (const champ of st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>cutoff)) {
     const ct=champGoalTally(champ);
     for (const p of (champ.champion_players||[])) {
       const n=p.name.trim(); if(!n) continue;
@@ -6523,7 +6535,7 @@ function computeGoalsPerTitle() {
 
 function computeGoalAverages(eligibleNames) {
   const CUTOFF = '2026-09-08';
-  const done = st.champs.filter(c=>c.status==='completed'&&c.date>=CUTOFF);
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>=CUTOFF);
   const data = {};
   for (const champ of done) {
     const allM = champ.matches||[];
@@ -6683,7 +6695,7 @@ function intersectSets(a,b) {
 
 function computePenaltyMisses() {
   const counts = {};
-  for (const champ of (st.champs||[]).filter(c=>c.status==='completed')) {
+  for (const champ of (st.champs||[]).filter(c=>c.status==='completed'&&!c.freeMode)) {
     const fin = (champ.matches||[]).find(m => m.phase==='final' && m.played && m.penaltyWinner && m.penaltyMissedBy?.length);
     if (!fin) continue;
     for (const player of fin.penaltyMissedBy) {
@@ -6951,7 +6963,7 @@ function vStats() {
   </div>`:''}
 
   ${(()=>{
-    const doneR = (st.champs||[]).filter(c=>c.status==='completed'&&c.teamRosters&&Object.keys(c.teamRosters).length);
+    const doneR = (st.champs||[]).filter(c=>c.status==='completed'&&!c.freeMode&&c.teamRosters&&Object.keys(c.teamRosters).length);
     if (!doneR.length) return '';
     const starsM = {};
     (st.players||[]).forEach(p=>starsM[p.name]=p.stars||0);
@@ -7064,7 +7076,7 @@ function vStats() {
 function drawEvoChart() {
   const canvas = document.getElementById('evo-chart');
   if (!canvas) return;
-  const done = st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  const done = st.champs.filter(c=>c.status==='completed'&&!c.freeMode).sort((a,b)=>a.date.localeCompare(b.date));
   if (!done.length) return;
 
   const COLORS = ['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
@@ -7187,7 +7199,7 @@ function drawMjEvoChart() {
   const top = sorted.slice(s,e+1).map(r=>r.n);
   if (!top.length) return;
   const COLORS = ['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
-  const doneChron = st.champs.filter(c=>c.status==='completed').sort((a,b)=>a.date.localeCompare(b.date));
+  const doneChron = st.champs.filter(c=>c.status==='completed'&&!c.freeMode).sort((a,b)=>a.date.localeCompare(b.date));
   if (!doneChron.length) return;
   const cum = Object.fromEntries(top.map(n=>[n,0]));
   const pts = doneChron.map(champ=>{
@@ -7282,7 +7294,7 @@ function getMjRankWindow(map, myName) {
 function drawMjGoalsChart() {
   const myName=getMjPlayerName(); if(!myName) return;
   const CUTOFF='2026-09-08';
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
   const map={};
   for(const champ of done){for(const m of(champ.matches||[])){const isFinal=m.phase==='final';const gs=(isFinal&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs)map[g.player]=(map[g.player]||0)+1;}}
   const top=getMjRankWindow(map,myName); if(!top.length) return;
@@ -7293,7 +7305,7 @@ function drawMjGoalsChart() {
 function drawMjFinalGoalsChart() {
   const myName=getMjPlayerName(); if(!myName) return;
   const CUTOFF='2026-09-08';
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
   const map={};
   for(const champ of done){for(const m of(champ.matches||[])){if(m.phase!=='final')continue;const gs=m.finalGoals?.length?m.finalGoals:(m.goals||[]);for(const g of gs)map[g.player]=(map[g.player]||0)+1;}}
   const top=getMjRankWindow(map,myName); if(!top.length) return;
@@ -7304,7 +7316,7 @@ function drawMjFinalGoalsChart() {
 function drawMjArtChart() {
   const myName=getMjPlayerName(); if(!myName) return;
   const CUTOFF='2026-09-08';
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
   const map={};
   for(const champ of done){const cg={};for(const m of(champ.matches||[])){const isFinal=m.phase==='final';const gs=(isFinal&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs)cg[g.player]=(cg[g.player]||0)+1;}if(Object.keys(cg).length){const mx=Math.max(...Object.values(cg));for(const[p,v]of Object.entries(cg))if(v===mx)map[p]=(map[p]||0)+1;}}
   const top=getMjRankWindow(map,myName); if(!top.length) return;
@@ -7315,7 +7327,7 @@ function drawMjArtChart() {
 function drawMjArtFinChart() {
   const myName=getMjPlayerName(); if(!myName) return;
   const CUTOFF='2026-09-08';
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>=CUTOFF).sort((a,b)=>a.date.localeCompare(b.date));
   const map={};
   for(const champ of done){const cfg={};for(const m of(champ.matches||[])){if(m.phase!=='final')continue;const gs=m.finalGoals?.length?m.finalGoals:(m.goals||[]);for(const g of gs)cfg[g.player]=(cfg[g.player]||0)+1;}if(Object.keys(cfg).length){const mx=Math.max(...Object.values(cfg));for(const[p,v]of Object.entries(cfg))if(v===mx)map[p]=(map[p]||0)+1;}}
   const top=getMjRankWindow(map,myName); if(!top.length) return;
@@ -7408,7 +7420,7 @@ function _buildChartPts(done, top, accumFn) {
 }
 
 function drawArtChart() {
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
   if (!done.length) return;
   const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
   const {artTitles}=computeGoalsRanking();
@@ -7423,7 +7435,7 @@ function drawArtChart() {
 }
 
 function drawArtFinalChart() {
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
   if (!done.length) return;
   const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
   const at=computeFinalsArtilheiroRanking();
@@ -7442,7 +7454,7 @@ function drawArtFinalChart() {
 }
 
 function drawGoalsChart() {
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
   if (!done.length) return;
   const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
   const {tally}=computeGoalsRanking();
@@ -7456,7 +7468,7 @@ function drawGoalsChart() {
 }
 
 function drawGoalsFinalChart() {
-  const done=st.champs.filter(c=>c.status==='completed'&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
+  const done=st.champs.filter(c=>c.status==='completed'&&!c.freeMode&&c.date>='2026-09-08').sort((a,b)=>a.date.localeCompare(b.date));
   if (!done.length) return;
   const COLORS=['#4DB8FF','#00d67f','#F5C842','#FF5C5C','#FF8A3C','#9EA7B3'];
   const {tally}=computeFinalsGoalTally();

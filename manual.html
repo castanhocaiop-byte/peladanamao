@@ -459,6 +459,7 @@ p strong {
       <li><a href="#anonimizar"><span class="num">22</span> Anonimizar o Nome</a></li>
       <li><a href="#politica"><span class="num">23</span> Política de Privacidade</a></li>
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
+      <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
     </ul>
   </nav>
 
@@ -490,6 +491,7 @@ p strong {
       <li><a href="#anonimizar"><span class="num">22</span> Anonimizar o Nome</a></li>
       <li><a href="#politica"><span class="num">23</span> Política de Privacidade</a></li>
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
+      <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
     </ul>
   </nav>
 
@@ -2183,6 +2185,40 @@ p strong {
       <div class="callout warn">
         <div class="callout-label warn">Preferência fica no aparelho</div>
         A marcação de "já vi o elenco/ranking" e o fechar manual do card ficam guardados apenas no navegador/aparelho usado no momento (não no servidor). Trocando de celular ou navegador, ou limpando os dados do site, o card pode voltar a aparecer do zero.
+      </div>
+    </section>
+
+    <!-- 25. Trial e Plano Free -->
+    <section class="section" id="planogratuito">
+      <h2 class="section-title"><span class="sn">25</span> Trial e Plano Free</h2>
+      <p>Toda liga nova começa com <strong>30 dias de teste grátis</strong>, com tudo liberado. Quando esse prazo termina, a liga não é bloqueada — ela passa a funcionar no <strong>plano free</strong>, com uma limitação específica.</p>
+
+      <h3>O que continua funcionando no plano free</h3>
+      <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
+        <li style="margin-bottom:4px">Criar novos campeonatos, com ou sem convocação prévia</li>
+        <li style="margin-bottom:4px">Sortear times em qualquer modalidade (equilibrado, aleatório ou manual)</li>
+        <li style="margin-bottom:4px">Registrar o placar das partidas, inclusive da final</li>
+        <li style="margin-bottom:4px">Ver todo o histórico, conquistas e ranking de antes do trial acabar — nada some</li>
+      </ul>
+
+      <h3>O que fica pausado</h3>
+      <p>Ao registrar o placar de uma partida de um campeonato criado no plano free, o app não pergunta mais <strong>quem fez os gols</strong> — só o placar geral é salvo. Como consequência, esse campeonato específico:</p>
+      <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
+        <li style="margin-bottom:4px">Não conta para nenhum título, mesmo tendo um time campeão de verdade — ele não entra no ranking geral nem nos gráficos de evolução</li>
+        <li style="margin-bottom:4px">Não desbloqueia nenhuma badge (artilheiro, sequências, campeão, votação, etc.)</li>
+        <li style="margin-bottom:4px">Continua aparecendo normalmente no histórico, com o placar de cada jogo</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-label">Por que essa é a régua, e não travar tudo</div>
+        Quem sente o valor do app é o grupo inteiro de amigos, não só o admin — travar toda a liga de uma vez tende a fazer o grupo simplesmente abandonar o app, em vez de assinar. Deixando o essencial (organizar o jogo, convocar, sortear, saber quem ganhou) sempre disponível, só a camada de estatísticas mais rica fica atrás do plano pago.
+      </div>
+
+      <h3>Como o sistema identifica um campeonato do plano free</h3>
+      <p>Cada campeonato nasce com uma marcação (<code>freeMode</code>) definida no momento em que é criado, conforme o trial da liga já estava vencido ou não naquele instante — essa marcação não muda depois, mesmo que a liga volte a ser paga futuramente. Um campeonato criado durante o trial mantém seus títulos e badges normalmente, ainda que só seja concluído depois do trial acabar.</p>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Ainda não há cobrança implementada</div>
+        Por enquanto, isto é só a régua entre o que conta e o que não conta — ainda não existe uma forma de a liga voltar a ser paga (nenhum meio de pagamento foi integrado). A verificação de "campo de gols aparece ou não" também é feita hoje só na tela (cliente); ainda não há uma trava correspondente nas regras de segurança do servidor.
       </div>
     </section>
 
