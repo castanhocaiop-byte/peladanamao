@@ -1,10 +1,5 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manual — Aceoma Série B</title>
-<meta name="theme-color" content="#0d1117">
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Manual Pelada na Mão</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap">
@@ -32,7 +27,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg:        #0d1117;
     --surface:   #161b22;
     --surface2:  #1c2333;
@@ -51,6 +46,26 @@
     --warn-bg:   #f0883e18;
     --tag-bg:    #ffffff0d;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #1c2333;
+  --border:    #30363d;
+  --border2:   #21262d;
+  --text:      #e6edf3;
+  --text2:     #8b949e;
+  --text3:     #6e7681;
+  --accent:    #00d67f;
+  --accent-bg: #00d67f18;
+  --gold:      #f0a500;
+  --gold-bg:   #f0a50018;
+  --blue:      #4DB8FF;
+  --blue-bg:   #4DB8FF10;
+  --warn:      #f0883e;
+  --warn-bg:   #f0883e18;
+  --tag-bg:    #ffffff0d;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -96,32 +111,7 @@ body {
   border-bottom: 2px solid var(--border);
   padding-bottom: 24px;
   margin-bottom: 32px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
-
-.header-text { flex: 1; }
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text2);
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.1s, color 0.1s;
-}
-.back-btn:hover { background: var(--surface2); color: var(--text); }
 
 .eyebrow {
   font-size: 11px;
@@ -141,7 +131,9 @@ body {
   text-wrap: balance;
 }
 
-.doc-title span { color: var(--accent); }
+.doc-title span {
+  color: var(--accent);
+}
 
 .doc-lead {
   font-size: 14px;
@@ -161,8 +153,13 @@ body {
   padding: 0 8px 10px;
 }
 
-.toc-list { list-style: none; }
-.toc-list li + li { margin-top: 1px; }
+.toc-list {
+  list-style: none;
+}
+
+.toc-list li + li {
+  margin-top: 1px;
+}
 
 .toc-list a {
   display: block;
@@ -175,9 +172,20 @@ body {
   transition: background 0.1s, color 0.1s;
   line-height: 1.35;
 }
-.toc-list a:hover { background: var(--surface2); color: var(--text); }
-.toc-list a .num { font-size: 10px; color: var(--text3); margin-right: 4px; }
 
+.toc-list a:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.toc-list a .num {
+  font-size: 10px;
+  color: var(--text3);
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* inline TOC (mobile) */
 .toc-inline {
   background: var(--surface);
   border: 1px solid var(--border2);
@@ -185,12 +193,25 @@ body {
   padding: 14px;
   margin-bottom: 28px;
 }
-.toc-inline .toc-label { padding: 0 0 10px; }
-.toc-inline .toc-list { columns: 2; column-gap: 12px; }
-@media (max-width: 400px) { .toc-inline .toc-list { columns: 1; } }
+
+.toc-inline .toc-label {
+  padding: 0 0 10px;
+}
+
+.toc-inline .toc-list {
+  columns: 2;
+  column-gap: 12px;
+}
+
+@media (max-width: 400px) {
+  .toc-inline .toc-list { columns: 1; }
+}
 
 /* ── section ──────────────────────────────────────────────────── */
-.section { margin-bottom: 44px; scroll-margin-top: 24px; }
+.section {
+  margin-bottom: 44px;
+  scroll-margin-top: 24px;
+}
 
 .section-title {
   font-family: 'Bebas Neue', sans-serif;
@@ -204,6 +225,7 @@ body {
   align-items: baseline;
   gap: 10px;
 }
+
 .section-title .sn {
   font-family: 'Inter', sans-serif;
   font-size: 11px;
@@ -212,10 +234,23 @@ body {
   letter-spacing: 0.4px;
 }
 
-h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 20px 0 6px; }
+h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 20px 0 6px;
+}
 
-p { color: var(--text2); margin-bottom: 10px; max-width: 62ch; }
-p strong { color: var(--text); font-weight: 600; }
+p {
+  color: var(--text2);
+  margin-bottom: 10px;
+  max-width: 62ch;
+}
+
+p strong {
+  color: var(--text);
+  font-weight: 600;
+}
 
 /* ── callout blocks ───────────────────────────────────────────── */
 .callout {
@@ -227,9 +262,10 @@ p strong { color: var(--text); font-weight: 600; }
   font-size: 13.5px;
   color: var(--text2);
 }
-.callout.gold { border-color: var(--gold);  background: var(--gold-bg); }
-.callout.blue { border-color: var(--blue);  background: var(--blue-bg); }
-.callout.warn { border-color: var(--warn);  background: var(--warn-bg); }
+
+.callout.gold  { border-color: var(--gold);  background: var(--gold-bg); }
+.callout.blue  { border-color: var(--blue);  background: var(--blue-bg); }
+.callout.warn  { border-color: var(--warn);  background: var(--warn-bg); }
 
 .callout-label {
   font-size: 10px;
@@ -239,6 +275,7 @@ p strong { color: var(--text); font-weight: 600; }
   color: var(--accent);
   margin-bottom: 4px;
 }
+
 .callout-label.gold { color: var(--gold); }
 .callout-label.blue { color: var(--blue); }
 .callout-label.warn { color: var(--warn); }
@@ -252,6 +289,7 @@ p strong { color: var(--text); font-weight: 600; }
   color: var(--blue);
   background: var(--blue-bg);
   border: 1px solid var(--blue);
+  opacity: 1;
   border-radius: 7px;
   padding: 8px 14px;
   margin: 8px 0;
@@ -264,12 +302,14 @@ p strong { color: var(--text); font-weight: 600; }
   border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.2px;
   background: var(--tag-bg);
   border: 1px solid var(--border);
   color: var(--text2);
   vertical-align: middle;
   white-space: nowrap;
 }
+
 .tag.green { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .tag.gold  { background: var(--gold-bg);   border-color: var(--gold);   color: var(--gold); }
 .tag.blue  { background: var(--blue-bg);   border-color: var(--blue);   color: var(--blue); }
@@ -283,6 +323,7 @@ p strong { color: var(--text); font-weight: 600; }
   font-variant-numeric: tabular-nums;
   margin: 14px 0;
 }
+
 .data-table th {
   text-align: left;
   padding: 8px 12px;
@@ -293,6 +334,7 @@ p strong { color: var(--text); font-weight: 600; }
   color: var(--text3);
   border-bottom: 2px solid var(--border);
 }
+
 .data-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border2);
@@ -300,8 +342,16 @@ p strong { color: var(--text); font-weight: 600; }
   vertical-align: top;
   line-height: 1.5;
 }
-.data-table td:first-child { font-weight: 600; color: var(--text); white-space: nowrap; }
-.data-table tr:last-child td { border-bottom: none; }
+
+.data-table td:first-child {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
 
 /* ── indicator grid ───────────────────────────────────────────── */
 .ind-grid {
@@ -310,7 +360,10 @@ p strong { color: var(--text); font-weight: 600; }
   gap: 8px;
   margin: 14px 0;
 }
-@media (max-width: 480px) { .ind-grid { grid-template-columns: 1fr; } }
+
+@media (max-width: 480px) {
+  .ind-grid { grid-template-columns: 1fr; }
+}
 
 .ind-card {
   background: var(--surface);
@@ -318,6 +371,7 @@ p strong { color: var(--text); font-weight: 600; }
   border-radius: 8px;
   padding: 12px 14px;
 }
+
 .ind-name {
   font-size: 10px;
   font-weight: 800;
@@ -326,8 +380,17 @@ p strong { color: var(--text); font-weight: 600; }
   color: var(--text3);
   margin-bottom: 3px;
 }
-.ind-desc { font-size: 13px; color: var(--text2); line-height: 1.5; }
-.ind-desc strong { color: var(--text); font-weight: 600; }
+
+.ind-desc {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.ind-desc strong {
+  color: var(--text);
+  font-weight: 600;
+}
 
 /* ── example ──────────────────────────────────────────────────── */
 .example {
@@ -340,6 +403,7 @@ p strong { color: var(--text); font-weight: 600; }
   margin: 12px 0;
   line-height: 1.6;
 }
+
 .example strong { color: var(--text); font-weight: 600; }
 .example .ex-label {
   font-size: 10px;
@@ -350,24 +414,24 @@ p strong { color: var(--text); font-weight: 600; }
   margin-bottom: 4px;
 }
 
+/* ── responsive ───────────────────────────────────────────────── */
 @media (max-width: 520px) {
   body { padding-inline: 16px; padding-block: 24px 48px; }
-  .page-header { flex-direction: column-reverse; align-items: flex-start; }
 }
 </style>
-</head>
-<body>
+
+<!-- ─────────────────────────────────────────────────────────── -->
+
 <div class="page">
 
+  <!-- Header -->
   <header class="page-header">
-    <div class="header-text">
-      <div class="eyebrow">Série B — Aceoma</div>
-      <h1 class="doc-title">MANUAL DO <span>SISTEMA</span></h1>
-      <p class="doc-lead">Regras de cálculo, origens dos indicadores e critérios de presença usados em todas as abas do aplicativo.</p>
-    </div>
-    <a href="/" class="back-btn">← Voltar ao app</a>
+    <div class="eyebrow">Pelada na Mão</div>
+    <h1 class="doc-title">MANUAL DO <span>SISTEMA</span></h1>
+    <p class="doc-lead">Regras de cálculo, origens dos indicadores e critérios de presença usados em todas as abas do aplicativo.</p>
   </header>
 
+  <!-- TOC — sidebar (desktop) -->
   <nav class="toc-sidebar" aria-label="Índice">
     <div class="toc-label">Índice</div>
     <ul class="toc-list">
@@ -381,9 +445,24 @@ p strong { color: var(--text); font-weight: 600; }
       <li><a href="#taxa"><span class="num">8</span> Taxa de Vitória</a></li>
       <li><a href="#aba-eu"><span class="num">9</span> Aba EU</a></li>
       <li><a href="#aba-stats"><span class="num">10</span> Aba Stats</a></li>
+      <li><a href="#convocacao"><span class="num">11</span> Convocação</a></li>
+      <li><a href="#financeiro"><span class="num">12</span> Financeiro</a></li>
+      <li><a href="#conquistas"><span class="num">13</span> Conquistas (Badges)</a></li>
+      <li><a href="#admin"><span class="num">14</span> Painel Admin</a></li>
+      <li><a href="#resumo"><span class="num">15</span> Resumo para o Grupo</a></li>
+      <li><a href="#clima"><span class="num">16</span> Previsão do Tempo</a></li>
+      <li><a href="#ligas"><span class="num">17</span> Múltiplas Ligas</a></li>
+      <li><a href="#votacao"><span class="num">18</span> Votação de Destaques</a></li>
+      <li><a href="#foto"><span class="num">19</span> Foto de Perfil</a></li>
+      <li><a href="#seguranca"><span class="num">20</span> Segurança dos Acessos</a></li>
+      <li><a href="#excluir"><span class="num">21</span> Excluir a Conta</a></li>
+      <li><a href="#anonimizar"><span class="num">22</span> Anonimizar o Nome</a></li>
+      <li><a href="#politica"><span class="num">23</span> Política de Privacidade</a></li>
+      <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
     </ul>
   </nav>
 
+  <!-- TOC — inline (mobile) -->
   <nav class="toc-inline" aria-label="Índice">
     <div class="toc-label">Nesta página</div>
     <ul class="toc-list">
@@ -397,9 +476,24 @@ p strong { color: var(--text); font-weight: 600; }
       <li><a href="#taxa"><span class="num">8</span> Taxa de Vitória</a></li>
       <li><a href="#aba-eu"><span class="num">9</span> Aba EU</a></li>
       <li><a href="#aba-stats"><span class="num">10</span> Aba Stats</a></li>
+      <li><a href="#convocacao"><span class="num">11</span> Convocação</a></li>
+      <li><a href="#financeiro"><span class="num">12</span> Financeiro</a></li>
+      <li><a href="#conquistas"><span class="num">13</span> Conquistas (Badges)</a></li>
+      <li><a href="#admin"><span class="num">14</span> Painel Admin</a></li>
+      <li><a href="#resumo"><span class="num">15</span> Resumo para o Grupo</a></li>
+      <li><a href="#clima"><span class="num">16</span> Previsão do Tempo</a></li>
+      <li><a href="#ligas"><span class="num">17</span> Múltiplas Ligas</a></li>
+      <li><a href="#votacao"><span class="num">18</span> Votação de Destaques</a></li>
+      <li><a href="#foto"><span class="num">19</span> Foto de Perfil</a></li>
+      <li><a href="#seguranca"><span class="num">20</span> Segurança dos Acessos</a></li>
+      <li><a href="#excluir"><span class="num">21</span> Excluir a Conta</a></li>
+      <li><a href="#anonimizar"><span class="num">22</span> Anonimizar o Nome</a></li>
+      <li><a href="#politica"><span class="num">23</span> Política de Privacidade</a></li>
+      <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
     </ul>
   </nav>
 
+  <!-- Content -->
   <main class="content">
 
     <!-- 1. Datas de Corte -->
@@ -408,12 +502,18 @@ p strong { color: var(--text); font-weight: 600; }
       <p>O sistema usa duas datas que delimitam quando cada grupo de estatísticas passa a ser contabilizado. Entender esses limites é essencial para interpretar qualquer indicador.</p>
 
       <table class="data-table">
-        <thead><tr><th>Constante</th><th>Data</th><th>O que delimita</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Constante</th>
+            <th>Data</th>
+            <th>O que delimita</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td><span class="tag">ROSTER_CUTOFF</span></td>
             <td>02/09/2026</td>
-            <td>A partir desta data, a presença de um jogador em um campeonato só é reconhecida se ele estiver no elenco registrado. Afeta jejuns, campeonatos disputados e o contador "sem título desde".</td>
+            <td>A partir desta data, a presença de um jogador em um campeonato só é reconhecida se ele estiver no elenco registrado (teamRosters). Afeta jejuns, campeonatos disputados e o contador "sem título desde".</td>
           </tr>
           <tr>
             <td><span class="tag blue">CUTOFF</span></td>
@@ -432,10 +532,15 @@ p strong { color: var(--text); font-weight: 600; }
     <!-- 2. Regra de Presença -->
     <section class="section" id="presenca">
       <h2 class="section-title"><span class="sn">02</span> Regra de Presença</h2>
-      <p>Determina se um campeonato "conta" para um jogador em cálculos que dependem de participação — jejuns, campeonatos disputados, contador de campeonatos sem título.</p>
+      <p>A regra de presença determina se um campeonato "conta" para um jogador em cálculos que dependem de participação — jejuns, campeonatos disputados, champsSinceTitle.</p>
 
       <table class="data-table">
-        <thead><tr><th>Período</th><th>Critério para contar</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Período</th>
+            <th>Critério para contar</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td>Antes de 02/09/2026</td>
@@ -443,7 +548,7 @@ p strong { color: var(--text); font-weight: 600; }
           </tr>
           <tr>
             <td>A partir de 02/09/2026</td>
-            <td>Só conta se o jogador estiver listado no elenco registrado do campeonato. Se não estiver em nenhum time, o campeonato é ignorado para ele.</td>
+            <td>Só conta se o jogador estiver listado no elenco registrado do campeonato (<code>teamRosters</code>). Se não estiver em nenhum time, o campeonato é ignorado para ele.</td>
           </tr>
         </tbody>
       </table>
@@ -456,8 +561,8 @@ p strong { color: var(--text); font-weight: 600; }
       <h3>Onde a regra é aplicada</h3>
       <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
         <li><strong style="color: var(--text)">Jejum</strong> — a sequência de participações usada no cálculo aplica esse filtro</li>
-        <li><strong style="color: var(--text)">Campeonatos disputados</strong> — card "Campeonatos" na aba EU</li>
-        <li><strong style="color: var(--text)">Sem título desde</strong> — contagem de campeonatos desde o último título</li>
+        <li><strong style="color: var(--text)">Campeonatos disputados</strong> — o card "Campeonatos" na aba EU</li>
+        <li><strong style="color: var(--text)">Sem título desde</strong> — a contagem de campeonatos desde o último título</li>
         <li><strong style="color: var(--text)">Taxa de vitória</strong> — denominador calculado com presença (pós CUTOFF)</li>
       </ul>
     </section>
@@ -468,17 +573,23 @@ p strong { color: var(--text); font-weight: 600; }
       <p>Cada campeão tem um <strong>peso</strong> associado à sua conquista, que define se foi um título inteiro ou meio título.</p>
 
       <table class="data-table">
-        <thead><tr><th>Tipo</th><th>Peso</th><th>Quando ocorre</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Peso</th>
+            <th>Quando ocorre</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td>Título inteiro</td>
             <td><span class="tag green">1.0</span></td>
-            <td>Jogador estava no elenco e jogou a final normalmente pelo time campeão.</td>
+            <td>Final decidida normalmente (um time vence).</td>
           </tr>
           <tr>
             <td>Meio título</td>
             <td><span class="tag gold">0.5</span></td>
-            <td>Jogador pertence ao time campeão, mas sua participação na final foi parcial ou indireta. Ver os dois casos abaixo.</td>
+            <td>O jogador pertence ao time campeão, mas sua participação na final foi parcial ou indireta — ver os dois casos abaixo. O peso é atribuído manualmente pelo admin ao registrar os campeões.</td>
           </tr>
         </tbody>
       </table>
@@ -487,21 +598,21 @@ p strong { color: var(--text); font-weight: 600; }
       <div class="ind-grid">
         <div class="ind-card">
           <div class="ind-name">Emprestado na final</div>
-          <div class="ind-desc">O jogador estava no elenco do time A, mas <strong>jogou a final pelo time B</strong> (emprestado) e o time B venceu.</div>
+          <div class="ind-desc">O jogador estava no elenco do time A, mas <strong>jogou a final pelo time B</strong> (emprestado) e o time B venceu. Ele recebe ½ título.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Não jogou a final</div>
-          <div class="ind-desc">Estava no elenco do time campeão, mas <strong>não entrou em campo na final</strong> — por lesão, ausência ou qualquer outro motivo.</div>
+          <div class="ind-desc">O jogador estava no elenco do time campeão, mas <strong>não entrou em campo na final</strong> — por lesão, ausência ou qualquer outro motivo.</div>
         </div>
       </div>
 
       <div class="callout gold">
         <div class="callout-label gold">Critério</div>
-        O ½ título é sobre a <strong>participação individual</strong> do jogador na decisão, não sobre o resultado do jogo. O peso é atribuído manualmente pelo admin ao registrar os campeões.
+        O ½ título é sobre a <strong>participação individual</strong> do jogador na decisão, não sobre o resultado do jogo. Uma final decidida normalmente pode gerar tanto títulos inteiros quanto meios títulos, dependendo de quem jogou.
       </div>
 
       <h3>Exibição</h3>
-      <p>O total é exibido com fração quando necessário: <strong>2½</strong> significa qualquer combinação de inteiros e meios que some 2.5.</p>
+      <p>O total de títulos é exibido com fração quando necessário: <strong>2½</strong> significa qualquer combinação de inteiros e meios que some 2.5.</p>
 
       <div class="example">
         <div class="ex-label">Exemplo</div>
@@ -518,7 +629,7 @@ p strong { color: var(--text); font-weight: 600; }
       <p>Mede campeonatos consecutivos em que o jogador foi campeão. Meio título contribui proporcionalmente.</p>
 
       <h3>Como calcula</h3>
-      <p>O sistema percorre todos os campeonatos em ordem cronológica:</p>
+      <p>O sistema percorre todos os campeonatos concluídos em ordem cronológica. Para cada campeonato:</p>
       <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2.2;">
         <li>Se o jogador foi campeão: <code style="color: var(--blue)">sequência += peso</code> (0.5 ou 1.0)</li>
         <li>Se não foi campeão: <code style="color: var(--warn)">sequência = 0</code> (reinicia)</li>
@@ -532,11 +643,11 @@ p strong { color: var(--text); font-weight: 600; }
       <div class="ind-grid" style="margin-top: 16px;">
         <div class="ind-card">
           <div class="ind-name">Maior Sequência</div>
-          <div class="ind-desc">Recorde histórico de vitórias consecutivas, com o período (data início – data fim).</div>
+          <div class="ind-desc">Recorde histórico de vitórias consecutivas. Exibe o período (data início – data fim).</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Sequência Atual</div>
-          <div class="ind-desc">Sequência de vitórias ainda em aberto até o último campeonato realizado.</div>
+          <div class="ind-desc">Sequência de vitórias ainda em aberto, até o último campeonato realizado.</div>
         </div>
       </div>
 
@@ -549,28 +660,31 @@ p strong { color: var(--text); font-weight: 600; }
     <!-- 5. Jejuns -->
     <section class="section" id="jejuns">
       <h2 class="section-title"><span class="sn">05</span> Jejuns</h2>
-      <p>Mede quantos campeonatos seguidos o jogador <em>participou</em> sem ser campeão. Diferente da sequência, o jejum <strong>aplica a regra de presença</strong> — campeonatos em que o jogador não estava no elenco são ignorados.</p>
+      <p>Mede quantos campeonatos seguidos o jogador <em>participou</em> sem ser campeão. Diferente da sequência, o jejum <strong>aplica a regra de presença</strong> — campeonatos em que o jogador não estava matriculado são ignorados.</p>
+
+      <h3>Sequência de participações</h3>
+      <p>Antes de calcular o jejum, o sistema monta uma lista filtrada com apenas os campeonatos em que aquele jogador esteve presente (respeitando o <span class="tag">ROSTER_CUTOFF</span>). O jejum é calculado <em>dentro</em> dessa lista.</p>
 
       <h3>Como calcula</h3>
-      <p>O sistema monta uma lista filtrada com apenas os campeonatos em que o jogador esteve presente. O jejum é calculado <em>dentro</em> dessa lista, contando os intervalos entre vitórias:</p>
+      <p>Dentro da sequência de participações, identifica os índices de cada vitória. O jejum entre duas vitórias consecutivas é o número de campeonatos participados entre elas:</p>
       <div class="formula">JEJUM = índice_vitória_B − índice_vitória_A − 1</div>
 
       <div class="ind-grid" style="margin-top: 16px;">
         <div class="ind-card">
           <div class="ind-name">Maior Jejum</div>
-          <div class="ind-desc">Maior intervalo registrado entre duas vitórias (ou entre a última vitória e o fim do histórico), com o período.</div>
+          <div class="ind-desc">Maior intervalo já registrado entre duas vitórias (ou entre a última vitória e o fim do histórico). Exibe o período.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Jejum Atual</div>
-          <div class="ind-desc">Campeonatos participados desde a última vitória. Zero se o último campeonato participado resultou em título.</div>
+          <div class="ind-desc">Campeonatos participados desde a última vitória até o momento. Zero se o último campeonato participado resultou em título.</div>
         </div>
       </div>
 
       <div class="example">
         <div class="ex-label">Exemplo com presença</div>
-        Jogador ganhou o 3º e o 8º campeonatos em que participou. Entre eles há 4 participações sem título → maior jejum = <strong>4</strong>. Após o 8º, participou de 2 sem ganhar → jejum atual = <strong>2</strong>.
+        Jogador participou de 10 campeonatos. Ganhou o 3º e o 8º. Entre eles há 4 participações sem título → maior jejum = <strong>4</strong>. Após o 8º, participou de 2 sem ganhar → jejum atual = <strong>2</strong>.
         <br><br>
-        Se depois do 8º título ficou de fora de 3 campeonatos (sem elenco), esses 3 <strong>não contam</strong> para o jejum atual.
+        Se depois do 8º título ele ficou de fora de 3 campeonatos (não estava no elenco), esses 3 <strong>não contam</strong> para o jejum atual.
       </div>
     </section>
 
@@ -579,10 +693,60 @@ p strong { color: var(--text); font-weight: 600; }
       <h2 class="section-title"><span class="sn">06</span> Gols e Artilharia</h2>
       <p>Toda estatística de gols usa o <span class="tag blue">CUTOFF</span> <strong>08/09/2026</strong> como ponto de partida. Campeonatos anteriores não entram em nenhuma contagem de gols.</p>
 
-      <h3>Gols em finais empatadas</h3>
-      <p>Em finais decididas nos pênaltis, apenas os gols marcados <em>no tempo normal e prorrogação</em> são contabilizados. Os pênaltis não contam como gols.</p>
+      <h3>Como registrar gols após um resultado</h3>
+      <p>Ao confirmar ou editar o placar de uma partida, o admin vê uma tela de <strong>contadores por jogador</strong> — sem campo de texto. Para cada time há uma lista com os jogadores do elenco registrado; basta usar <strong>[−]</strong> e <strong>[+]</strong> para incrementar ou decrementar os gols de cada um. O placar fica no topo com steppers separados.</p>
 
-      <h3>Indicadores</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Jogadores do elenco</div>
+          <div class="ind-desc">Aparecem automaticamente. Cada um tem seu próprio contador mostrando <strong>·</strong> (zero) ou o número de gols em destaque com a cor do time.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Emprestados — com gol</div>
+          <div class="ind-desc">Jogadores fora do elenco daquele time ficam em uma seção colapsável <strong>+ Emprestado</strong>. O botão <strong>⚽</strong> adiciona 1 gol e o contador aparece na lista com a tag <em>emp.</em></div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Emprestados — sem gol</div>
+          <div class="ind-desc">O botão <strong>✓ Jogo</strong> marca o emprestado como participante sem gol. Ele aparece na lista com a tag <em>emp. ✓jogo</em>. A partida é contabilizada no G/Jogo desse jogador mesmo sem gols marcados.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">⚠ Sem marcador</div>
+          <div class="ind-desc">Se os gols atribuídos somarem menos que o placar, o sistema avisa em laranja quantos gols estão sem marcador — como alerta, sem bloquear a confirmação.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Marcadores no card</div>
+          <div class="ind-desc">Após confirmação, o card da partida exibe os marcadores abaixo do placar na cor de cada time. Gols múltiplos aparecem com número entre parênteses — ex. <em>Caio(2)</em>.</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Gols opcionais</div>
+        O registro de marcadores é sempre opcional — é possível confirmar o placar sem atribuir gols a ninguém.
+      </div>
+
+      <h3>Quem pode editar gols</h3>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>Quem pode editar</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Campeonato em andamento</td>
+            <td><strong>Todos os usuários</strong> — qualquer jogador logado pode corrigir o placar e os gols de uma partida já registrada.</td>
+          </tr>
+          <tr>
+            <td>Campeonato finalizado</td>
+            <td>Apenas <strong>admins</strong> — o botão ✎ de edição aparece somente para usuários com perfil de administrador.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Finais empatadas (pênaltis)</h3>
+      <p>É permitido registrar empate no placar de uma final. Ao confirmar, um modal aparece perguntando <strong>"Qual time venceu nos pênaltis?"</strong> — o admin seleciona o time vencedor, que é salvo como campeão. O placar permanece como empate; os gols dos pênaltis não contam.</p>
+      <p>Para <strong>corrigir</strong> uma final já registrada como não-empate: edite o placar da final para empate — o mesmo modal de pênaltis aparece e atualiza o campeão automaticamente.</p>
+      <p>A badge <strong>🙏 Tafarel</strong> é concedida ao goleiro campeão em uma final que terminou empatada (decidida nos pênaltis).</p>
+      <h3>Gols em finais empatadas</h3>
+      <p>Em finais que terminaram empatadas (decididas nos pênaltis), somente os gols marcados <em>no tempo normal e prorrogação</em> são contabilizados — registrados separadamente em <code style="color: var(--blue)">finalGoals</code>. Os pênaltis não contam como gols.</p>
+
+      <h3>Indicadores de gols</h3>
       <div class="ind-grid">
         <div class="ind-card">
           <div class="ind-name">Total de Gols</div>
@@ -590,11 +754,11 @@ p strong { color: var(--text); font-weight: 600; }
         </div>
         <div class="ind-card">
           <div class="ind-name">Gols em Finais</div>
-          <div class="ind-desc">Total de gols marcados em partidas de final (pós 08/09).</div>
+          <div class="ind-desc">Total de gols marcados especificamente em partidas de final (pós 08/09).</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Artilharia</div>
-          <div class="ind-desc">Número de campeonatos em que foi o maior artilheiro daquele campeonato.</div>
+          <div class="ind-desc">Número de campeonatos em que o jogador foi o maior artilheiro <em>daquele</em> campeonato (pode haver empate).</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Artilharia de Finais</div>
@@ -602,11 +766,11 @@ p strong { color: var(--text); font-weight: 600; }
         </div>
         <div class="ind-card">
           <div class="ind-name">Recorde Pessoal</div>
-          <div class="ind-desc">Maior número de gols em um único campeonato, em toda a história (sem restrição de data).</div>
+          <div class="ind-desc">Maior número de gols marcados em um único campeonato, em toda a história (sem restrição de data).</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Jejum de Gols</div>
-          <div class="ind-desc">Campeonatos seguidos (pós 08/09) sem marcar nenhum gol.</div>
+          <div class="ind-desc">Quantos campeonatos seguidos (pós 08/09) o jogador ficou sem marcar nenhum gol, <strong>contando apenas campeonatos em que esteve inscrito</strong>. Jogadores marcados como 🧤 Goleiro são excluídos deste ranking (mas contam na artilharia).</div>
         </div>
       </div>
     </section>
@@ -614,18 +778,24 @@ p strong { color: var(--text); font-weight: 600; }
     <!-- 7. Médias de Gols -->
     <section class="section" id="medias">
       <h2 class="section-title"><span class="sn">07</span> Médias de Gols</h2>
-      <p>Calculadas apenas para campeonatos a partir de <strong>08/09/2026</strong>.</p>
+      <p>Calculadas apenas para campeonatos a partir de <strong>08/09/2026</strong>, onde há registro de elencos e jogos. Dois tipos: por campeonato e por jogo disputado.</p>
 
       <h3>Gols por Campeonato (G/Camp)</h3>
       <div class="formula">G/Camp = total de gols ÷ campeonatos no elenco</div>
-      <p>Denominador: campeonatos pós 08/09 em que o jogador estava registrado em algum time. Se não esteve em nenhum elenco mas marcou gols, aquele campeonato também entra no denominador.</p>
+      <p>Denominador: campeonatos <em>pós 08/09</em> em que o jogador estava registrado em algum time. Se não esteve em nenhum elenco mas marcou gols, aquele campeonato também entra no denominador.</p>
 
       <h3>Gols por Jogo (G/Jogo)</h3>
       <div class="formula">G/Jogo = total de gols ÷ partidas disputadas</div>
-      <p>O cálculo de "partidas disputadas" depende da situação em cada campeonato:</p>
+
+      <p>O cálculo de "partidas disputadas" depende da situação do jogador em cada campeonato:</p>
 
       <table class="data-table">
-        <thead><tr><th>Situação</th><th>Partidas contadas</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Situação</th>
+            <th>Partidas contadas</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td>Registrado em um time</td>
@@ -633,23 +803,23 @@ p strong { color: var(--text); font-weight: 600; }
           </tr>
           <tr>
             <td>Emprestado a outro time</td>
-            <td>Partidas do time registrado + cada partida <em>fora</em> desse time onde o jogador marcou gol. Se foi emprestado mas não marcou, aquelas partidas não são contadas — não há como confirmar que jogou.</td>
+            <td>Partidas do time registrado + cada partida <em>fora</em> desse time onde o jogador marcou gol ou foi marcado como <strong>✓ Jogo</strong> (participante sem gol).</td>
           </tr>
           <tr>
             <td>Fora de qualquer elenco</td>
-            <td>Somente as partidas onde marcou gol. Partidas sem gol são ignoradas pelo mesmo motivo.</td>
+            <td>Somente as partidas onde o jogador marcou gol ou foi marcado como <strong>✓ Jogo</strong>. Partidas sem registro de participação são ignoradas.</td>
           </tr>
         </tbody>
       </table>
 
       <div class="callout">
         <div class="callout-label">Lógica do empréstimo</div>
-        Se um jogador está no elenco do <strong>time vermelho</strong> mas marcou na final jogando pelo <strong>time amarelo</strong>, essa partida extra é adicionada automaticamente às suas partidas disputadas.
+        Se um jogador está no elenco do <strong>time vermelho</strong> mas marcou na final jogando pelo <strong>time amarelo</strong>, essa partida extra é adicionada às partidas do time vermelho. Ambos os cenários são detectados automaticamente pelo sistema.
       </div>
 
       <h3>Gols por Título</h3>
       <div class="formula">G/Título = gols em campeonatos ganhos ÷ títulos (pós 08/09)</div>
-      <p>Contabiliza apenas os gols marcados dentro de campeonatos que o jogador venceu, dividido pelos títulos conquistados após o corte.</p>
+      <p>Contabiliza apenas os gols marcados dentro de campeonatos que o jogador venceu, dividido pelo número de títulos conquistados após o corte.</p>
     </section>
 
     <!-- 8. Taxa de Vitória -->
@@ -660,28 +830,28 @@ p strong { color: var(--text); font-weight: 600; }
 
       <div class="callout gold">
         <div class="callout-label gold">Numerador e denominador</div>
-        Ambos usam a mesma janela temporal (pós 08/09/2026) e a mesma regra de presença. Um título antes do corte não entra no numerador; um campeonato sem elenco não entra no denominador.
+        Ambos usam a mesma janela temporal (pós 08/09/2026) e a mesma regra de presença. Um título conquistado antes do corte não entra no numerador, e um campeonato sem elenco registrado não entra no denominador.
       </div>
     </section>
 
     <!-- 9. Aba EU -->
     <section class="section" id="aba-eu">
       <h2 class="section-title"><span class="sn">09</span> Aba EU</h2>
-      <p>Visão personalizada para o jogador logado. Todos os indicadores são calculados individualmente e atualizados em tempo real.</p>
+      <p>Visão personalizada para o jogador logado. Todos os indicadores são calculados individualmente para aquele jogador e atualizados em tempo real.</p>
 
-      <h3>Cards principais</h3>
+      <h3>Cards principais (grid 2×3)</h3>
       <div class="ind-grid">
         <div class="ind-card">
           <div class="ind-name">Títulos</div>
-          <div class="ind-desc">Total acumulado com pesos, posição no ranking entre jogadores ativos e evolução temporal.</div>
+          <div class="ind-desc">Total acumulado (todos os campeonatos, com pesos). Contexto de posição no ranking geral e evolução temporal.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Gols</div>
-          <div class="ind-desc">Total pós 08/09, posição no ranking e evolução por campeonato.</div>
+          <div class="ind-desc">Total de gols marcados pós 08/09, com posição no ranking e evolução.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Gols em Finais</div>
-          <div class="ind-desc">Gols marcados em finais pós 08/09.</div>
+          <div class="ind-desc">Gols marcados em partidas de final pós 08/09.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Artilharia</div>
@@ -693,39 +863,67 @@ p strong { color: var(--text); font-weight: 600; }
         </div>
         <div class="ind-card">
           <div class="ind-name">Campeonatos</div>
-          <div class="ind-desc">Total disputado (com regra de presença) e taxa de vitória pós 08/09.</div>
+          <div class="ind-desc">Total de campeonatos disputados (com regra de presença) e taxa de vitória.</div>
         </div>
       </div>
 
       <h3>Card — Sequências &amp; Jejuns</h3>
-      <p>Exibe maior sequência, sequência ativa, maior jejum e jejum atual — cada um com o período correspondente. Aparece somente se houver ao menos um registro relevante.</p>
+      <p>Aparece somente se o jogador tiver ao menos um registro relevante. Exibe maior sequência, sequência ativa, maior jejum e jejum atual — cada um com o período correspondente.</p>
 
       <h3>Card — Títulos Inteiros / Meios Títulos</h3>
-      <p>Detalha a composição do total de títulos. Exibido somente para quem tem ao menos 1 título.</p>
+      <p>Grid 2 colunas exibido somente para quem tem ao menos 1 título. Detalha a composição do total.</p>
 
       <h3>Card — Recordes Pessoais</h3>
-      <p>Agrega: recorde de gols num único campeonato, gols por título, média G/Camp, média G/Jogo e jejum de gols. Linhas ocultadas quando o valor é zero ou não aplicável.</p>
+      <p>Agrega em uma lista: recorde de gols num único campeonato, gols por título, média G/Camp, média G/Jogo e jejum de gols. Linhas ocultadas automaticamente quando o valor é zero ou não aplicável.</p>
+
+      <h3>Card — Meus Últimos Times</h3>
+      <p>Lista os últimos 5 campeonatos em que o jogador esteve em um elenco registrado. Cada linha exibe: cor do time, nome do time, data, total de estrelas do elenco e total de títulos históricos do elenco, e o resultado obtido (🏆 Campeão · 🥈 Vice · 🏅 Semifinalista · Fase de Grupos). Clique em qualquer linha para ver o elenco completo daquele time com estrelas e títulos individuais por jogador.</p>
+
+      <h3>Card — Times que Fui Campeão</h3>
+      <p>Mesma exibição do card acima, mas filtrando apenas os campeonatos em que o jogador foi campeão. Só aparece se houver ao menos um título. Também clicável para ver o elenco detalhado.</p>
+
+      <h3>Card — Média dos Meus Times</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Estrelas médias do time</div>
+          <div class="ind-desc">Média da soma de estrelas de todos os elencos em que o jogador participou.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Taxa de título por time</div>
+          <div class="ind-desc">Percentual de campeonatos com elenco registrado em que o time daquele jogador foi campeão.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Estrelas — times campeões</div>
+          <div class="ind-desc">Média das estrelas dos elencos nos campeonatos em que o jogador foi campeão.</div>
+        </div>
+      </div>
 
       <h3>Banner de status</h3>
-      <p>Reflete o resultado no campeonato mais recente: campeão, vice-campeão, participante ou ausente. Quando há título passado, exibe também a contagem de campeonatos sem título desde então.</p>
+      <p>O banner no topo da aba reflete o resultado do jogador no campeonato mais recente: campeão, vice-campeão, participante ou ausente. Quando há título passado, exibe também a contagem de campeonatos sem título desde então.</p>
+
+      <h3>Banner de convocação</h3>
+      <p>Quando há uma convocação aberta (campeonato no status <em>preset</em>), um banner de destaque aparece na aba EU mostrando a data e solicitando confirmação de presença. O jogador pode responder "Sim, vou" ou "Não vou" — a resposta fica salva imediatamente e pode ser alterada enquanto a convocação estiver em aberto. Logo abaixo do banner aparece a <strong>previsão do tempo</strong> para o horário do jogo (quando o local e o horário da liga estão configurados — ver seção 16).</p>
+
+      <h3>Excluir minha conta, anonimizar meu nome e privacidade</h3>
+      <p>No fim da aba EU há três links próprios do jogador, que não dependem do admin: <strong>🗑️ Excluir minha conta</strong> (seção 21), <strong>🕶️ Anonimizar meu nome no histórico</strong> (seção 22) e <strong>🔒 Privacidade</strong> (seção 23, também disponível na tela de login).</p>
     </section>
 
     <!-- 10. Aba Stats -->
     <section class="section" id="aba-stats">
       <h2 class="section-title"><span class="sn">10</span> Aba Stats</h2>
-      <p>Rankings comparativos entre jogadores ativos, com filtros para análise segmentada.</p>
+      <p>Rankings comparativos entre jogadores, com filtros para análise segmentada.</p>
 
-      <h3>Filtros</h3>
+      <h3>Filtros disponíveis</h3>
       <table class="data-table">
         <thead><tr><th>Filtro</th><th>Efeito</th></tr></thead>
         <tbody>
           <tr>
             <td>Jogador específico</td>
-            <td>Limita todos os rankings a um único jogador.</td>
+            <td>Limita todos os rankings a um único jogador — útil para ver seus próprios registros históricos em contexto.</td>
           </tr>
           <tr>
             <td>Mínimo de títulos</td>
-            <td>Exibe apenas jogadores com pelo menos N títulos.</td>
+            <td>Exibe apenas jogadores com pelo menos N títulos. Permite comparar o grupo dos mais vitoriosos.</td>
           </tr>
           <tr>
             <td>Ativos / Todos</td>
@@ -736,20 +934,1258 @@ p strong { color: var(--text); font-weight: 600; }
 
       <h3>Blocos de ranking</h3>
       <div class="ind-grid">
-        <div class="ind-card"><div class="ind-name">Maior Sequência</div><div class="ind-desc">Top 5 histórico de vitórias consecutivas.</div></div>
-        <div class="ind-card"><div class="ind-name">Maior Jejum</div><div class="ind-desc">Top 5 histórico de participações sem título (com presença aplicada).</div></div>
-        <div class="ind-card"><div class="ind-name">Sequência Ativa</div><div class="ind-desc">Quem está em sequência de vitórias agora.</div></div>
-        <div class="ind-card"><div class="ind-name">Jejum Atual</div><div class="ind-desc">Top 5 de quem está há mais tempo sem ganhar (com presença).</div></div>
-        <div class="ind-card"><div class="ind-name">Títulos Inteiros</div><div class="ind-desc">Ranking por quantidade de títulos com peso 1.0.</div></div>
-        <div class="ind-card"><div class="ind-name">Meios Títulos</div><div class="ind-desc">Ranking por quantidade de meios títulos (emprestado ou ausente na final do time campeão).</div></div>
-        <div class="ind-card"><div class="ind-name">Gols por Título</div><div class="ind-desc">Média de gols por campeonato vencido, para campeões pós 02/09/2026.</div></div>
-        <div class="ind-card"><div class="ind-name">Médias de Gols</div><div class="ind-desc">Tabela com G/Camp e G/Jogo para jogadores com gols pós 08/09/2026.</div></div>
-        <div class="ind-card"><div class="ind-name">Mais Gols num Camp.</div><div class="ind-desc">Recorde de gols num único campeonato, histórico.</div></div>
-        <div class="ind-card"><div class="ind-name">Jejum de Gols</div><div class="ind-desc">Campeonatos seguidos sem marcar, pós 08/09/2026.</div></div>
+        <div class="ind-card">
+          <div class="ind-name">Maior Sequência</div>
+          <div class="ind-desc">Top 5 histórico de vitórias consecutivas.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Maior Jejum</div>
+          <div class="ind-desc">Top 5 histórico de participações sem título (com presença aplicada).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Sequência Ativa</div>
+          <div class="ind-desc">Quem está em sequência de vitórias agora.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Jejum Atual</div>
+          <div class="ind-desc">Top 5 de quem está há mais tempo sem ganhar (com presença).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Títulos Inteiros</div>
+          <div class="ind-desc">Ranking por quantidade de títulos com peso 1.0.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Meios Títulos</div>
+          <div class="ind-desc">Ranking por quantidade de meios títulos (emprestado na final ou não atuou na final do time campeão).</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Gols por Título</div>
+          <div class="ind-desc">Média de gols por campeonato vencido, para campeões pós 02/09/2026.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Médias de Gols</div>
+          <div class="ind-desc">Tabela com G/Camp e G/Jogo para todos os jogadores com gols pós 08/09/2026.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Mais Gols num Camp.</div>
+          <div class="ind-desc">Recorde de gols num único campeonato, histórico.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Jejum de Gols</div>
+          <div class="ind-desc">Campeonatos seguidos (pós 08/09) sem marcar, contando apenas campeonatos em que o jogador esteve inscrito. Goleiros (🧤) não aparecem neste ranking.</div>
+        </div>
+      </div>
+
+      <h3>🍀 Sortudos &amp; Azarados — Títulos do Elenco</h3>
+      <p>Para cada jogador, o sistema percorre todos os campeonatos com elenco registrado em que ele participou e calcula a <strong>média de títulos acumulados pelos companheiros de time</strong> — excluindo o próprio jogador do cálculo. Quem sistematicamente caiu em times com companheiros mais titulados é considerado <em>sortudo</em>; quem sempre ficou com os menos titulados é <em>azarado</em>.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Regra dos títulos antes da data</div>
+        Os títulos de cada companheiro são contados apenas até a véspera daquele campeonato — o título eventualmente conquistado <em>naquele mesmo dia</em> não entra na conta. A comparação reflete o histórico real de cada jogador no momento em que os times foram formados.
+      </div>
+
+      <h3>⭐ Sortudos &amp; Azarados — Estrelas do Elenco</h3>
+      <p>Mesmo critério, mas usando as <strong>estrelas atuais dos companheiros</strong> como proxy de qualidade. As estrelas são uma avaliação de nível do jogador e não mudam retroativamente, então refletem o peso técnico do elenco em cada edição. O próprio jogador também é excluído do cálculo.</p>
+
+      <div class="example">
+        <div class="ex-label">Exemplo</div>
+        Jogador A participou de 3 campeonatos. Seus companheiros tinham, respectivamente, 4, 6 e 5 títulos somados (excluindo A). Média = <strong>5,0 títulos</strong>. Se a média geral é 3,0, A é considerado sortudo em títulos de elenco.
+      </div>
+    </section>
+
+    <!-- 11. Convocação -->
+    <section class="section" id="convocacao">
+      <h2 class="section-title"><span class="sn">11</span> Convocação</h2>
+      <p>Antes de criar um campeonato ativo, o admin pode abrir uma <strong>convocação</strong> (campeonato no status <em>preset</em>) para coletar confirmações de presença dos jogadores. Só pode existir uma convocação aberta por vez.</p>
+
+      <h3>Fluxo do admin</h3>
+      <table class="data-table">
+        <thead><tr><th>Ação</th><th>O que faz</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Criar convocação</td>
+            <td>Disponível na aba Criar (quando não há convocação aberta nem campeonato ativo). O admin escolhe a data e abre a lista de presença.</td>
+          </tr>
+          <tr>
+            <td>🍖 Churrasco</td>
+            <td>Toggle que sinaliza se haverá churrasco no evento. Altera automaticamente a mensagem do link de convocação.</td>
+          </tr>
+          <tr>
+            <td>🔗 Link / Copiar mensagem</td>
+            <td>Copia para a área de transferência uma mensagem WhatsApp com a data do evento, tipo (jogo ou jogo + churrasco) e o link do app para confirmação.</td>
+          </tr>
+          <tr>
+            <td>💬 WhatsApp individual</td>
+            <td>Botão visível ao lado de cada jogador que tem WhatsApp cadastrado. Abre o WhatsApp com uma mensagem de convocação pré-preenchida endereçada diretamente àquele número. Exclusivo do admin: o número fica numa área de contatos que só o admin lê (ver seção 20).</td>
+          </tr>
+          <tr>
+            <td>+ Avulso</td>
+            <td>Campo de texto + botão para adicionar um jogador avulso à convocação (ver seção abaixo).</td>
+          </tr>
+          <tr>
+            <td>Fechar inscrições →</td>
+            <td>Encerra a convocação e avança para a aba <strong>Novo</strong>, já aberta direto no sorteio de times (ver seção abaixo). Jogadores que não confirmaram presença são marcados como ausentes por padrão e ficam disponíveis para exclusão do sorteio.</td>
+          </tr>
+          <tr>
+            <td>Cancelar</td>
+            <td>Remove a convocação sem criar campeonato.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Ordem de exibição da lista</h3>
+      <p>A lista de convocação é ordenada em três blocos: <strong>confirmados</strong> (incluindo avulsos) → <strong>não vão</strong> → <strong>pendentes</strong>.</p>
+
+      <h3>Respostas dos jogadores</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Confirmado (✓)</div>
+          <div class="ind-desc">Aparece no topo da lista. Entra no sorteio automaticamente.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Recusado (✗)</div>
+          <div class="ind-desc">Aparece no segundo bloco. Marcado como ausente ao fechar inscrições.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Sem resposta (·)</div>
+          <div class="ind-desc">Aparece no final da lista. Tratado como ausente ao fechar inscrições.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">(avulso)</div>
+          <div class="ind-desc">Sempre no topo como confirmado. Não é um jogador cadastrado — ver seção Jogador Avulso.</div>
+        </div>
+      </div>
+
+      <h3>Jogador avulso</h3>
+      <p>O admin pode incluir um <strong>jogador avulso</strong> na convocação — alguém que não está no cadastro regular e participará apenas naquela edição. O formulário tem três campos opcionais além do nome:</p>
+
+      <table class="data-table">
+        <thead><tr><th>Campo</th><th>Descrição</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Nome</td>
+            <td>Obrigatório. Enter avança para o campo WhatsApp.</td>
+          </tr>
+          <tr>
+            <td>WhatsApp</td>
+            <td>Opcional. Se informado, exibe o botão 💬 ao lado do avulso na lista para enviar a mensagem de convocação. O número vai para a área de contatos do admin (não fica na cobrança nem no campeonato) e é apagado quando o avulso sai da lista.</td>
+          </tr>
+          <tr>
+            <td>Já pagou</td>
+            <td>Checkbox opcional. Se marcado, o registro financeiro é criado como <strong>recebido</strong>; desmarcado (padrão), fica como <strong>pendente</strong>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Presença</div>
+          <div class="ind-desc">O avulso é incluído como <strong>confirmado automaticamente</strong> — sem necessidade de resposta. Aparece no topo da lista com o selo <em>(avulso)</em> em laranja.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Financeiro</div>
+          <div class="ind-desc">O registro de cobrança é criado <strong>imediatamente</strong> ao adicionar o avulso, em <em>Financeiro → Avulsos</em>, com o valor de <strong>Valor Avulso</strong>. Remover o avulso da convocação também remove o registro financeiro.</div>
+        </div>
+      </div>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Valor do avulso</div>
+        O valor cobrado vem do campo <strong>Valor Avulso</strong> nas configurações financeiras (padrão: R$20). Para ajustar, acesse Financeiro → ⚙️ Configurar valores antes de adicionar o avulso.
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Acesso não cadastrado</div>
+        Se um jogador ainda não tem conta e clicar no link de convocação, será direcionado para criar sua conta. Após cadastro e aprovação do admin, o jogador precisa acessar o app novamente para confirmar presença — a convocação não é confirmada automaticamente.
+      </div>
+
+      <h3>Sorteio de times — equilíbrio por média</h3>
+      <p>A aba <strong>Novo</strong> tem dois botões no topo — <strong>⚖️ Sortear Times</strong> e <strong>✋ Montar Manualmente</strong> — que alternam o conteúdo do mesmo card; o sorteio vem selecionado por padrão. Um só existe quando há jogador elegível para sortear; sem nenhum, a aba mostra direto a montagem manual.</p>
+      <p>O sorteio distribui os jogadores presentes nos times usando um algoritmo que minimiza a diferença de <strong>média de estrelas</strong> entre equipes, não a diferença total. Isso evita que um time fique desequilibrado por ter mais jogadores que outro.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Regra</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Somenteᶜ (só churrasco)</td>
+            <td>Jogadores marcados como <em>Só Churrasco</em> são automaticamente <strong>excluídos</strong> do sorteio — não aparecem na lista de presentes.</td>
+          </tr>
+          <tr>
+            <td>Avulsos no sorteio</td>
+            <td>Jogadores avulsos adicionados na convocação são pré-carregados na seção <em>Extras</em> do sorteio ao abrir o campeonato ativo.</td>
+          </tr>
+          <tr>
+            <td>Distribuição por time</td>
+            <td>O número mínimo de jogadores por time é <code>floor(total ÷ times)</code>; os jogadores excedentes são distribuídos um a um nos primeiros times (diferença máxima de 1). Dentro dessas restrições de tamanho, o algoritmo greedy equilibra as estrelas e realiza trocas para minimizar a diferença de média entre times.</td>
+          </tr>
+          <tr>
+            <td>🧤 Goleiros</td>
+            <td>Goleiros são alocados primeiro — um por time, na ordem das estrelas. Se houver mais goleiros do que times, os excedentes entram no sorteio normal como linha de campo; um aviso é exibido neste caso.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Do resultado do sorteio até criar o campeonato</div>
+        Depois de sortear, cada time mostra seu elenco e uma fileira de bolinhas coloridas — toque numa para dar a cor daquele time (a cor já usada por outro time some das opções). Quando todos os times tiverem cor, aparece <strong>Usar estes times no campeonato ↓</strong>: ele leva para a tela de revisão, com as cores e os jogadores de cada time já pré-marcados — a aba muda de nome para <strong>🎲 Times do Sorteio</strong>, deixando claro que aquilo veio do sorteio, não de escolha manual. Só volta a se chamar <strong>✋ Montar Manualmente</strong> se você tocar nela de propósito, para editar os times à mão a partir dali.
+      </div>
+
+      <h3>Gerenciar elenco do campeonato</h3>
+      <p>Após a criação do campeonato, os elencos registrados ficam visíveis em uma seção colapsável <strong>👥 Elencos</strong> — tanto no campeonato ativo quanto nos finalizados. O cabeçalho de cada time exibe o <strong>total de estrelas do elenco naquele campeonato</strong> (soma das estrelas individuais de cada jogador registrado), facilitando a comparação do peso técnico dos times em cada edição.</p>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Admin</div>
+        Apenas admins veem o botão <strong>✕</strong> ao lado de cada jogador. Clicar nele remove o jogador do elenco daquele time imediatamente, sem confirmação.
+      </div>
+
+      <p>Remover um jogador do elenco afeta a regra de presença: se removido de um campeonato pós 02/09/2026, aquele campeonato deixa de contar para as estatísticas de participação desse jogador.</p>
+
+      <h3>🧤 Goleiros</h3>
+      <p>O admin pode marcar qualquer jogador como goleiro diretamente na lista de jogadores. O campo é um toggle individual — o botão 🧤 aparece em cada linha, destacado em azul quando ativo.</p>
+
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Badge 🧤</div>
+          <div class="ind-desc">Jogadores com o campo ativo exibem o ícone 🧤 azul ao lado do nome na lista de jogadores, na lista de presença da convocação e no resultado do sorteio.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Sorteio</div>
+          <div class="ind-desc">Goleiros são posicionados primeiro no sorteio: um por time, em ordem decrescente de estrelas. Se houver mais goleiros que times, os excedentes entram como linha de campo e um aviso é exibido.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Artilharia</div>
+          <div class="ind-desc">Goleiros <strong>contam normalmente</strong> para todos os rankings de gols e artilharia — o campo não afeta esse cálculo.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Jejum de Gols</div>
+          <div class="ind-desc">Goleiros são <strong>excluídos</strong> do ranking de jejum de gols (aba Stats e aba EU), pois não é esperado que marquem com regularidade.</div>
+        </div>
+      </div>
+
+      <h3>🥉 Disputa de 3º e 4º lugar</h3>
+      <p>É possível substituir as partidas restantes da fase de grupos por uma disputa de 3º e 4º lugar antes da final — algo decidido no andamento do campeonato, sem previsão antecipada.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>Como acionar</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Campeonato ativo</td>
+            <td>Botão <strong>🥉 Encerrar + Disputa de 3º Lugar</strong>, visível quando ao menos 2 partidas foram disputadas e há 4 ou mais times.</td>
+            <td>As partidas não disputadas da fase regular são removidas. O sistema classifica os times pela tabela atual e cria automaticamente a partida de 3º lugar (3º vs 4º) e a final (1º vs 2º).</td>
+          </tr>
+          <tr>
+            <td>Campeonato finalizado (retroativo)</td>
+            <td>Botão <strong>🥉 Adicionar disputa de 3º lugar</strong>, visível apenas para admins no Histórico, quando o campeonato já tem campeão, tem 4+ times e ainda não tem partida de 3º lugar registrada.</td>
+            <td>Cria a partida de 3º lugar baseada na classificação final. Para registrar o placar, um botão <strong>⚽ Registrar placar do 3º lugar</strong> aparece abaixo do card da partida.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Nota</div>
+        A disputa de 3º lugar não interfere no campeão nem nas estatísticas de título — serve apenas para registro histórico do resultado entre o 3º e 4º colocados.
+      </div>
+    </section>
+
+    <!-- 12. Financeiro -->
+    <section class="section" id="financeiro">
+      <h2 class="section-title"><span class="sn">12</span> Financeiro</h2>
+      <p>O módulo financeiro registra pagamentos de mensalidade e churrasco por campeonato, controla a reserva do time e exibe o caixa consolidado.</p>
+
+      <div class="callout">
+        <div class="callout-label">Visibilidade do churrasco</div>
+        Campos e botões relacionados ao churrasco são condicionais às configurações da liga: o <strong>toggle 🍖 Churrasco</strong> na convocação só aparece se <em>Tem Churrasco</em> estiver ativado; a <strong>coluna de churrasco</strong> no resumo do mês e os <strong>botões 🍖 e Ambos</strong> na lista de pagamentos só aparecem quando o churrasco está configurado como <em>cobrado separado</em>. Em ligas com churrasco incluso na mensalidade esses controles são ocultados.
+      </div>
+
+      <h3>Valores configuráveis</h3>
+      <table class="data-table">
+        <thead><tr><th>Campo</th><th>Descrição</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Valor Mensalidade</td>
+            <td>Valor cobrado por jogo de cada jogador regular.</td>
+          </tr>
+          <tr>
+            <td>Valor Churrasco</td>
+            <td>Adicional cobrado de jogadores regulares que participam do churrasco (sobre a mensalidade). <strong>Visível apenas quando o churrasco é cobrado separado.</strong></td>
+          </tr>
+          <tr>
+            <td>Valor Só Churrasco</td>
+            <td>Valor cobrado de quem <strong>não joga</strong>, apenas participa do churrasco. Esse jogador tem o campo <em>Só Churrasco</em> marcado no cadastro. O cálculo de mensalidade não se aplica. <strong>Visível apenas quando o churrasco está ativado na liga.</strong></td>
+          </tr>
+          <tr>
+            <td>Reserva</td>
+            <td>Valor mínimo mantido no caixa. O saldo disponível exibe o caixa total menos a reserva.</td>
+          </tr>
+          <tr>
+            <td>Valor Avulso</td>
+            <td>Valor cobrado de jogadores avulsos adicionados na convocação. Também usado para lançamentos manuais não padronizados (padrão: R$20).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Regra de cálculo por jogador</h3>
+      <div class="callout blue">
+        <div class="callout-label blue">Fórmula</div>
+        <strong>Jogador regular:</strong> total = (mensalidade se pagou mensalidade) + (churrasco se pagou churrasco)<br>
+        <strong>Só Churrasco:</strong> total = (valor só churrasco se pagou churrasco) — sem mensalidade
+      </div>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Importante</div>
+        Jogadores marcados como <em>Só Churrasco</em> não têm cobrança de mensalidade. A cobrança de churrasco para eles usa o campo <strong>Valor Só Churrasco</strong>, e não o campo Valor Churrasco dos demais.
+      </div>
+
+      <h3>🔑 Chave PIX</h3>
+      <p>Em ⚙️ Configurar valores, há um campo <strong>Chave PIX</strong> (CPF, e-mail, telefone ou chave aleatória). Quando preenchido, a chave é incluída automaticamente nas mensagens de cobrança enviadas pelo WhatsApp.</p>
+
+      <h3>💬 Cobrar mensalidade via WhatsApp</h3>
+      <p>Na lista de contribuições do mês, todo jogador regular com mensalidade <strong>em aberto</strong> e WhatsApp cadastrado exibe um botão 💬 ao lado do nome (exclusivo do admin). A mensagem varia conforme o dia de vencimento configurado:</p>
+
+      <div class="example">
+        <div class="ex-label">Antes do vencimento</div>
+        ⚽ Olá, <em>[nome]</em>!<br><br>
+        Lembrando que sua mensalidade do <strong>Futebol ACEOMA</strong> de <em>[mês]</em> vence em <strong>DD/MM/AAAA</strong>.<br><br>
+        💰 Valor: R$ <em>[valor]</em><br>
+        🔑 Chave PIX: <em>[chave]</em>
+      </div>
+
+      <div class="example">
+        <div class="ex-label">No vencimento ou depois (em atraso)</div>
+        ⚽ Olá, <em>[nome]</em>!<br><br>
+        Sua mensalidade do <strong>Futebol ACEOMA</strong> de <em>[mês]</em> está <strong>em atraso</strong>.<br><br>
+        💰 Valor: R$ <em>[valor]</em><br>
+        🔑 Chave PIX: <em>[chave]</em>
+      </div>
+
+      <p>O botão 💬 desaparece automaticamente quando a mensalidade é marcada como paga. Jogadores marcados como <em>Só Churrasco</em> não têm botão de cobrança de mensalidade. A linha do PIX aparece apenas se a chave estiver configurada.</p>
+    </section>
+
+    <!-- 13. Conquistas (Badges) -->
+    <section class="section" id="conquistas">
+      <h2 class="section-title"><span class="sn">13</span> Conquistas (Badges)</h2>
+      <p>A aba EU exibe um painel de conquistas individuais. Cada badge representa um critério específico; badges conquistadas são exibidas em destaque e as pendentes aparecem bloqueadas (🔒). Clicar em qualquer badge abre uma legenda com o critério completo.</p>
+      <div class="callout">
+        <div class="callout-label">Visibilidade</div>
+        Badges não conquistadas ficam visíveis (<strong>bloqueadas</strong>) apenas no próprio perfil do jogador. Ao visitar o perfil de outro jogador, todas as badges dele são visíveis — conquistadas e pendentes.
+      </div>
+      <h3>Presença</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>⭐ Estreante</td><td>Participou do 1º campeonato</td></tr>
+        <tr><td>📆 [Dia] é Sagrada</td><td>90%+ de presença nos campeonatos (mín. 5 realizados). O nome desta badge muda conforme o dia de jogo configurado — ex.: <em>Terça é Sagrada</em>, <em>Sábado é Sagrado</em>, <em>Quinta é Sagrada</em>.</td></tr>
+        <tr><td>🎖️ Veterano</td><td>Participou de 10 ou mais campeonatos</td></tr>
+      </tbody></table>
+      <h3>Desempenho</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>📈 Vencedor Nato</td><td>50%+ de taxa de vitória com no mínimo 5 campeonatos disputados (pós CUTOFF)</td></tr>
+        <tr><td>🛡️ Invicto</td><td>Campeão de ao menos 1 campeonato sem que seu time perdesse nenhuma partida</td></tr>
+      </tbody></table>
+      <h3>Títulos inteiros (qualquer ordem)</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🏆 Campeão</td><td>Pelo menos 1 título inteiro</td></tr>
+        <tr><td>🌟 Ídolo</td><td>5 títulos inteiros</td></tr>
+        <tr><td>⚜️ Lenda</td><td>10 títulos inteiros</td></tr>
+      </tbody></table>
+      <h3>Títulos consecutivos (inteiros e seguidos)</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🥇 Bicampeão</td><td>2 títulos inteiros consecutivos</td></tr>
+        <tr><td>🏅 Tricampeão</td><td>3 títulos inteiros consecutivos</td></tr>
+        <tr><td>💎 Tetracampeão</td><td>4 títulos inteiros consecutivos</td></tr>
+        <tr><td>👑 Pentacampeão</td><td>5 títulos inteiros consecutivos</td></tr>
+        <tr><td>🔱 Campeão Supremo</td><td>10 títulos inteiros consecutivos</td></tr>
+      </tbody></table>
+      <h3>½ Títulos</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🌗 Meio Campeão</td><td>Pelo menos 1 título com ½ participação</td></tr>
+        <tr><td>🌛 Tri-Meio Campeão</td><td>3 meios títulos</td></tr>
+        <tr><td>🃏 Coringa</td><td>5 meios títulos</td></tr>
+        <tr><td>🤌 Só Meiotando</td><td>Tem mais meios títulos do que títulos inteiros</td></tr>
+      </tbody></table>
+      <h3>Vice-Campeão</h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🍿 Pipoca</td><td>Vice-campeão em 3 campeonatos consecutivos — o time chegou à final mas perdeu 3 vezes seguidas</td></tr>
+      </tbody></table>
+      <h3>Gols totais <span class="tag">Linha de campo</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🤤 Fome de Gol</td><td>25 ou mais gols no total</td></tr>
+        <tr><td>☄️ Haaland do [nome da liga]</td><td>50 ou mais gols no total. O nome desta badge é dinâmico — exibe o nome da liga atual do jogador (ex.: <em>Haaland da Aceoma</em>, <em>Haaland da Liga X</em>).</td></tr>
+        <tr><td>💯 Vou te alcançar, CR7!!</td><td>100 ou mais gols no total</td></tr>
+      </tbody></table>
+      <h3>Artilharia de campeonato <span class="tag">Linha de campo</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>⚽ Artilheiro</td><td>Artilheiro de ao menos 1 campeonato</td></tr>
+        <tr><td>🥉 Chuteira de Bronze</td><td>Artilheiro em 5 campeonatos</td></tr>
+        <tr><td>🥈 Chuteira de Prata</td><td>Artilheiro em 10 campeonatos</td></tr>
+        <tr><td>✨ Chuteira de Ouro</td><td>Artilheiro em 20 campeonatos</td></tr>
+      </tbody></table>
+      <h3>Artilharia de final <span class="tag">Linha de campo</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🎯 Artilheiro da Final</td><td>Artilheiro em pelo menos 1 final (qualquer resultado)</td></tr>
+        <tr><td>💡 Decisivo</td><td>Artilheiro da final <strong>e campeão</strong> em 3 campeonatos — só conta se o time do jogador ganhou</td></tr>
+        <tr><td>🔑 Sempre Decisivo</td><td>Artilheiro da final <strong>e campeão</strong> em 5 campeonatos</td></tr>
+        <tr><td>🦸 Decide Todas</td><td>Artilheiro da final <strong>e campeão</strong> em 10 campeonatos</td></tr>
+      </tbody></table>
+      <div class="callout warn">
+        <div class="callout-label warn">Mudança nos critérios</div>
+        As badges <strong>Decisivo</strong>, <strong>Sempre Decisivo</strong> e <strong>Decide Todas</strong> agora exigem que o jogador tenha sido artilheiro da final <em>e</em> que seu time tenha vencido o campeonato. Apenas a badge <strong>Artilheiro da Final</strong> continua contando independente do resultado.
+      </div>
+      <h3>Partidas e records <span class="tag">Linha de campo</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>⚽ Doblete</td><td>2 gols em uma única partida</td></tr>
+        <tr><td>🔥 Hat-trick</td><td>3 ou mais gols em uma única partida</td></tr>
+        <tr><td>♠️ Poker</td><td>4 gols em uma única partida</td></tr>
+        <tr><td>🖐️ Manita</td><td>5 gols em uma única partida</td></tr>
+        <tr><td>🎩 Duplo Hat-trick</td><td>6 gols em uma única partida</td></tr>
+        <tr><td>🔄 Viciado em Hat-trick</td><td>Hat-trick em 5 campeonatos consecutivos (em todos os 5 o jogador precisou estar inscrito no elenco e ter marcado 3+ gols em alguma partida)</td></tr>
+        <tr><td>😭 Gols, Glória e... Derrota!</td><td>Marcou hat-trick em uma final, mas seu time perdeu — referência ao hat-trick de Mbappé na final da Copa do Mundo de 2022</td></tr>
+        <tr><td>🌟 Melhor que o Mbappé</td><td>Marcou hat-trick em uma final e seu time venceu o campeonato</td></tr>
+        <tr><td>💥 Goleador</td><td>10 ou mais gols em um único campeonato</td></tr>
+        <tr><td>⚡ Máquina de Gols</td><td>Média <strong>acima de 1,0</strong> gol por jogo em ao menos 1 campeonato (estritamente maior que 1,0 — empate não conta)</td></tr>
+        <tr><td>💪 Eu sou bom, meu empresário que é ruim</td><td>Ser o artilheiro do campeonato com o próprio time ficando em último lugar na fase regular</td></tr>
+      </tbody></table>
+      <h3>Presença emprestada <span class="tag">Todos os jogadores</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🙋 Fominha</td><td>3 ou mais jogos emprestados em um único campeonato</td></tr>
+        <tr><td>🌪️ Jogo Todas</td><td>6 ou mais jogos emprestados em um único campeonato</td></tr>
+      </tbody></table>
+      <div class="callout">
+        <div class="callout-label">O que é "emprestado"</div>
+        Um jogador é considerado emprestado em uma partida quando: (a) está na lista <em>participants</em> daquela partida, ou (b) marcou um gol em uma partida cujo time não era o seu time registrado no campeonato.
+      </div>
+      <h3>Goleiro <span class="tag blue">Exclusivo 🧤</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🧤 Paredão</td><td>70% ou mais de clean sheets (jogos sem sofrer gol) em ao menos 1 campeonato</td></tr>
+        <tr><td>🙏 Tafarel</td><td>Campeão em uma final que terminou empatada (decidida nos pênaltis)</td></tr>
+      </tbody></table>
+      <h3>Pênaltis na final <span class="tag">Todos os jogadores</span></h3>
+      <p>Estas badges dependem do registro de <strong>quem perdeu pênalti</strong> na disputa — um passo opcional que aparece logo após o admin selecionar o time vencedor nos pênaltis. O admin seleciona os jogadores que erraram; o sistema determina se o time deles venceu ou perdeu.</p>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>😭 Baggio</td><td>Perdeu pênalti na final <strong>e</strong> o título foi embora junto — o time do jogador perdeu a disputa</td></tr>
+        <tr><td>🙌 Salvo pelos companheiros</td><td>Perdeu pênalti na final, mas o time venceu assim mesmo — alguém compensou o erro</td></tr>
+      </tbody></table>
+      <div class="callout">
+        <div class="callout-label">Como registrar</div>
+        Ao selecionar o vencedor nos pênaltis, um segundo passo aparece: <strong>"Quem perdeu pênalti?"</strong> — o admin toca nos jogadores que erraram (de qualquer time). Este passo é opcional; se pulado, as badges não são atribuídas naquele campeonato.
+      </div>
+      <h3>Estatísticas de pênaltis perdidos em final</h3>
+      <p>Além das badges, o sistema contabiliza o total de pênaltis perdidos em finais por cada jogador como uma <strong>estatística histórica</strong>.</p>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Aba EU — Recordes Pessoais</div>
+          <div class="ind-desc">Linha <strong>"Pênaltis perdidos em final"</strong> aparece quando o valor é maior que zero. O subtítulo detalha quantos resultaram em derrota de título e quantos o time venceu mesmo assim.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Aba Stats — Ranking</div>
+          <div class="ind-desc">Card <strong>"😬 Pênaltis Perdidos em Final"</strong> com ranking de todos os jogadores que já erraram, mostrando total, vezes que perdeu o título (😭) e vezes que foi salvo (🙌). Só aparece quando há pelo menos um registro.</div>
+        </div>
+      </div>
+      <h3>Financeiro <span class="tag">Visível apenas com mensalidade ativa</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>😇 Sonho do Adm</td><td>Mensalidade do <strong>mês atual</strong> marcada como paga em Financeiro. Não se aplica a jogadores marcados como <em>Só Churrasco</em> (não pagam mensalidade). Só existe em ligas com Valor da Mensalidade configurado acima de zero.</td></tr>
+        <tr><td>😎 Devendo e Luxando</td><td>Foi campeão (título inteiro) em um campeonato cujo mês, no Financeiro, teve a mensalidade dele <strong>paga depois do dia de vencimento</strong> (ou ainda não paga até hoje, com o vencimento daquele mês já passado). Não se aplica a <em>Só Churrasco</em>. Considera todo o histórico de campeonatos, não só os recentes.</td></tr>
+      </tbody></table>
+      <div class="callout warn">
+        <div class="callout-label warn">Sonho do Adm é dinâmica; Devendo e Luxando é permanente</div>
+        <strong>Sonho do Adm</strong> reflete o mês corrente e pode aparecer e desaparecer conforme o pagamento é marcado/desmarcado ou o mês vira — não representa uma conquista fixa. <strong>Devendo e Luxando</strong>, por usar a <strong>data em que o admin marcou o pagamento como feito</strong> (e não apenas o status atual pago/não pago), é estável: uma vez que o jogador pagou depois do vencimento daquele mês, a badge permanece mesmo que o histórico financeiro seja revisado depois. A única exceção são pagamentos marcados como pagos <em>antes</em> desta funcionalidade existir, que não têm data registrada — nesses casos a badge não é concedida, para não arriscar afirmar algo que o sistema não pode confirmar.
+      </div>
+      <h3>Votação <span class="tag">Visível apenas com a votação ligada na liga</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🥰 Xodó da Galera</td><td>Eleito <strong>Bola Cheia</strong> (destaque positivo) 1 vez</td></tr>
+        <tr><td>🏛️ Patrimônio do {Liga}</td><td>Eleito Bola Cheia 3 vezes</td></tr>
+        <tr><td>🤴 Rei do {Liga}</td><td>Eleito Bola Cheia 5 vezes</td></tr>
+        <tr><td>🪵 Perna de Pau</td><td>Eleito <strong>Bola Murcha</strong> (destaque negativo) 1 vez</td></tr>
+        <tr><td>🚧 Cone Oficial</td><td>Eleito Bola Murcha 3 vezes</td></tr>
+        <tr><td>🐟 Bagre de Carteirinha</td><td>Eleito Bola Murcha 5 vezes</td></tr>
+        <tr><td>🎒 Carregado</td><td>Eleito Bola Murcha em um campeonato em que também foi campeão com título inteiro</td></tr>
+        <tr><td>🦸 Craque de Time Pequeno</td><td>Eleito Bola Cheia em um campeonato em que o time dele ficou em último lugar na fase regular</td></tr>
+        <tr><td>🪄 Dia/Tarde/Noite Mágica</td><td>Artilheiro do campeonato, artilheiro da final, campeão <strong>e</strong> Bola Cheia — as quatro coisas no mesmo campeonato. Nome dinâmico, ver detalhe na seção 18.</td></tr>
+      </tbody></table>
+      <p>Detalhes de como funciona a votação, prazos e empates na seção <a href="#votacao" style="color: var(--accent)">18 — Votação de Destaques</a>.</p>
+      <h3>Churrasco <span class="tag">Visível apenas com churrasco ativado</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🍖 Só vim pra comer</td><td>Compareceu a pelo menos 1 dia de churrasco, mas tem menos de 60% de presença nos campeonatos realizados no período</td></tr>
+        <tr><td>🍖 Pelo menos tinha churrasco</td><td>Estava no elenco do time que terminou em <strong>último lugar</strong> em um campeonato que teve churrasco. O último lugar é apurado pela tabela de pontos de todas as fases exceto final e semifinal — ou seja, quando há disputa de 3º lugar, o resultado dela <strong>também entra</strong> nessa classificação.</td></tr>
+      </tbody></table>
+      <div class="callout">
+        <div class="callout-label">Visibilidade condicional</div>
+        Estas badges — tanto conquistadas quanto bloqueadas — só aparecem no painel de Conquistas quando a liga tem o churrasco habilitado nas configurações. Em ligas sem churrasco, as badges não existem.
+      </div>
+      <h3>Cores de Times <span class="tag">Todos os jogadores</span></h3>
+      <p>Badges relacionadas às cores de times em que o jogador participou ou venceu campeonatos. Todas as contagens são históricas — sem restrição de data. As badges individuais por cor só aparecem no painel se aquela cor estiver habilitada na liga. As badges "todas as cores" usam as cores disponíveis no momento.</p>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🌍 Loco Abreu</td><td>Jogou em campeonato de cada cor disponível na liga. Reflete as cores habilitadas no momento — se a liga adicionar uma nova cor, a badge exige aquela cor também.</td></tr>
+        <tr><td>🎨 Paleta de Ouro</td><td>Venceu campeonato com cada cor disponível na liga. Mesmo critério dinâmico do Loco Abreu, mas exige título em vez de apenas participação.</td></tr>
+      </tbody></table>
+      <table class="data-table" style="margin-top:10px"><thead><tr><th>Badge (título com cada cor)</th><th>Critério</th><th>Visível</th></tr></thead><tbody>
+        <tr><td>💙 Azul Não Chora</td><td>Campeão pelo time Azul</td><td>Só se Azul habilitado</td></tr>
+        <tr><td>🖤 Ouro Negro</td><td>Campeão pelo time Preto</td><td>Só se Preto habilitado</td></tr>
+        <tr><td>💛 Não Amarelou</td><td>Campeão pelo time Amarelo</td><td>Só se Amarelo habilitado</td></tr>
+        <tr><td>❤️ No Vermelho Não</td><td>Campeão pelo time Vermelho</td><td>Só se Vermelho habilitado</td></tr>
+        <tr><td>🧡 Agente Laranja</td><td>Campeão pelo time Laranja</td><td>Só se Laranja habilitado</td></tr>
+        <tr><td>💚 Verde que te Quero Campeão</td><td>Campeão pelo time Verde</td><td>Só se Verde habilitado</td></tr>
+        <tr><td>💜 Roxo de Tanto Ganhar</td><td>Campeão pelo time Roxo</td><td>Só se Roxo habilitado</td></tr>
+        <tr><td>🏆 Cinquenta Tons de Taça</td><td>Campeão pelo time Cinza</td><td>Só se Cinza habilitado</td></tr>
+        <tr><td>🌸 Ganhou de Rosinha</td><td>Campeão pelo time Rosa</td><td>Só se Rosa habilitado</td></tr>
+        <tr><td>👻 Fantasma Campeão</td><td>Campeão pelo time Branco</td><td>Só se Branco habilitado</td></tr>
+      </tbody></table>
+      <h3>Superação <span class="tag">Todos os jogadores</span></h3>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
+        <tr><td>🔄 Virou SAF</td><td>O jogador estava no elenco do time em <strong>último lugar na fase regular</strong> de um campeonato e foi <strong>campeão</strong> (título inteiro) no campeonato imediatamente seguinte. Ambos os campeonatos precisam ter elencos registrados. O último lugar é definido pelos pontos da fase regular apenas.</td></tr>
+      </tbody></table>
+      <h3>Conquistas Especiais <span class="tag warn">Únicas e intransferíveis</span></h3>
+      <p>Badges únicas atribuídas manualmente a jogadores específicos, em reconhecimento a conquistas históricas de eras anteriores ao sistema atual. O ícone é um troféu envelhecido (tom âmbar escuro para Amadora, bronze para Semi Profissional). Todos os jogadores veem essas badges no painel — bloqueadas para os demais, o que as torna automaticamente as mais raras de Alex e Cesar.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Exclusivas da liga Aceoma</div>
+        Estas badges são visíveis <strong>apenas na liga Aceoma</strong>. Em outras ligas, elas não aparecem no painel de conquistas.
+      </div>
+      <table class="data-table"><thead><tr><th>Badge</th><th>Jogador</th><th>Motivo</th></tr></thead><tbody>
+        <tr><td>🏆 Maior Campeão era Amadora (2º sem 2025)</td><td><strong>Alex</strong></td><td>Maior campeão da era amadora — 2º semestre de 2025</td></tr>
+        <tr><td>🏆 Maior Campeão era Semi Profissional (1º sem 2026)</td><td><strong>Cesar</strong></td><td>Maior campeão da era semi profissional — 1º semestre de 2026</td></tr>
+      </tbody></table>
+      <div class="callout gold">
+        <div class="callout-label gold">Visibilidade por tipo</div>
+        Badges marcadas como <strong>Linha de campo</strong> ficam ocultas do perfil de goleiros. Badges marcadas como <strong>Goleiro</strong> ficam ocultas dos jogadores de linha. <strong>Conquistas Especiais</strong> aparecem para todos (na liga Aceoma) — como bloqueadas para quem não é o jogador designado —, sendo automaticamente as mais raras desses jogadores. A contagem total do painel inclui essas badges para todos os jogadores que as veem.
+      </div>
+      <h3>Detalhe de badge</h3>
+      <p>Ao clicar em qualquer badge (conquistada ou bloqueada), um painel exibe o critério completo, o <strong>percentual de jogadores elegíveis</strong> que já conquistaram aquela badge e a <strong>lista completa de detentores</strong> em ordem de participação — os jogadores com mais campeonatos disputados aparecem primeiro como proxy de quem a conquistou mais cedo.</p>
+      <h3>Badge mais rara no elenco</h3>
+      <p>No visualizador de elenco de cada campeonato (seção 👥 Elencos), o ícone da <strong>badge mais rara</strong> de cada jogador aparece ao lado do seu nome — a badge que poucos outros jogadores possuem. Isso permite ver rapidamente quais jogadores têm conquistas únicas dentro daquele grupo.</p>
+      <h3>Modo de teste (admin)</h3>
+      <p>Na aba EU, o admin vê um botão <strong>🧪 ver todas</strong> no cabeçalho do card de Conquistas. Ao ativar, todas as badges são exibidas como conquistadas — útil para visualizar o ícone e o SVG de cada badge sem precisar que os critérios estejam cumpridos. Clicar novamente em <strong>🔓 ver real</strong> volta ao estado real do jogador selecionado. Este modo é visual apenas e não altera nenhum dado.</p>
+    </section>
+
+    <!-- 14. Painel Admin -->
+    <section class="section" id="admin">
+      <h2 class="section-title"><span class="sn">14</span> Painel Admin</h2>
+      <p>O botão ⚙️ no cabeçalho abre o Painel Admin, exclusivo para administradores. Exibe um badge vermelho com o total de itens pendentes (aprovações + solicitações de vinculação) quando há algo aguardando ação.</p>
+
+      <h3>Aprovações pendentes</h3>
+      <p>Novos usuários que criaram conta ficam com status <em>pendente</em> até o admin aprovar ou rejeitar. Ao aprovar, o admin pode vincular o usuário a um jogador do elenco ao mesmo tempo. O badge no ⚙️ é atualizado ao abrir o aplicativo, ao voltar para ele (se passou mais de 1 minuto) e ao abrir o Painel Admin. A lista de membros vem do servidor, pela função <code>listMembers</code>, que só responde ao admin da liga. Aprovar, rejeitar, promover a admin e vincular jogadores são executados <strong>pelo servidor</strong>, que confirma que quem clicou é admin daquela liga (ver a seção 20). Se aparecer um erro dizendo que só administradores podem fazer aquilo, recarregue a página e tente de novo.</p>
+
+      <h3>Solicitações de vinculação de perfil</h3>
+      <p>Um usuário já aprovado mas sem perfil vinculado verá a tela "Perfil não configurado" com o botão <strong>Solicitar vinculação</strong>. Ao clicar, uma solicitação é registrada; o badge no ⚙️ do admin a mostra na próxima atualização (ao abrir o aplicativo, voltar para ele ou abrir o Painel Admin).</p>
+      <p>O admin escolhe o jogador correspondente na lista suspensa e clica <strong>Vincular</strong>, ou <strong>Descartar</strong> para ignorar a solicitação sem vincular.</p>
+
+      <h3>Notificações push</h3>
+      <p>O app envia notificações push automáticas via Firebase Cloud Messaging (FCM). Para recebê-las, o jogador precisa autorizar notificações no navegador — um banner de ativação aparece no app para quem ainda não autorizou.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Evento</th><th>Quem recebe</th><th>Conteúdo</th></tr></thead>
+        <tbody>
+          <tr><td>📋 Nova convocação</td><td>Todos os jogadores ativos da liga</td><td>Data do evento e se terá churrasco. Ao tocar, abre a aba EU para confirmar presença.</td></tr>
+          <tr><td>🏆 Campeonato finalizado</td><td>Todos os jogadores ativos da liga</td><td>Nome do time campeão. Ao tocar, abre o Histórico.</td></tr>
+          <tr><td>💰 Nova mensalidade</td><td>O jogador cobrado</td><td>Valor da cobrança gerada. Ao tocar, abre o Financeiro.</td></tr>
+          <tr><td>🏅 Nova badge conquistada</td><td>O próprio jogador</td><td>Nome da badge desbloqueada. Ao tocar, abre a aba EU (Conquistas).</td></tr>
+          <tr><td>🗳️ Votação aberta</td><td>Só os jogadores que estavam no elenco daquele campeonato (e têm conta vinculada)</td><td>Campeonato, prêmios em votação e prazo. Enviada quando a votação abre (ao finalizar o campeonato ou ao usar <em>Abrir votação</em>) e reenviada pelo botão <em>🔔 Avisar jogadores</em>. Ao tocar, abre a aba EU, onde está o banner de voto.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Como funciona</div>
+        Disparado por <strong>Firebase Cloud Functions</strong> que escutam mudanças no Firestore em tempo real. O token FCM de cada dispositivo é armazenado automaticamente quando as notificações são autorizadas. Tokens que o Firebase informa estarem inválidos são removidos automaticamente do cadastro do usuário.
+      </div>
+
+      <h3>Notificação duplicada</h3>
+      <p>Cada envio carrega uma <strong>etiqueta do evento</strong> (por exemplo, a votação de um campeonato). Se o mesmo aviso chegar mais de uma vez ao mesmo navegador, ele <strong>substitui</strong> o anterior em vez de empilhar. O aplicativo em segundo plano deixou de exibir uma segunda cópia por conta própria — o navegador já exibe a que vem do servidor. Aparelhos com a versão antiga do aplicativo passam a usar a nova assim que o app é aberto uma vez.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Ainda pode aparecer em dobro</div>
+        Um mesmo celular que use o site em <strong>dois navegadores</strong> (ex.: Chrome e o app instalado na tela inicial no iPhone) tem dois cadastros de notificação independentes e recebe um aviso em cada um. Para receber uma vez só, ative as notificações em apenas um deles.
+      </div>
+
+      <h3>Churrasco retroativo no histórico <span class="tag">Visível apenas com churrasco ativado</span></h3>
+      <p>Ao abrir um campeonato finalizado na aba <strong>Histórico</strong>, o admin vê o botão <strong>🍖 Sem churrasco</strong> / <strong>🍖 Com churrasco</strong> na barra superior. Clicando nele, o campo <code>churrasco</code> do campeonato é alterado no Firestore imediatamente, permitindo corrigir casos em que a marcação foi esquecida durante a convocação.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Efeito</div>
+        Alterar o churrasco de um campeonato concluído recalcula automaticamente as badges <strong>🍖 Só vim pra comer</strong> e <strong>🍖 Pelo menos tinha churrasco</strong> para todos os membros daquele campeonato na próxima abertura do app.
+      </div>
+
+      <h3>Reativar notificações após bloqueio</h3>
+      <p>Se o usuário negou a permissão de notificações no navegador, o app exibe um aviso em laranja com orientações. Para reativar:</p>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">Chrome Android</strong> — toque no ícone de cadeado ou ℹ️ na barra de endereços → <em>Permissões</em> → ativar <em>Notificações</em></li>
+        <li><strong style="color: var(--text)">iOS Safari</strong> — acesse <em>Ajustes → Apps → Safari → Configurações de site → Notificações</em> ou pelo botão de compartilhamento do site</li>
+      </ul>
+      <p>Após reativar no sistema, reabra o app e as notificações serão registradas automaticamente.</p>
+    </section>
+
+    <!-- 16. Previsão do Tempo -->
+    <section class="section" id="clima">
+      <h2 class="section-title"><span class="sn">16</span> Previsão do Tempo</h2>
+      <p>O app exibe automaticamente a previsão do tempo para o horário do próximo campeonato, visível na aba <strong>Jogo</strong> quando há uma convocação aberta ou um campeonato ativo (sem campeão definido).</p>
+
+      <h3>Configuração inicial (admin)</h3>
+      <p>Para que a previsão funcione, o admin precisa configurar duas informações em <strong>⚙️ Painel Admin → Configurações da liga → 🌤 Previsão do tempo</strong>:</p>
+
+      <table class="data-table">
+        <thead><tr><th>Configuração</th><th>Como definir</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Horário padrão dos jogos</td>
+            <td>Dois seletores (hora e minuto) + botão <strong>Salvar</strong>. Define o horário padrão dos campeonatos da liga — normalmente sempre o mesmo. A previsão será buscada para esse horário específico. Nada é salvo automaticamente: escolha a hora e o minuto desejados e toque em Salvar.</td>
+          </tr>
+          <tr>
+            <td>Local dos jogos</td>
+            <td>Campo de busca por endereço, nome do local, bairro ou cidade — digite e toque em <strong>🔍 Buscar</strong>, depois selecione o resultado correto na lista. Alternativamente, o botão <strong>📍 Ou usar localização atual</strong> captura o GPS do dispositivo no momento (exige estar fisicamente no local).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Busca por endereço</div>
+        A busca usa a API de geocodificação gratuita do Open-Meteo (mesmo provedor da previsão, sem necessidade de chave). Basta digitar o nome do local ou endereço — não é necessário estar no local no momento da configuração.
+      </div>
+
+      <h3>Como funciona</h3>
+      <table class="data-table">
+        <thead><tr><th>Etapa</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Coordenadas</td>
+            <td>Usa as coordenadas do local dos jogos salvas pelo admin no Firestore — <strong>não</strong> a localização do dispositivo em tempo real. Nenhuma permissão de geolocalização é solicitada aos jogadores.</td>
+          </tr>
+          <tr>
+            <td>Dados meteorológicos</td>
+            <td>Usa a API <strong>Open-Meteo</strong> (gratuita, sem chave). Busca dados horários para retornar a temperatura, probabilidade de precipitação e velocidade do vento <strong>no horário configurado da partida</strong>.</td>
+          </tr>
+          <tr>
+            <td>Alcance</td>
+            <td>Disponível para campeonatos com até <strong>16 dias de antecedência</strong>. Para datas além desse prazo, é exibida uma mensagem indicando que a previsão ainda não está disponível.</td>
+          </tr>
+          <tr>
+            <td>Cache</td>
+            <td>A previsão é armazenada na memória da sessão. O botão <strong>↺</strong> força uma nova busca quando necessário.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Onde aparece</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Convocação aberta</div>
+          <div class="ind-desc">Aparece entre o cabeçalho do card "📅 Próximo Campeonato" e a lista de confirmados/recusados.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Campeonato ativo</div>
+          <div class="ind-desc">Aparece logo abaixo da barra de data/formato/times, enquanto o campeão ainda não foi definido.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Aba EU (Meu Craque)</div>
+          <div class="ind-desc">Aparece logo abaixo do banner de convocação ("Você vai participar?"), nos três estados: pendente, presença confirmada e não vou. É a tela que abre ao tocar na notificação de convocação.</div>
+        </div>
+      </div>
+
+      <h3>Informações exibidas</h3>
+      <div class="ind-grid">
+        <div class="ind-card"><div class="ind-name">Ícone + descrição</div><div class="ind-desc">Emoji e texto baseados no código WMO do tempo (☀️ Céu limpo, 🌧️ Chuva, ⛈️ Trovoada, etc.).</div></div>
+        <div class="ind-card"><div class="ind-name">Temperatura</div><div class="ind-desc">Temperatura prevista no horário da partida em °C.</div></div>
+        <div class="ind-card"><div class="ind-name">🌧 Precipitação %</div><div class="ind-desc">Probabilidade de chuva no horário da partida. Valores ≥70% aparecem em vermelho; ≥40% em laranja.</div></div>
+        <div class="ind-card"><div class="ind-name">💨 Vento</div><div class="ind-desc">Velocidade do vento em km/h no horário da partida.</div></div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Sem local configurado</div>
+        Se o local dos jogos ainda não foi salvo, a previsão não é exibida. Admins veem um aviso com link direto para a configuração; outros usuários não veem nada.
+      </div>
+    </section>
+
+    <!-- 15. Resumo para o Grupo -->
+    <section class="section" id="resumo">
+      <h2 class="section-title"><span class="sn">15</span> Resumo para o Grupo</h2>
+      <p>Após a finalização de um campeonato, o sistema gera automaticamente uma <strong>mensagem formatada para o grupo do WhatsApp</strong> com os destaques da edição. O disparo é manual — o admin decide se e quando enviar.</p>
+
+      <h3>Como acessar</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Automático ao finalizar</div>
+          <div class="ind-desc">Logo após salvar os campeões de um campeonato, o modal de <strong>📤 Resumo do Campeonato</strong> abre automaticamente com a mensagem pronta.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Botão no Histórico</div>
+          <div class="ind-desc">Em Histórico → qualquer campeonato finalizado, o botão <strong>📤 Resumo</strong> na barra superior abre o mesmo modal. Disponível para todos os usuários (não apenas admins).</div>
+        </div>
+      </div>
+
+      <h3>Conteúdo da mensagem</h3>
+      <table class="data-table">
+        <thead><tr><th>Bloco</th><th>O que exibe</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>🥇 Campeão</td>
+            <td>Nome do time campeão e elenco completo (players registrados).</td>
+          </tr>
+          <tr>
+            <td>⚽ Artilheiro(s)</td>
+            <td>Nome e gols do(s) artilheiro(s) daquele campeonato. Se houver empate, todos são listados. Bloco omitido se não houver gols registrados.</td>
+          </tr>
+          <tr>
+            <td>📋 Goleadores</td>
+            <td>Top 5 marcadores do campeonato com posição e contagem de gols. Aparece somente se houver mais de um marcador diferente.</td>
+          </tr>
+          <tr>
+            <td>🌟 Bola Cheia / 🥀 Bola Murcha</td>
+            <td>Vencedores da votação de destaques, com o número de votos. Só aparecem se a votação daquele campeonato já estiver <strong>encerrada</strong> quando o resumo é aberto — depois de encerrar, use o botão 📤 Resumo no Histórico.</td>
+          </tr>
+          <tr>
+            <td>📊 Ranking de Campeões</td>
+            <td>Top 7 do ranking geral de títulos, com posição, nome e total de títulos (inteiros ou ½). Usa o ranking atualizado após a finalização.</td>
+          </tr>
+          <tr>
+            <td>📈 Mudanças no ranking</td>
+            <td>Jogadores do time campeão que subiram ou desceram de posição no ranking em função dos títulos ganhos nesta edição. Bloco omitido se ninguém mudou de posição.</td>
+          </tr>
+          <tr>
+            <td>🎖 Badges conquistadas</td>
+            <td>Badges que algum participante deste campeonato <strong>ganhou pela primeira vez</strong> nesta edição. O sistema calcula as badges do jogador sem este campeonato e compara com o estado atual — a diferença são as conquistas novas. Ordenadas da mais rara para a menos rara. Bloco omitido se nenhuma badge nova foi desbloqueada.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Como detecta badges novas</div>
+        O sistema computa as badges de cada participante <strong>excluindo</strong> temporariamente este campeonato dos dados, depois <strong>com</strong> ele, e tira a diferença. Essa abordagem é necessária porque badges não têm uma "data de conquista" armazenada — são sempre calculadas dinamicamente. A lista é ordenada das mais raras para as menos raras pelo número total de detentores.
+      </div>
+
+      <h3>Ações disponíveis no modal</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">📋 Copiar</div>
+          <div class="ind-desc">Copia o texto completo para a área de transferência. Prontos para colar diretamente em qualquer conversa do WhatsApp.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">💬 WhatsApp</div>
+          <div class="ind-desc">Abre o WhatsApp (web ou app) com o texto pré-preenchido. O usuário escolhe manualmente para qual grupo ou contato enviar.</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Formatação</div>
+        A mensagem usa a sintaxe do WhatsApp: <strong>*negrito*</strong> para destaques e <em>_itálico_</em> para raridade das badges. O texto é gerado no momento em que o modal é aberto — sempre com dados atualizados do Firestore.
+      </div>
+    </section>
+
+    <!-- 17. Múltiplas Ligas -->
+    <section class="section" id="ligas">
+      <h2 class="section-title"><span class="sn">17</span> Múltiplas Ligas</h2>
+      <p>Uma mesma conta pode fazer parte de <strong>mais de uma liga</strong> — por exemplo, um jogador que participa de dois grupos diferentes. O botão <strong>ligas</strong>, ao lado do nome da liga no cabeçalho, abre a tela de gerenciamento de ligas a qualquer momento, mesmo para quem participa de apenas uma.</p>
+
+      <h3>Tela "Escolha a liga"</h3>
+      <p>Lista todas as ligas em que a conta participa, com o papel em cada uma (Admin, Jogador ou Pendente). A partir dela é possível:</p>
+
+      <table class="data-table">
+        <thead><tr><th>Ação</th><th>Como fazer</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Entrar em uma liga</td>
+            <td>Toque no nome da liga na lista.</td>
+          </tr>
+          <tr>
+            <td>Entrar com convite</td>
+            <td>Abra o link recebido do admin (ele gera em ⚙️ Painel Admin → <strong>🔗 Gerar link de convite</strong>) ou, numa conta sem liga, toque em <strong>Tenho um convite</strong> e cole o link. Cada convite vale para <strong>uma pessoa só</strong>; se já foi usado aparece <em>Convite inválido ou já utilizado</em>. Ver seção 20.</td>
+          </tr>
+          <tr>
+            <td>Sair de uma liga</td>
+            <td>Toque no botão 🚪 ao lado da liga. Pede confirmação antes de remover o vínculo.</td>
+          </tr>
+          <tr>
+            <td>Criar nova liga</td>
+            <td>Botão <strong>＋ Criar nova liga</strong> ao final da lista (também disponível em ⚙️ Painel Admin → Ações). Abre o mesmo formulário do cadastro inicial (nome + ID da liga), com 30 dias grátis. Se cancelado, volta para a liga em que você estava.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Sair de uma liga é permanente</div>
+        Ao sair, o vínculo com a liga é removido — histórico de estatísticas, badges e financeiro daquela liga deixam de ser acessíveis pela conta. Para voltar, é necessário um novo convite (ou aprovação, se a liga permitir cadastro livre). Se a conta for <strong>admin</strong>, o app avisa que, sendo o único, ninguém mais poderá gerenciar a liga depois da saída.
+      </div>
+
+      <h3>Renomear a liga <span class="tag">Admin</span></h3>
+      <p>Em <strong>⚙️ Painel Admin → Configurações da liga → Nome da liga</strong>, o admin pode alterar o nome exibido para todos os membros. O campo já vem preenchido com o nome atual; edite e toque em <strong>Salvar</strong>. O nome no cabeçalho é atualizado imediatamente para quem fez a alteração; os demais membros veem o novo nome na próxima vez que abrirem o app.</p>
+
+      <div class="callout">
+        <div class="callout-label">O que não muda</div>
+        Renomear a liga altera apenas o nome de exibição. O <strong>ID da liga</strong> (usado em links de convite e na URL) permanece o mesmo definido na criação e não pode ser alterado.
+      </div>
+    </section>
+
+    <!-- 18. Votação de Destaques -->
+    <section class="section" id="votacao">
+      <h2 class="section-title"><span class="sn">18</span> Votação de Destaques</h2>
+      <p>Depois que um campeonato é finalizado, quem jogou nele pode votar em dois prêmios: a <strong>🌟 Bola Cheia</strong> (destaque positivo) e a <strong>🥀 Bola Murcha</strong> (destaque negativo). Cada votação é <strong>opcional</strong> e ligada ou desligada separadamente em cada liga.</p>
+
+      <h3>Ligar as votações <span class="tag">Admin</span></h3>
+      <table class="data-table">
+        <thead><tr><th>Onde</th><th>O que faz</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Cadastro da liga nova</td>
+            <td>Última pergunta do assistente de configuração: dois botões para ligar a Bola Cheia e/ou a Bola Murcha (ambos desligados por padrão).</td>
+          </tr>
+          <tr>
+            <td>Painel Admin</td>
+            <td><strong>⚙️ → Configurações da liga → 🗳️ Votação de destaques</strong>: uma chave <em>Ligada / Desligada</em> para cada prêmio, valendo para os <strong>próximos</strong> campeonatos finalizados.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Cada campeonato guarda o que foi votado</div>
+        No momento em que o campeonato é finalizado, o sistema registra quais votações estavam ligadas. Mudar a configuração depois não altera campeonatos que já abriram votação. Para abrir a votação de um campeonato já finalizado, o admin usa o botão <strong>Abrir votação</strong> no card <em>Destaques do campeonato</em> (Histórico), usando a configuração atual da liga.
+      </div>
+
+      <h3>Como votar</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Quem vota</div>
+          <div class="ind-desc">Somente jogadores <strong>inscritos naquele campeonato</strong> (no elenco de algum time) e com conta vinculada ao seu jogador. Quem não jogou naquele dia não vota.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Em quem vota</div>
+          <div class="ind-desc">Nos outros jogadores do elenco daquele campeonato. <strong>Ninguém vota em si mesmo</strong>. Um mesmo jogador não pode ser Bola Cheia e Bola Murcha no mesmo voto.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Onde</div>
+          <div class="ind-desc">Banner <strong>🗳️ Votação aberta</strong> na aba Meu Craque (botão <em>Votar</em>) ou no card <em>Destaques do campeonato</em>. Na tela de voto, toque em 🌟 e/ou 🥀 ao lado do nome; tocar de novo desmarca.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Opcional</div>
+          <div class="ind-desc">Dá para votar só em um dos prêmios ou em nenhum. O voto pode ser <strong>alterado ou removido</strong> enquanto a votação estiver aberta.</div>
+        </div>
+      </div>
+
+      <h3>Encerramento e resultado</h3>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Aberta</td>
+            <td>Abre ao finalizar o campeonato. Fica aberta por <strong>3 dias</strong>. O card mostra só quantos jogadores já votaram — o resultado não aparece.</td>
+          </tr>
+          <tr>
+            <td>Encerrada</td>
+            <td>Encerra sozinha após 3 dias, ou antes, quando o admin toca em <strong>Encerrar agora</strong>. Depois disso ninguém mais vota.</td>
+          </tr>
+          <tr>
+            <td>Resultado</td>
+            <td>Vence quem tiver <strong>mais votos</strong> em cada prêmio. Em caso de <strong>empate, todos os empatados levam o prêmio</strong>. Sem nenhum voto válido, o prêmio fica sem vencedor.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Sobre o sigilo do voto</div>
+        Na tela ninguém vê quem votou em quem — só as contagens. Os votos ficam gravados no documento do campeonato, então quem mexer diretamente no banco de dados conseguiria ver as escolhas. Votos de quem não estava no elenco ou em si mesmo são ignorados na apuração.
+      </div>
+
+      <h3>Aviso aos jogadores</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Quando é enviado</div>
+          <div class="ind-desc">Uma notificação <strong>🗳️ Votação aberta</strong> vai para quem estava no elenco do campeonato no momento em que a votação abre: ao finalizar o campeonato (junto com o aviso de resultado) ou quando o admin usa <em>Abrir votação</em>.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Reenviar <span class="tag">Admin</span></div>
+          <div class="ind-desc">No card <em>Destaques do campeonato</em>, enquanto a votação está aberta, o botão <strong>🔔 Avisar jogadores</strong> reenvia o aviso (como <em>Lembrete</em>) para o elenco. Serve também para campeonatos cuja votação abriu antes deste aviso existir. Não funciona depois de encerrada.</div>
+        </div>
+      </div>
+
+      <h3>Onde o resultado aparece</h3>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">Histórico</strong> — card <em>🗳️ Destaques do campeonato</em>, com os vencedores, o número de votos e os demais votados</li>
+        <li><strong style="color: var(--text)">Resumo para o grupo</strong> — linhas <em>🌟 Bola Cheia</em> e <em>🥀 Bola Murcha</em> na mensagem do WhatsApp (só aparecem se a votação já estiver encerrada quando o resumo for aberto — use o botão 📤 Resumo do Histórico depois de encerrar)</li>
+        <li><strong style="color: var(--text)">Ranking</strong> — cards <em>🌟 Bola Cheia</em> e <em>🥀 Bola Murcha</em> com quem mais foi eleito (top 5, respeitando o filtro Todos/Ativos)</li>
+        <li><strong style="color: var(--text)">Conquistas</strong> — badges de acúmulo e combinações (ver abaixo)</li>
+      </ul>
+
+      <h3>Badges da votação</h3>
+      <table class="data-table">
+        <thead><tr><th>Badge</th><th>Critério</th></tr></thead>
+        <tbody>
+          <tr><td>🥰 Xodó da Galera</td><td>Eleito Bola Cheia 1 vez</td></tr>
+          <tr><td>🏛️ Patrimônio do {Liga}</td><td>Eleito Bola Cheia 3 vezes (o nome da liga entra automaticamente)</td></tr>
+          <tr><td>🤴 Rei do {Liga}</td><td>Eleito Bola Cheia 5 vezes</td></tr>
+          <tr><td>🪵 Perna de Pau</td><td>Eleito Bola Murcha 1 vez</td></tr>
+          <tr><td>🚧 Cone Oficial</td><td>Eleito Bola Murcha 3 vezes</td></tr>
+          <tr><td>🐟 Bagre de Carteirinha</td><td>Eleito Bola Murcha 5 vezes</td></tr>
+          <tr><td>🎒 Carregado</td><td>Eleito Bola Murcha em um campeonato em que também foi campeão com <strong>título inteiro</strong> (meio título não conta)</td></tr>
+          <tr><td>🦸 Craque de Time Pequeno</td><td>Eleito Bola Cheia em um campeonato em que o time dele ficou em <strong>último lugar</strong> na fase regular (menos pontos; empate no último lugar conta)</td></tr>
+          <tr><td>🪄 Dia/Tarde/Noite Mágica</td><td>Ser, no <strong>mesmo campeonato</strong>: artilheiro do campeonato, artilheiro da final, campeão e eleito Bola Cheia. As quatro coisas precisam coincidir naquele campeonato — não basta somar conquistas de campeonatos diferentes. Goleiro não pode ganhar esta badge (critério de artilharia não se aplica).</td></tr>
+        </tbody>
+      </table>
+      <p>Só contam campeonatos com a votação <strong>encerrada</strong>. Empate no prêmio conta para todos os empatados (e empate na artilharia geral ou da final também conta — todos os empatados no topo são considerados artilheiros daquele campeonato). As badges de uma categoria só aparecem no painel de Conquistas de ligas em que aquela votação está ligada (ou já foi usada).</p>
+      <div class="callout">
+        <div class="callout-label">Nome dinâmico: Dia, Tarde ou Noite Mágica</div>
+        O texto da badge <strong>🪄 Dia/Tarde/Noite Mágica</strong> muda de acordo com o <strong>horário padrão dos jogos</strong> configurado em ⚙️ Painel Admin → Configurações da liga → 🌤 Previsão do tempo (seção <a href="#clima" style="color: var(--accent)">16 — Previsão do Tempo</a>) — o mesmo horário usado para buscar a previsão do tempo. Antes das 12h o nome vira <strong>"Dia Mágico"</strong>; das 12h às 17h59, <strong>"Tarde Mágica"</strong>; das 18h em diante, <strong>"Noite Mágica"</strong>. Se a liga nunca configurou esse horário, o app usa 16h como padrão (exibe "Tarde Mágica"). A liga tem apenas um horário padrão de jogos — não há um horário por campeonato — então o nome da badge segue sempre a configuração atual da liga, para todos os jogadores.
+      </div>
+    </section>
+
+    <!-- 19. Foto de Perfil -->
+    <section class="section" id="foto">
+      <h2 class="section-title"><span class="sn">19</span> Foto de Perfil</h2>
+      <p>Cada jogador pode ter uma foto de perfil. Ela aparece no <strong>Elenco</strong>, no <strong>Ranking</strong> (campeões, vices, artilheiros e prêmios), nos <strong>elencos dos campeonatos</strong> e do histórico, no detalhe de time em <strong>Meu Craque</strong>, na lista da <strong>convocação</strong> e na tela de <strong>votação</strong>. Quem não tem foto aparece com as iniciais do nome.</p>
+
+      <h3>Como enviar a própria foto</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Onde</div>
+          <div class="ind-desc">Aba <strong>Meu Craque</strong>: toque no círculo com o ícone 📷 ao lado do seu nome e escolha uma imagem da galeria ou tire uma foto.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Quem pode</div>
+          <div class="ind-desc">Quem tem a conta <strong>vinculada a um jogador</strong> (a mesma condição para usar Meu Craque). Cada um altera apenas a própria foto.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Tamanho</div>
+          <div class="ind-desc">A imagem é <strong>recortada em quadrado e reduzida para 240 px</strong> no próprio aparelho antes de enviar — o envio é leve e a foto não precisa ser editada antes.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Remover</div>
+          <div class="ind-desc">Link <em>remover foto</em> abaixo do nome, em Meu Craque. O avatar volta para as iniciais.</div>
+        </div>
+      </div>
+
+      <h3>Ações do admin <span class="tag">Admin</span></h3>
+      <p>Em <strong>Elenco → ✏️ Editar jogador</strong>, o admin vê a foto atual e pode <strong>Adicionar/Trocar foto</strong> ou <strong>Remover</strong> a foto de qualquer jogador (útil para tirar uma imagem inadequada). Ao <strong>renomear</strong> o jogador, a foto acompanha o novo nome.</p>
+
+      <h3>Onde a foto fica guardada</h3>
+      <table class="data-table">
+        <thead><tr><th>Item</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Arquivo</td>
+            <td>Enviado ao <strong>Cloudinary</strong> — o mesmo serviço já usado nos comprovantes de despesa.</td>
+          </tr>
+          <tr>
+            <td>Endereço</td>
+            <td>O link da imagem é salvo no Firestore, na coleção <code>player_photos</code> da liga (um documento por jogador). Só links do Cloudinary da liga são aceitos pelas regras.</td>
+          </tr>
+          <tr>
+            <td>Troca ou remoção</td>
+            <td>O link muda, mas o arquivo antigo continua no Cloudinary (ocupa pouco espaço).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-label">Quem pode gravar</div>
+        A foto usa uma coleção própria (<code>player_photos</code>) com regras no <code>firestore.rules</code>: o jogador grava e apaga <strong>só a própria foto</strong> (a conta precisa estar vinculada àquele jogador); o admin grava e apaga qualquer uma; qualquer membro ativo da liga lê. As regras são publicadas com <code>firebase deploy --only firestore:rules</code> a partir da pasta do projeto — sempre que o arquivo mudar, é preciso publicar de novo.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">"Sem permissão para salvar a foto"</div>
+        Esse aviso aparece quando o Firestore recusa a gravação. As causas possíveis são: as regras da foto ainda não terem sido publicadas, a conta <strong>não estar vinculada</strong> a um jogador (ver Painel Admin → vínculo de perfil) ou a conta ainda estar com aprovação pendente na liga. Uma tentativa recusada pode deixar o arquivo enviado ao Cloudinary sem uso, o que não afeta o app.
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Privacidade</div>
+        As fotos só aparecem para membros logados da liga, mas o link do Cloudinary é público para quem o tiver — o arquivo em si não é privado.
+      </div>
+    </section>
+
+    <!-- 20. Segurança dos Acessos -->
+    <section class="section" id="seguranca">
+      <h2 class="section-title"><span class="sn">20</span> Segurança dos Acessos</h2>
+      <p>Quem é admin, quem é jogador e a qual jogador cada conta está vinculada são as informações que protegem o financeiro, os contatos e a configuração da liga. Por isso o aplicativo <strong>não grava esses dados diretamente</strong>: cada alteração passa por uma <strong>Cloud Function</strong> (código que roda no servidor do Firebase), que confere quem está pedindo antes de gravar. As regras do Firestore recusam qualquer tentativa de gravar esses campos por fora.</p>
+
+      <h3>Quem pode fazer o quê</h3>
+      <table class="data-table">
+        <thead><tr><th>Ação</th><th>Função</th><th>Quem pode</th><th>O que o servidor confere</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Entrar por convite</td>
+            <td><code>joinLeague</code></td>
+            <td>Qualquer conta logada</td>
+            <td>O convite existe, é daquela liga e ainda não foi usado; então o marca como usado. Quem já participa da liga não gasta o convite.</td>
+          </tr>
+          <tr>
+            <td>Criar liga</td>
+            <td><code>createLeague</code></td>
+            <td>Qualquer conta logada</td>
+            <td>ID livre (letras minúsculas, números e hífens, de 2 a 50 caracteres) e limite de <strong>10 ligas criadas por conta</strong>. Quem cria vira admin da liga.</td>
+          </tr>
+          <tr>
+            <td>Sair da liga</td>
+            <td><code>leaveLeague</code></td>
+            <td>A própria conta</td>
+            <td>Remove apenas o vínculo dela com aquela liga.</td>
+          </tr>
+          <tr>
+            <td>Aprovar, rejeitar, promover a admin, vincular a jogador e responder pedido de vinculação</td>
+            <td><code>manageMember</code></td>
+            <td>Admin da liga e o dono do sistema</td>
+            <td>Quem pede é admin <em>daquela</em> liga, e a ação só afeta aquela liga. O criador da liga não pode ser rejeitado.</td>
+          </tr>
+          <tr>
+            <td>Listar os membros da liga (Painel Admin e selo do ⚙️)</td>
+            <td><code>listMembers</code></td>
+            <td>Admin da liga e o dono do sistema</td>
+            <td>Quem pede é admin <em>daquela</em> liga. Devolve só nome, e-mail, papel, jogador vinculado e data de entrada dos membros <em>daquela</em> liga — sem aparelhos de notificação e sem dados de outras ligas.</td>
+          </tr>
+          <tr>
+            <td>Mover os números de WhatsApp antigos para a área do admin</td>
+            <td><code>migrateContacts</code></td>
+            <td>Admin da liga e o dono do sistema</td>
+            <td>Quem pede é admin <em>daquela</em> liga. Roda sozinha quando um admin abre o app; grava o contato antes de apagar o número antigo e pode ser repetida sem risco.</td>
+          </tr>
+          <tr>
+            <td>Excluir a própria conta</td>
+            <td><code>deleteMyAccount</code></td>
+            <td>A própria conta</td>
+            <td>Login de menos de 5 minutos; a conta não pode ser a única admin de uma liga. Só apaga a conta de quem chama: nenhum identificador vindo do app é aceito.</td>
+          </tr>
+          <tr>
+            <td>Anonimizar o próprio nome no histórico</td>
+            <td><code>anonymizeMyName</code></td>
+            <td>A própria conta</td>
+            <td>Só troca a identidade de quem chamou; gera o identificador anônimo no servidor (não é escolhido pela pessoa).</td>
+          </tr>
+          <tr>
+            <td>Registrar as badges já vistas</td>
+            <td><code>saveEarnedBadges</code></td>
+            <td>Jogador ou admin da liga</td>
+            <td>A conta participa da liga; cada um grava só a própria lista.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>O que a própria conta ainda grava sozinha no seu cadastro: os dados de notificação (aparelhos e permissão) e o aviso de que pediu vinculação de perfil. O cadastro nasce sempre "vazio" — sem papel de admin e sem ligas — e as ligas entram depois, pelas funções acima.</p>
+
+      <h3>Convites</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Uso único</div>
+          <div class="ind-desc">Cada link vale para <strong>uma</strong> pessoa. Depois de usado, mostra <em>Convite inválido ou já utilizado</em>.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Quem gera</div>
+          <div class="ind-desc">Só o admin da liga cria, lista e apaga convites. Nenhuma outra conta consegue ler ou alterar um convite pelo aplicativo.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Papel do convite</div>
+          <div class="ind-desc">O convite dá o papel dele <strong>somente dentro daquela liga</strong>. A permissão geral da conta nunca muda por causa de um convite.</div>
+        </div>
+      </div>
+
+      <h3>Mensagens que podem aparecer</h3>
+      <table class="data-table">
+        <thead><tr><th>Mensagem</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td>Somente administradores da liga podem fazer isso.</td><td>A conta que pediu não é admin daquela liga — ou o papel mudou e a página está desatualizada (recarregue).</td></tr>
+          <tr><td>O criador da liga não pode ser removido.</td><td>Tentativa de rejeitar quem criou a liga.</td></tr>
+          <tr><td>Esse ID já está em uso.</td><td>Já existe uma liga com esse ID; escolha outro.</td></tr>
+          <tr><td>Você já criou 10 ligas.</td><td>Limite por conta atingido (o dono do sistema não tem limite).</td></tr>
+          <tr><td>Convite inválido ou já utilizado.</td><td>O link já foi usado, foi digitado errado ou é de outra liga.</td></tr>
+          <tr><td>Não foi possível concluir agora…</td><td>Falha de conexão ou do servidor; tente de novo.</td></tr>
+          <tr><td>Sem conexão com o servidor. Recarregue a página.</td><td>A biblioteca das funções não carregou; recarregar resolve.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dados pessoais (LGPD)</h3>
+      <p>Cada conta lê <strong>somente o próprio cadastro</strong>. Nome, e-mail e vínculo de outras pessoas não são legíveis pelo aplicativo: o admin de uma liga recebe a lista dos <strong>membros da sua liga</strong> pela função <code>listMembers</code>, que devolve apenas o que o Painel Admin usa — nunca os aparelhos de notificação nem dados de outras ligas.</p>
+      <table class="data-table">
+        <thead><tr><th>Dado</th><th>Quem consegue ler</th></tr></thead>
+        <tbody>
+          <tr><td>Nome, e-mail, ligas e papéis da conta</td><td>A própria conta. O admin vê nome, e-mail e papel dos membros <em>da sua liga</em> no Painel Admin.</td></tr>
+          <tr><td>Aparelhos de notificação (tokens)</td><td>Só a própria conta e o servidor que envia os avisos. Não aparecem no Painel Admin.</td></tr>
+          <tr><td>Pedido de vinculação (nome e e-mail)</td><td>O admin da liga e quem fez o pedido.</td></tr>
+          <tr><td>Foto de perfil</td><td>Membros ativos da liga leem o link. Ao apagar (admin, o próprio jogador, anonimização ou exclusão de conta), o servidor também tenta apagar o arquivo no Cloudinary — ver o callout técnico no fim desta seção.</td></tr>
+          <tr><td>Financeiro (mensalidades, avulsos, despesas)</td><td>Membros ativos da liga: a aba Financeiro é aberta a todo o grupo.</td></tr>
+          <tr><td>WhatsApp dos jogadores e dos avulsos</td><td>Só o admin da liga: o número fica na área <code>contacts</code>, que as regras negam a qualquer outra conta.</td></tr>
+          <tr><td>Nome no histórico esportivo (elenco, campeonatos, gols, títulos, votos)</td><td>Qualquer membro ativo da liga. O próprio jogador troca o nome por um identificador anônimo quando quiser, sem pedir ao admin (seção 22).</td></tr>
+          <tr><td>Exclusão da conta e dos dados pessoais</td><td>O próprio jogador exclui pelo app, sem pedir ao admin (seção 21).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>WhatsApp só do admin</h3>
+      <p>O número de WhatsApp de jogadores e avulsos fica numa área própria da liga (<code>contacts</code>) que <strong>só o admin lê e grava</strong>. O cadastro do elenco e as cobranças de avulsos — que todo membro lê — <strong>não aceitam mais o campo <code>whatsapp</code></strong>: as regras recusam gravar ou alterar o número ali. Os avulsos dos campeonatos também deixaram de guardar o número.</p>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Editar o WhatsApp de um jogador (✏️ no Elenco)</td><td>O número é gravado em <code>contacts</code>. Se a troca de nome mudar a chave do jogador, o contato acompanha.</td></tr>
+          <tr><td>Remover um jogador do cadastro</td><td>O contato dele é apagado junto (sem jogador, sem número).</td></tr>
+          <tr><td>Incluir um avulso com WhatsApp</td><td>O número vai para <code>contacts</code> (identificador <code>avulso_</code> + nome); a cobrança e o campeonato guardam só nome e valor.</td></tr>
+          <tr><td>Remover um avulso da lista</td><td>O contato dele é apagado.</td></tr>
+          <tr><td>Jogador comum</td><td>Não lê contatos: as regras recusam e o aplicativo nem tenta.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Migração dos números antigos</h3>
+      <p>Na primeira vez que um admin abre o aplicativo nesta versão, a função <code>migrateContacts</code> roda sozinha para aquela liga: copia os números que ainda estavam no cadastro do elenco, nas cobranças de avulsos e nos avulsos dos campeonatos para <code>contacts</code> e só depois apaga o campo das áreas abertas. Aparece o aviso <em>🔒 N contato(s) de WhatsApp agora só o admin vê</em>. <strong>Cada liga precisa de um admin abrindo o app uma vez.</strong></p>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Sem perda</div>
+          <div class="ind-desc">Grava o contato antes de apagar o número antigo. Se algo falhar no meio, nada se perde e a próxima abertura conclui o serviço.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Repetível</div>
+          <div class="ind-desc">Um contato que o admin já ajustou nunca é sobrescrito pelo número antigo. Depois de concluída, a função responde na hora, sem varrer nada.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Conferência</div>
+          <div class="ind-desc">Além dos lugares conhecidos, a função procura o campo <code>whatsapp</code> nas demais áreas da liga. Se achar algum, o admin vê o aviso <em>⚠️ WhatsApp em formato antigo</em> e a liga não é marcada como concluída.</div>
+        </div>
+      </div>
+      <div class="callout">
+        <div class="callout-label">Como conferir</div>
+        Os logs da função registram, <strong>sem nenhum dado pessoal</strong> (só contagens e, se sobrar algo, o caminho do documento), o que foi movido em cada liga: <code>firebase functions:log --only migrateContacts</code>.
+      </div>
+
+      <h3>Publicação <span class="tag">Técnico</span></h3>
+      <p>As três partes são publicadas separadamente, a partir da pasta do projeto:</p>
+      <table class="data-table">
+        <thead><tr><th>Parte</th><th>Comando</th></tr></thead>
+        <tbody>
+          <tr><td>Funções (<code>functions/index.js</code>)</td><td><code>firebase deploy --only functions</code></td></tr>
+          <tr><td>Regras (<code>firestore.rules</code>)</td><td><code>firebase deploy --only firestore:rules</code></td></tr>
+          <tr><td>Aplicativo (<code>index.html</code>)</td><td><code>npx vercel deploy --prod</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <div class="callout-label">Ordem</div>
+        Ao <strong>fechar</strong> um acesso que o aplicativo usa hoje, publique <strong>primeiro as funções</strong>, depois o aplicativo e <strong>por último as regras</strong> — assim nada é bloqueado antes da hora. Quando as regras <strong>abrem uma área nova</strong> que o aplicativo novo vai usar (como <code>contacts</code>), publique as regras antes do aplicativo. Antes de publicar regras, o teste a seco (<code>firebase deploy --only firestore:rules --dry-run</code>) confere se elas compilam.
+      </div>
+      <div class="callout">
+        <div class="callout-label">Testes</div>
+        As regras e as funções de acesso foram testadas em emuladores locais (Autenticação, Firestore e Funções) com contas de teste, incluindo tentativas de ataque (virar admin, ler dados de outros, criar liga por fora, mexer em convites, ler WhatsApp como jogador). Nada disso toca o Firebase real.
+      </div>
+      <div class="callout">
+        <div class="callout-label">Apagar o arquivo da foto no Cloudinary <span class="tag">Técnico</span></div>
+        Uma função (<code>onPlayerPhotoDeleted</code>) apaga também o arquivo no Cloudinary sempre que o documento da foto é removido, por qualquer caminho (admin, o próprio jogador, anonimização ou exclusão de conta). As chaves do Cloudinary (Configurações → Security, no painel do Cloudinary) foram configuradas como Firebase Secrets — <code>CLOUDINARY_API_KEY</code> e <code>CLOUDINARY_API_SECRET</code> — e a exclusão real do arquivo foi confirmada em produção em 28/09/2026. Para trocar as chaves no futuro (por exemplo, se o Cloudinary for regenerado): <code>firebase functions:secrets:set NOME_DA_CHAVE --project seriebaceoma --force --data-file "caminho\do\arquivo.txt"</code> — apontando para um arquivo local com só o valor dentro, apagado logo depois. Evite colar o valor direto num campo de terminal: se o comando falhar antes de pedir o valor (por exemplo, projeto não detectado), o que for colado em seguida fica exposto na tela e no histórico de comandos.
+      </div>
+    </section>
+
+    <!-- 21. Excluir a Conta -->
+    <section class="section" id="excluir">
+      <h2 class="section-title"><span class="sn">21</span> Excluir a Conta</h2>
+      <p>Todo jogador pode <strong>excluir a própria conta</strong>, sem depender do admin. É o direito de eliminação previsto na LGPD. A opção <strong>🗑️ Excluir minha conta</strong> fica no fim da aba <strong>EU</strong> e também nas telas sem liga (boas-vindas), <em>Escolha a liga</em> e <em>Aguardando aprovação</em>.</p>
+
+      <h3>O que é apagado</h3>
+      <table class="data-table">
+        <thead><tr><th>Dado</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Login (e-mail e senha, link ou conta Google)</td><td>Apagado: não dá mais para entrar com ele.</td></tr>
+          <tr><td>Cadastro do usuário: e-mail, nome da conta, ligas e papéis, aparelhos de notificação e avisos de badges</td><td>Apagado.</td></tr>
+          <tr><td>Pedido de vinculação de perfil</td><td>Apagado.</td></tr>
+          <tr><td>Foto e WhatsApp do jogador ligado à conta</td><td>Apagados, com tentativa de apagar também o arquivo da foto no Cloudinary (ver seção 20). Se outra conta estiver ligada ao mesmo jogador, ficam para ela.</td></tr>
+          <tr><td>Convites que a conta criou ou usou</td><td>Perdem só o identificador da conta; o convite em si continua.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>O que continua</h3>
+      <div class="callout warn">
+        <div class="callout-label warn">Histórico esportivo da liga</div>
+        O <strong>nome do jogador</strong> nos campeonatos já disputados (elenco, gols, títulos, votos) e no cadastro do elenco é o registro esportivo da liga e continua. Para tirá-lo de lá, o admin <strong>renomeia</strong> o jogador (✏️ no Elenco → Editar jogador; a troca vale em todo o histórico) e/ou o <strong>remove do elenco</strong> (✕, que apaga também o WhatsApp).
+      </div>
+      <div class="callout">
+        <div class="callout-label">Arquivo da foto</div>
+        A foto é guardada no Cloudinary (serviço de imagens). Ao excluir a conta, o servidor apaga o documento da foto e <strong>tenta apagar também o arquivo</strong> no Cloudinary (ver seção 20). Enquanto as chaves do Cloudinary não estiverem configuradas no servidor, o arquivo continua lá, sem ligação com a pessoa.
+      </div>
+
+      <h3>Como funciona</h3>
+      <div class="ind-grid">
+        <div class="ind-card">
+          <div class="ind-name">Confirmação</div>
+          <div class="ind-desc">O app mostra o que será apagado e o que continua, e só libera o botão depois de digitar <strong>EXCLUIR</strong>.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Login recente</div>
+          <div class="ind-desc">Por segurança, só exclui quem entrou há <strong>menos de 5 minutos</strong>. Passado o prazo, o app pede para confirmar que é a própria pessoa: com a conta Google (botão) ou digitando a senha. Quem entra por link no e-mail deve sair, entrar de novo pelo link e repetir a exclusão.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Único admin</div>
+          <div class="ind-desc">Quem é o <strong>único admin</strong> de uma liga não consegue excluir: o app mostra o nome da liga. Promova outro admin (⚙️ Painel Admin → ▲) ou saia da liga antes. Se a conta era a criadora da liga e há outros admins, a liga passa para o admin mais antigo.</div>
+        </div>
+        <div class="ind-card">
+          <div class="ind-name">Sem volta</div>
+          <div class="ind-desc">A exclusão é definitiva. Para voltar ao Pelada na Mão é preciso criar uma conta nova e receber um novo convite.</div>
+        </div>
+      </div>
+
+      <h3>Mensagens que podem aparecer</h3>
+      <table class="data-table">
+        <thead><tr><th>Mensagem</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td>Você é o único admin de … Promova outro admin ou saia da liga antes de excluir a conta.</td><td>Falta outro admin na liga citada.</td></tr>
+          <tr><td>Por segurança, confirme que é você… / digite sua senha…</td><td>O login tem mais de 5 minutos: use o botão de confirmar com o Google ou digite a senha e clique de novo.</td></tr>
+          <tr><td>Senha incorreta.</td><td>A senha digitada na confirmação não confere.</td></tr>
+          <tr><td>Seus dados pessoais já foram apagados, mas o login ainda existe. Clique no botão de novo para concluir.</td><td>A conexão caiu no último passo. Clicar de novo termina o serviço.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Como o servidor faz <span class="tag">Técnico</span></h3>
+      <p>A função <code>deleteMyAccount</code> confere o login recente e a regra do único admin, limpa os dados de cada liga em que a conta está e apaga o cadastro (com as notificações pendentes). O login é apagado por último; se o servidor não puder apagá-lo (por exemplo, falta de permissão), ele avisa o app, que conclui com <code>user.delete()</code>. Os logs (<code>firebase functions:log --only deleteMyAccount</code>) trazem só contagens, nunca dados pessoais.</p>
+    </section>
+
+    <!-- 22. Anonimizar o Nome -->
+    <section class="section" id="anonimizar">
+      <h2 class="section-title"><span class="sn">22</span> Anonimizar o Nome</h2>
+      <p>Todo jogador pode trocar o <strong>próprio nome</strong>, em todo o histórico da liga, por um identificador anônimo gerado pelo sistema — sem excluir a conta nem sair da liga. É outra frente do direito de anonimização da LGPD: dá para continuar jogando sem manter o nome real associado ao histórico. A opção <strong>🕶️ Anonimizar meu nome no histórico</strong> fica na aba <strong>EU</strong>, logo acima de "Excluir minha conta".</p>
+
+      <h3>O que muda</h3>
+      <table class="data-table">
+        <thead><tr><th>Onde</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Elenco</td><td>O nome no cadastro vira algo como <em>"Jogador Anônimo #A1B2"</em>. O identificador (código de 4 dígitos) é gerado pelo sistema — a pessoa não escolhe o nome.</td></tr>
+          <tr><td>Campeonatos já disputados</td><td>Nome do campeão, times, gols e votos (dados e recebidos) são todos atualizados para o novo nome.</td></tr>
+          <tr><td>Títulos e mensalidades</td><td>Migrados para o novo nome, sem perder o histórico de títulos nem o status de pagamento.</td></tr>
+          <tr><td>Foto de perfil</td><td><strong>Removida</strong> — uma foto identifica a pessoa, então não é levada adiante.</td></tr>
+          <tr><td>WhatsApp</td><td>Continua guardado (só o admin vê), só muda de "endereço" — o grupo continua se organizando normalmente.</td></tr>
+          <tr><td>Estrelas, situação ativo/inativo e convocações futuras</td><td>Continuam normalmente: a pessoa segue jogando, só sem o nome real no histórico.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Sem volta</div>
+        Depois de anonimizado, não existe um botão para "desfazer" e recuperar o nome real no histórico antigo. Convocações abertas no momento da troca podem perder a confirmação de presença anterior (o app avisa disso antes de confirmar) — vale reconfirmar presença se for o caso.
+      </div>
+
+      <h3>Diferença para "Excluir minha conta"</h3>
+      <p>Anonimizar <strong>não</strong> apaga o login nem tira a pessoa da liga — ela continua jogando e recebendo convocações, só sem o nome real associado ao que já aconteceu. Excluir a conta (seção 21) é o oposto: sai da liga e apaga o login, mas por padrão mantém o nome real no histórico esportivo. As duas ações são independentes e podem ser usadas juntas ou separadas.</p>
+
+      <h3>Como o servidor faz <span class="tag">Técnico</span></h3>
+      <p>A função <code>anonymizeMyName</code> troca a identidade (cadastro novo + apagar o antigo + apontar a conta para o novo) numa <strong>transação</strong>: ou as três coisas mudam juntas, ou nenhuma muda. A limpeza do resto do histórico (campeonatos, títulos, mensalidades) vem depois, a partir do nome antigo guardado no novo cadastro — por isso a função pode ser chamada de novo com segurança caso alguma etapa falhe no meio, sem duplicar nem perder dados.</p>
+    </section>
+
+    <!-- 23. Política de Privacidade -->
+    <section class="section" id="politica">
+      <h2 class="section-title"><span class="sn">23</span> Política de Privacidade</h2>
+      <p>O botão <strong>🔒 Privacidade</strong> abre, dentro do próprio app, um resumo em linguagem simples do que é guardado, quem vê cada dado e como usar os direitos de anonimizar o nome e excluir a conta. Fica disponível na tela de <strong>login</strong> (antes mesmo de criar conta) e no fim da aba <strong>EU</strong>.</p>
+      <div class="callout">
+        <div class="callout-label">Não é parecer jurídico</div>
+        O texto descreve como o Pelada na Mão funciona hoje, para o próprio jogador entender o que acontece com seus dados. Ele não substitui uma avaliação jurídica; o responsável por cada liga é o seu admin, e o dono do sistema deve revisar o texto periodicamente conforme o app muda.
+      </div>
+    </section>
+
+    <!-- 24. Primeiros Passos -->
+    <section class="section" id="primeirospassos">
+      <h2 class="section-title"><span class="sn">24</span> Primeiros Passos</h2>
+      <p>Um card <strong>🚀 Primeiros passos</strong> aparece no topo da aba <strong>EU (Meu Craque)</strong> para ajudar quem está começando a usar a liga, com uma lista curta e diferente para admin e para jogador comum.</p>
+
+      <h3>O que aparece para o admin</h3>
+      <table class="data-table"><thead><tr><th>Item</th><th>Quando conta como feito</th></tr></thead><tbody>
+        <tr><td>Configure o horário e local dos jogos</td><td>Assim que a liga tiver o horário padrão e a localização salvos em ⚙️ Painel Admin → Previsão do tempo (seção 16)</td></tr>
+        <tr><td>Convide os jogadores da sua pelada</td><td>Assim que o elenco tiver mais de 1 jogador cadastrado</td></tr>
+        <tr><td>Crie o primeiro campeonato</td><td>Assim que existir pelo menos 1 campeonato na liga (ativo ou já encerrado)</td></tr>
+      </tbody></table>
+
+      <h3>O que aparece para o jogador comum</h3>
+      <table class="data-table"><thead><tr><th>Item</th><th>Quando conta como feito</th></tr></thead><tbody>
+        <tr><td>Confirme presença na próxima convocação</td><td>Assim que o jogador responder <strong>Sim, vou</strong> ou <strong>Não vou</strong> em algum campeonato</td></tr>
+        <tr><td>Confira o elenco da sua liga</td><td>Ao tocar no próprio item, que já leva para a aba Elenco</td></tr>
+        <tr><td>Veja o ranking da liga</td><td>Ao tocar no próprio item, que já leva para a aba Ranking</td></tr>
+      </tbody></table>
+
+      <div class="callout">
+        <div class="callout-label">Quem não vê o card</div>
+        Uma conta sem vínculo com um jogador do elenco não vê este card — em vez disso, a aba EU mostra a tela de "Perfil não configurado" com o botão de solicitar vinculação (o verdadeiro primeiro passo, tratado à parte). O admin que está usando o seletor <strong>👁 Ver como</strong> para inspecionar o perfil de outro jogador também não vê o card enquanto estiver simulando.
+      </div>
+
+      <h3>Como ele desaparece</h3>
+      <p>O card some sozinho assim que todos os itens daquela lista estiverem concluídos. Também dá para fechá-lo a qualquer momento pelo <strong>×</strong> no canto — nesse caso ele não volta a aparecer mais para aquela conta, mesmo com itens pendentes.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Preferência fica no aparelho</div>
+        A marcação de "já vi o elenco/ranking" e o fechar manual do card ficam guardados apenas no navegador/aparelho usado no momento (não no servidor). Trocando de celular ou navegador, ou limpando os dados do site, o card pode voltar a aparecer do zero.
       </div>
     </section>
 
   </main>
 </div>
-</body>
-</html>
+
+</body></html>
