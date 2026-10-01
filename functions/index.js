@@ -346,6 +346,10 @@ const RESEND_FROM = "Pelada na Mão <avisos@notificacoes.peladanamao.com.br>";
 //   firebase functions:secrets:set MERCADOPAGO_WEBHOOK_SECRET
 const MERCADOPAGO_ACCESS_TOKEN = defineSecret("MERCADOPAGO_ACCESS_TOKEN");
 const MERCADOPAGO_WEBHOOK_SECRET = defineSecret("MERCADOPAGO_WEBHOOK_SECRET");
+// A URL configurada em Suas integrações → Notificações não cobre pagamentos criados via
+// Preference (confirmado em teste: o pagamento veio com notification_url null e o Mercado
+// Pago nunca tentou entregar nada) — por isso cada criação informa a URL explicitamente.
+const MERCADOPAGO_WEBHOOK_URL = "https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook";
 const MERCADOPAGO_WEBHOOK_NOT_CONFIGURED = "PENDENTE_CONFIGURAR";
 const MP_PLANS = {
   monthly: { amount: 29.9, label: "Assinatura mensal" },
@@ -1168,14 +1172,18 @@ async function requireLeagueAdminWithEmail(auth, liga) {
 exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
-  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
+  await requireLeagueAdminWithEmail(auth, liga);
 
   const result = await new PreApproval(mpClient()).create({
     body: {
-      reason: `Pelada na Mão — ${MP_PLANS.monthly.label} (${liga})`,
+      reason: `Pelada na Mão — ${MP_PLANS.monthly.label}`,
       external_reference: liga,
-      payer_email: payerEmail,
+      // payer_email de propósito ausente: o Mercado Pago recusa a criação quando o
+      // pagador informado e o coletor (dono do Access Token) não são do mesmo tipo
+      // (ambos reais ou ambos de teste) — deixar o Mercado Pago pedir o e-mail no
+      // próprio checkout evita esse conflito nos dois ambientes.
       back_url: "https://peladanamao.com.br",
+      notification_url: MERCADOPAGO_WEBHOOK_URL,
       auto_recurring: {
         frequency: 1,
         frequency_type: "months",
@@ -1190,25 +1198,26 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
 exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
-  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
+  await requireLeagueAdminWithEmail(auth, liga);
 
   const result = await new Preference(mpClient()).create({
     body: {
       items: [{
         id: `annual-${liga}`,
-        title: `Pelada na Mão — ${MP_PLANS.annual.label} (${liga})`,
+        title: `Pelada na Mão — ${MP_PLANS.annual.label}`,
         quantity: 1,
         unit_price: MP_PLANS.annual.amount,
         currency_id: "BRL",
       }],
       external_reference: liga,
-      payer: { email: payerEmail },
+      // payer.email de propósito ausente — mesmo motivo do PreApproval acima.
       back_urls: {
         success: "https://peladanamao.com.br",
         pending: "https://peladanamao.com.br",
         failure: "https://peladanamao.com.br",
       },
       auto_return: "approved",
+      notification_url: MERCADOPAGO_WEBHOOK_URL,
     },
   });
   return { initPoint: result.init_point };
