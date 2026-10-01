@@ -1887,6 +1887,20 @@ p strong {
       <h2 class="section-title"><span class="sn">20</span> Segurança dos Acessos</h2>
       <p>Quem é admin, quem é jogador e a qual jogador cada conta está vinculada são as informações que protegem o financeiro, os contatos e a configuração da liga. Por isso o aplicativo <strong>não grava esses dados diretamente</strong>: cada alteração passa por uma <strong>Cloud Function</strong> (código que roda no servidor do Firebase), que confere quem está pedindo antes de gravar. As regras do Firestore recusam qualquer tentativa de gravar esses campos por fora.</p>
 
+      <h3>Esqueci minha senha</h3>
+      <p>Na tela de login, abaixo do botão <strong>Entrar</strong>, o link <strong>Esqueci minha senha</strong> envia um e-mail de redefinição pelo próprio Firebase Authentication — o aplicativo não guarda nem vê a senha em nenhum momento.</p>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Campo de e-mail vazio</td><td>Aviso <em>Digite seu email no campo acima primeiro.</em> — nada é enviado.</td></tr>
+          <tr><td>E-mail preenchido</td><td>Mensagem <em>Email enviado! Confira sua caixa de entrada (e o spam).</em> — o Firebase manda um link para criar uma senha nova.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <div class="callout-label">Por que a mensagem é sempre a mesma</div>
+        O aviso de "e-mail enviado" aparece <strong>mesmo que aquele e-mail não tenha conta</strong> no sistema. É assim de propósito: se a mensagem mudasse conforme o e-mail existe ou não, qualquer pessoa poderia descobrir quais e-mails têm cadastro só testando um por um.
+      </div>
+
       <h3>Quem pode fazer o quê</h3>
       <table class="data-table">
         <thead><tr><th>Ação</th><th>Função</th><th>Quem pode</th><th>O que o servidor confere</th></tr></thead>

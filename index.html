@@ -1405,6 +1405,21 @@ async function doLoginEmail(mode) {
   }
 }
 
+async function doForgotPassword() {
+  const email = document.getElementById('li-email')?.value?.trim();
+  const err = document.getElementById('login-err');
+  if (!email) {
+    if (err) { err.style.color = 'var(--danger)'; err.textContent = 'Digite seu email no campo acima primeiro.'; }
+    return;
+  }
+  try {
+    await AUTH.sendPasswordResetEmail(email);
+    if (err) { err.style.color = 'var(--accent)'; err.textContent = 'Email enviado! Confira sua caixa de entrada (e o spam).'; }
+  } catch(e) {
+    if (err) { err.style.color = 'var(--danger)'; err.textContent = _firebaseErrMsg(e.code); }
+  }
+}
+
 async function doLoginGoogle() {
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -4044,6 +4059,10 @@ function vLogin() {
           style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Criar conta</button>
         <button onclick="st._loginTab='link';render()"
           style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Entrar sem senha →</button>
+      </div>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="doForgotPassword()"
+          style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:0;text-decoration:underline;font-family:inherit">Esqueci minha senha</button>
       </div>`;
   }
 
