@@ -460,6 +460,7 @@ p strong {
       <li><a href="#politica"><span class="num">23</span> Privacidade e Termos de Uso</a></li>
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
+      <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
     </ul>
   </nav>
 
@@ -492,6 +493,7 @@ p strong {
       <li><a href="#politica"><span class="num">23</span> Privacidade e Termos de Uso</a></li>
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
+      <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
     </ul>
   </nav>
 
@@ -2265,14 +2267,39 @@ p strong {
       <h3>Como o sistema identifica um campeonato do plano free</h3>
       <p>Cada campeonato nasce com uma marcação (<code>freeMode</code>) definida no momento em que é criado, conforme o trial da liga já estava vencido ou não naquele instante — essa marcação não muda depois, mesmo que a liga volte a ser paga futuramente. Um campeonato criado durante o trial mantém seus títulos e badges normalmente, ainda que só seja concluído depois do trial acabar.</p>
 
-      <div class="callout warn">
-        <div class="callout-label warn">Ainda não há cobrança implementada</div>
-        Por enquanto, isto é só a régua entre o que conta e o que não conta — ainda não existe uma forma de a liga voltar a ser paga (nenhum meio de pagamento foi integrado).
-      </div>
       <div class="callout">
         <div class="callout-label">Trava também no servidor, não só na tela</div>
         A tela esconde o campo de gols no plano free, mas isso sozinho não impediria alguém de tentar escrever esse dado direto no banco por fora do app. Existe uma função no servidor (<code>enforceFreeModeNoGoals</code>) que roda a cada gravação num campeonato do plano free e apaga qualquer dado de gol que apareça ali, então a régua vale mesmo que a tela seja contornada.
       </div>
+    </section>
+
+    <!-- 26. Assinatura e Pagamento -->
+    <section class="section" id="assinatura">
+      <h2 class="section-title"><span class="sn">26</span> Assinatura e Pagamento</h2>
+      <p>O botão <strong>💳</strong> no topo do app (só visível para o admin) abre a tela de assinatura, com dois planos pagos via <strong>Mercado Pago</strong>, pessoa física.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Plano</th><th>Valor</th><th>Como funciona</th></tr></thead>
+        <tbody>
+          <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a liga cancelar.</td></tr>
+          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: perto do vencimento, um lembrete por e-mail avisa para pagar de novo.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Como o sistema confirma o pagamento</h3>
+      <p>O botão de assinar não marca nada como pago sozinho — ele só abre o link de pagamento do Mercado Pago. Quem confirma é um <strong>webhook</strong>: o Mercado Pago avisa o servidor quando a cobrança é aprovada, o servidor confere esse aviso diretamente com a API do Mercado Pago (nunca confiando só no que chega na notificação) e só então grava a liga como paga, com uma data de validade (<code>subscriptionActiveUntil</code>).</p>
+      <div class="callout">
+        <div class="callout-label">Uma assinatura ativa sempre libera a liga</div>
+        <code>isLeagueFree()</code> agora confere duas coisas: o trial venceu <em>e</em> não há assinatura ativa. Uma liga com assinatura em dia nunca cai no plano free, mesmo que o trial de 30 dias já tenha acabado há muito tempo.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Segurança do webhook <span class="tag">Técnico</span></div>
+        O endereço que recebe os avisos do Mercado Pago é público na internet, então qualquer notificação que chegar sem uma assinatura digital válida (conferida com a chave secreta configurada no Mercado Pago) é recusada — inclusive enquanto essa chave ainda não tiver sido configurada, o servidor nunca aceita uma notificação sem conferir.
+      </div>
+
+      <h3>Fora do app empacotado nas lojas</h3>
+      <p>O Pelada na Mão ainda não está publicado nas lojas de aplicativo. Quando estiver, a tela de assinatura não deve aparecer dentro do app nativo — só no site, com o lembrete de renovação sempre por e-mail. Isso evita a comissão de 15% a 30% que a Apple e o Google cobram sobre pagamentos feitos dentro de apps publicados neles, e a regra de origem (<em>steering</em>) que proíbe linkar para um pagamento externo de dentro do app, fora do Brasil.</p>
     </section>
 
   </main>
