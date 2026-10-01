@@ -330,6 +330,12 @@ const CLOUDINARY_CLOUD = "fwtyio7l"; // mesmo "cloud name" já usado nas regras 
 const CLOUDINARY_API_KEY = defineSecret("CLOUDINARY_API_KEY");
 const CLOUDINARY_API_SECRET = defineSecret("CLOUDINARY_API_SECRET");
 
+// E-mails transacionais (aviso de liga abandonada) via Resend, com o domínio
+// notificacoes.peladanamao.com.br verificado lá. Configurada com:
+//   firebase functions:secrets:set RESEND_API_KEY
+const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
+const RESEND_FROM = "Pelada na Mão <avisos@notificacoes.peladanamao.com.br>";
+
 // Extrai o public_id (com eventual pasta, sem extensão) de uma URL de entrega do
 // Cloudinary. Ex.: ".../image/upload/v123/aceoma/abc123.jpg" → "aceoma/abc123".
 function cloudinaryPublicId(url) {
@@ -865,58 +871,50 @@ exports.deleteMyAccount = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
 // — por isso pode ser refeita com segurança se a função for repetida.
 const ANON_PREFIX = "jogador_anonimo_";
 
-exports.anonymizeMyName = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async request => {
-  const auth = requireAuth(request);
-  const liga = leagueIdOf(request.data);
-  const userRef = db.doc(`users/${auth.uid}`);
-  const user = (await userRef.get()).data() || {};
-  const role = user.leagues?.[liga]?.role;
-  if (role !== "player" && role !== "admin") throw fail("permission-denied", "Você não participa desta liga.");
-
-  const currentKey = user.leagues[liga]?.playerKey || user.playerKey || "";
-  if (!PLAYER_KEY_RE.test(currentKey)) throw fail("failed-precondition", "Sua conta não está vinculada a um jogador nesta liga.");
-
+// Troca a identidade de um jogador do elenco por um identificador anônimo, dentro de uma
+// liga, e aponta para o novo registro qualquer conta vinculada a ele (normalmente uma só).
+// Extraído de anonymizeMyName para ser reaproveitado pela limpeza de ligas abandonadas, que
+// faz o mesmo para o elenco inteiro de uma vez, sem uma conta chamando. Devolve null se o
+// jogador não existir mais no elenco (nada a fazer).
+async function renamePlayerToAnon(liga, oldKey) {
   const base = `leagues/${liga}`;
-  let oldKey, oldName, newKey, newName;
+  const oldRegRef = db.doc(`${base}/player_registry/${oldKey}`);
+  const oldReg = await oldRegRef.get();
+  if (!oldReg.exists) return null;
+  const oldName = oldReg.data().name;
+  const newKey = ANON_PREFIX + crypto.randomBytes(4).toString("hex");
+  const newName = `Jogador Anônimo #${newKey.slice(-4).toUpperCase()}`;
+  const linkedQuery = db.collection("users").where(new FieldPath("leagues", liga, "playerKey"), "==", oldKey);
 
-  if (currentKey.startsWith(ANON_PREFIX)) {
-    // Identidade já trocada (nesta chamada ou numa anterior): só confere se sobrou
-    // histórico com o nome antigo e termina de limpar.
-    const reg = await db.doc(`${base}/player_registry/${currentKey}`).get();
-    if (!reg.exists || !reg.data().formerName) return { ok: true, alreadyAnonymized: true };
-    newKey = currentKey; newName = reg.data().name; oldName = reg.data().formerName; oldKey = playerKey(oldName);
-  } else {
-    oldKey = currentKey;
-    const oldRegRef = db.doc(`${base}/player_registry/${oldKey}`);
-    const oldReg = await oldRegRef.get();
-    if (!oldReg.exists) throw fail("not-found", "Jogador não encontrado no elenco.");
-    oldName = oldReg.data().name;
-    newKey = ANON_PREFIX + crypto.randomBytes(4).toString("hex");
-    newName = `Jogador Anônimo #${newKey.slice(-4).toUpperCase()}`;
-
-    // Troca de identidade: cadastro novo + apagar o antigo + apontar a conta para o
-    // novo, tudo ou nada. formerName fica gravado para a limpeza do histórico (abaixo)
-    // conseguir encontrar o nome antigo mesmo que a função seja chamada de novo depois.
-    await db.runTransaction(async tx => {
-      const [freshUser, freshOldReg] = await Promise.all([tx.get(userRef), tx.get(oldRegRef)]);
-      if (!freshOldReg.exists) return; // outra chamada já fez a troca
-      const d = freshOldReg.data();
-      tx.set(db.doc(`${base}/player_registry/${newKey}`), {
-        name: newName, formerName: oldName,
-        added: d.added || new Date().toISOString().slice(0, 10), active: d.active !== false,
-        ...(d.stars != null ? { stars: d.stars } : {}),
-      });
-      tx.delete(oldRegRef);
-      const leagueField = f => new FieldPath("leagues", liga, f);
-      const fields = [leagueField("playerKey"), newKey];
-      if ((freshUser.data()?.playerKey || "") === oldKey) fields.push(new FieldPath("playerKey"), newKey);
-      tx.update(userRef, ...fields);
+  // Troca de identidade: cadastro novo + apagar o antigo + apontar toda conta vinculada
+  // para o novo, tudo ou nada. formerName fica gravado para a limpeza do histórico (abaixo)
+  // conseguir encontrar o nome antigo mesmo que a função seja chamada de novo depois.
+  await db.runTransaction(async tx => {
+    const [freshOldReg, linkedSnap] = await Promise.all([tx.get(oldRegRef), tx.get(linkedQuery)]);
+    if (!freshOldReg.exists) return; // outra chamada já fez a troca
+    const d = freshOldReg.data();
+    tx.set(db.doc(`${base}/player_registry/${newKey}`), {
+      name: newName, formerName: oldName,
+      added: d.added || new Date().toISOString().slice(0, 10), active: d.active !== false,
+      ...(d.stars != null ? { stars: d.stars } : {}),
     });
-  }
+    tx.delete(oldRegRef);
+    linkedSnap.docs.forEach(doc => {
+      const fields = [new FieldPath("leagues", liga, "playerKey"), newKey];
+      if ((doc.data().playerKey || "") === oldKey) fields.push("playerKey", newKey);
+      tx.update(doc.ref, ...fields);
+    });
+  });
 
-  // Limpeza do histórico: idêntica em espírito ao que o admin já faz ao renomear um
-  // jogador (renamePlayer, no index.html), só que restrita ao próprio nome de quem
-  // chamou. Cada passo confere o nome antigo, então repetir a função não duplica nada.
+  return { oldKey, oldName, newKey, newName };
+}
+
+// Limpeza do histórico de uma liga (títulos, foto, contato, financeiro, campeonatos) depois
+// de renamePlayerToAnon. Idêntica em espírito ao que o admin já faz ao renomear um jogador
+// (renamePlayer, no index.html), só que restrita ao jogador trocado. Cada passo confere o
+// nome antigo, então repetir a função não duplica nada.
+async function cleanPlayerHistory(liga, { oldKey, oldName, newKey, newName }) {
+  const base = `leagues/${liga}`;
   const titlesOld = await db.doc(`${base}/player_titles/${oldKey}`).get();
   if (titlesOld.exists) {
     await db.doc(`${base}/player_titles/${newKey}`).set({ ...titlesOld.data(), name: newName });
@@ -978,9 +976,34 @@ exports.anonymizeMyName = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
     }
     if (Object.keys(patch).length) await doc.ref.update(patch);
   }
+}
 
+exports.anonymizeMyName = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async request => {
+  const auth = requireAuth(request);
+  const liga = leagueIdOf(request.data);
+  const userRef = db.doc(`users/${auth.uid}`);
+  const user = (await userRef.get()).data() || {};
+  const role = user.leagues?.[liga]?.role;
+  if (role !== "player" && role !== "admin") throw fail("permission-denied", "Você não participa desta liga.");
+
+  const currentKey = user.leagues[liga]?.playerKey || user.playerKey || "";
+  if (!PLAYER_KEY_RE.test(currentKey)) throw fail("failed-precondition", "Sua conta não está vinculada a um jogador nesta liga.");
+
+  let result;
+  if (currentKey.startsWith(ANON_PREFIX)) {
+    // Identidade já trocada (nesta chamada ou numa anterior): só confere se sobrou
+    // histórico com o nome antigo e termina de limpar.
+    const reg = await db.doc(`leagues/${liga}/player_registry/${currentKey}`).get();
+    if (!reg.exists || !reg.data().formerName) return { ok: true, alreadyAnonymized: true };
+    result = { newKey: currentKey, newName: reg.data().name, oldName: reg.data().formerName, oldKey: playerKey(reg.data().formerName) };
+  } else {
+    result = await renamePlayerToAnon(liga, currentKey);
+    if (!result) throw fail("not-found", "Jogador não encontrado no elenco.");
+  }
+
+  await cleanPlayerHistory(liga, result);
   logger.info("anonymizeMyName concluída", { liga });
-  return { ok: true, newKey, newName };
+  return { ok: true, newKey: result.newKey, newName: result.newName };
 });
 
 // ── Backup agendado do Firestore ────────────────────────────────────────────
@@ -1004,5 +1027,106 @@ exports.scheduledFirestoreBackup = onSchedule(
       collectionIds: [], // vazio = todas as coleções, de todas as ligas
     });
     logger.info(`Backup do Firestore iniciado em ${outputUriPrefix}`, { operationName: operation.name });
+  }
+);
+
+// Marca que alguém abriu a liga agora — chamada pelo app toda vez que a liga é carregada
+// (startListeners, no index.html). É o sinal que a varredura mensal de ligas abandonadas usa
+// para saber se ainda há gente usando. Não precisa ser admin: qualquer membro conta como "a
+// liga está viva". Sem rate limit: na pior hipótese grava o mesmo valor várias vezes por
+// sessão, o que é inofensivo e muito barato.
+exports.touchLeagueActivity = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  const liga = leagueIdOf(request.data);
+  const user = (await db.doc(`users/${auth.uid}`).get()).data() || {};
+  if (!user.leagues?.[liga]?.role) throw fail("permission-denied", "Você não participa desta liga.");
+  await db.doc(`leagues/${liga}`).update({ lastActivityAt: new Date().toISOString() });
+  return { ok: true };
+});
+
+// ── Ligas abandonadas: aviso e anonimização automática ──────────────────────────────────
+// `lastActivityAt` (gravado por touchLeagueActivity) diz quando alguém abriu a liga pela
+// última vez. Esta varredura roda uma vez por mês:
+//  1. liga sem nenhuma abertura há ~11 meses e ainda sem aviso → manda e-mail aos admins e
+//     grava `abandonmentWarnedAt`;
+//  2. liga avisada há mais de 30 dias cujo `lastActivityAt` não mudou desde o aviso (ninguém
+//     reagiu) → anonimiza o elenco inteiro, jogador por jogador, com a mesma limpeza de
+//     anonymizeMyName, e grava `abandonmentAnonymizedAt`. Não exclui a liga nem o histórico
+//     esportivo (campeonatos, títulos, estatísticas) — só os dados pessoais (nome, foto,
+//     WhatsApp) deixam de ficar associados a ele, pela mesma razão de não guardar dado
+//     pessoal por tempo indefinido sem necessidade (LGPD).
+//  3. liga avisada que voltou a ter atividade → o aviso é descartado, permitindo um novo
+//     ciclo completo se ela ficar inativa de novo no futuro. Uma liga já anonimizada nunca
+//     entra de novo no ciclo (não há mais nome real para proteger).
+const ABANDON_WARN_AFTER_DAYS = 335; // ~11 meses
+const ABANDON_ACT_AFTER_DAYS = 30;   // prazo de reação depois do aviso
+
+async function sendAbandonWarningEmail(to, leagueId) {
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to,
+        subject: `Sua liga "${leagueId}" está inativa há quase um ano`,
+        html: `<p>Ninguém da liga <strong>${leagueId}</strong> no Pelada na Mão abre o aplicativo há quase um ano.</p>`
+          + `<p>Para manter o histórico, os títulos e os dados dos jogadores como estão hoje, basta entrar no aplicativo normalmente — não precisa fazer mais nada.</p>`
+          + `<p>Se ninguém entrar nos próximos 30 dias, o nome, a foto e o WhatsApp de cada jogador dessa liga serão trocados por um identificador anônimo, por padrão de proteção de dados pessoais. O histórico esportivo (resultados, títulos, estatísticas) continua existindo normalmente, só sem os nomes.</p>`
+          + `<p>peladanamao.com.br</p>`,
+      }),
+    });
+    if (!res.ok) logger.warn("Resend não confirmou o envio do aviso de abandono", { status: res.status, leagueId });
+  } catch (e) {
+    logger.warn("Falha ao chamar a API do Resend para aviso de abandono", { message: e?.message, leagueId });
+  }
+}
+
+exports.checkAbandonedLeagues = onSchedule(
+  { schedule: "0 6 1 * *", timeZone: "America/Sao_Paulo", region: "us-east1", secrets: [RESEND_API_KEY], timeoutSeconds: 540 },
+  async () => {
+    const now = Date.now();
+    const warnCutoff = new Date(now - ABANDON_WARN_AFTER_DAYS * 86400000).toISOString();
+    const actCutoff = new Date(now - ABANDON_ACT_AFTER_DAYS * 86400000).toISOString();
+    let warned = 0, anonymized = 0;
+
+    const leaguesSnap = await db.collection("leagues").get();
+    for (const leagueDoc of leaguesSnap.docs) {
+      const liga = leagueDoc.id;
+      const data = leagueDoc.data();
+      if (data.abandonmentAnonymizedAt) continue; // já processada: o ciclo não se repete
+      const lastActivityAt = data.lastActivityAt;
+      if (!lastActivityAt) continue; // liga que ninguém abriu desde que o campo existe
+
+      if (data.abandonmentWarnedAt) {
+        if (lastActivityAt > data.abandonmentWarnedAt) {
+          // Reaberta depois do aviso: cancela e permite um novo ciclo no futuro.
+          await leagueDoc.ref.update({ abandonmentWarnedAt: FieldValue.delete() });
+          continue;
+        }
+        if (data.abandonmentWarnedAt < actCutoff) {
+          const registrySnap = await db.collection(`leagues/${liga}/player_registry`).get();
+          for (const playerDoc of registrySnap.docs) {
+            const key = playerDoc.id;
+            if (key.startsWith(ANON_PREFIX)) continue;
+            const result = await renamePlayerToAnon(liga, key);
+            if (result) await cleanPlayerHistory(liga, result);
+          }
+          await leagueDoc.ref.update({ abandonmentAnonymizedAt: new Date().toISOString() });
+          anonymized++;
+        }
+        continue;
+      }
+
+      if (lastActivityAt < warnCutoff) {
+        const adminsSnap = await db.collection("users").where(new FieldPath("leagues", liga, "role"), "==", "admin").get();
+        const emails = adminsSnap.docs.map(d => d.data().email).filter(Boolean);
+        if (emails.length) await sendAbandonWarningEmail(emails, liga);
+        await leagueDoc.ref.update({ abandonmentWarnedAt: new Date().toISOString() });
+        warned++;
+      }
+    }
+
+    logger.info("checkAbandonedLeagues concluída", { ligasAvisadas: warned, ligasAnonimizadas: anonymized });
   }
 );

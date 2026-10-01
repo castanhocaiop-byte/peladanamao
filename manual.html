@@ -2009,6 +2009,29 @@ p strong {
         </tbody>
       </table>
 
+      <h3>Ligas abandonadas</h3>
+      <p>Guardar dado pessoal de uma liga que ninguém mais usa, por tempo indefinido, não tem necessidade — e é uma das coisas que a LGPD pede para evitar. Por isso uma rotina mensal confere, para cada liga, quando alguém abriu ela pela última vez.</p>
+      <table class="data-table">
+        <thead><tr><th>Quando</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>~11 meses sem ninguém abrir a liga</td><td>Um e-mail avisa o(s) admin(s): basta entrar no aplicativo normalmente para manter tudo como está. Nenhum dado muda neste passo.</td></tr>
+          <tr><td>+ 30 dias depois do aviso, ainda sem ninguém abrir</td><td>O nome, a foto e o WhatsApp de <strong>cada jogador do elenco</strong> são trocados por um identificador anônimo — a mesma troca da seção 22, feita pelo sistema para o elenco inteiro de uma vez.</td></tr>
+          <tr><td>Alguém abre a liga a qualquer momento antes da anonimização</td><td>O aviso é descartado. Se a liga ficar inativa de novo no futuro, o prazo de 11 meses recomeça do zero.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <div class="callout-label">O que NÃO muda</div>
+        A liga não é excluída e o histórico esportivo continua existindo normalmente — resultados, títulos, estatísticas, tudo preservado. Só os dados que identificam as pessoas deixam de ficar associados a esse histórico, exatamente como na anonimização que qualquer jogador já pode pedir para si mesmo a qualquer momento.
+      </div>
+      <div class="callout gold">
+        <div class="callout-label gold">Uma vez só</div>
+        Depois de anonimizada, a liga não entra de novo nesse ciclo automaticamente — não há mais nome real para proteger. Reabrir a liga anos depois não desfaz a anonimização.
+      </div>
+      <div class="callout warn">
+        <div class="callout-label warn">E-mail via Resend <span class="tag">Técnico</span></div>
+        O aviso é enviado pela API do Resend, usando o domínio <code>notificacoes.peladanamao.com.br</code> (verificado lá com registros DNS próprios, separados do domínio principal). A chave de API fica como Firebase Secret (<code>RESEND_API_KEY</code>), do mesmo jeito que as chaves do Cloudinary.
+      </div>
+
       <h3>WhatsApp só do admin</h3>
       <p>O número de WhatsApp de jogadores e avulsos fica numa área própria da liga (<code>contacts</code>) que <strong>só o admin lê e grava</strong>. O cadastro do elenco e as cobranças de avulsos — que todo membro lê — <strong>não aceitam mais o campo <code>whatsapp</code></strong>: as regras recusam gravar ou alterar o número ali. Os avulsos dos campeonatos também deixaram de guardar o número.</p>
       <table class="data-table">

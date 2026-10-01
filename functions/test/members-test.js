@@ -86,7 +86,10 @@ const fakeDb = {
     const writes = [];
     let wrote = false;
     const tx = {
-      get: async ref => { if (wrote) throw new Error('leituras devem vir antes das escritas'); return snapOf(ref.path); },
+      get: async target => {
+        if (wrote) throw new Error('leituras devem vir antes das escritas');
+        return target.path !== undefined ? snapOf(target.path) : await target.get(); // doc ref OU query
+      },
       set: (ref, d) => { wrote = true; writes.push(() => ref.set(d)); },
       update: (ref, ...args) => {
         wrote = true;
@@ -160,7 +163,7 @@ const reset = () => {
 
 (async () => {
   // opções das funções
-  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 9 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
+  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 10 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
 
   // ───────── joinLeague ─────────
   reset();

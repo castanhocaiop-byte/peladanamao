@@ -802,6 +802,7 @@ function startListeners() {
   _unsubListeners = [];
   st.photos = {};
   st.contacts = {};
+  callFn('touchLeagueActivity', { liga: st.leagueId }).catch(()=>{}); // marca a liga como ativa; falha aqui não afeta o uso do app
 
   const u1 = col('championships').onSnapshot(snap => {
     const wasReady = st.ready;

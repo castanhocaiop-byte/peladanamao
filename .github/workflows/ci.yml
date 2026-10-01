@@ -54,3 +54,7 @@ jobs:
       - name: Testes das Cloud Functions (plano free e backup)
         working-directory: functions
         run: node test/free-mode-test.js
+
+      - name: Testes das Cloud Functions (ligas abandonadas)
+        working-directory: functions
+        run: node test/abandoned-leagues-test.js
