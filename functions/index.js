@@ -1172,16 +1172,18 @@ async function requireLeagueAdminWithEmail(auth, liga) {
 exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
-  await requireLeagueAdminWithEmail(auth, liga);
+  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
 
+  // payer_email é obrigatório para este tipo de assinatura (o SDK marca como opcional,
+  // mas a API recusa sem ele: "payer_email is required"). Em teste, se o Access Token for
+  // de uma conta de teste, o Mercado Pago exige que este e-mail também seja de uma conta
+  // de teste ("Both payer and collector must be real or test users") — isso nunca ocorre
+  // em produção, onde as duas pontas já são contas reais.
   const result = await new PreApproval(mpClient()).create({
     body: {
       reason: `Pelada na Mão — ${MP_PLANS.monthly.label}`,
       external_reference: liga,
-      // payer_email de propósito ausente: o Mercado Pago recusa a criação quando o
-      // pagador informado e o coletor (dono do Access Token) não são do mesmo tipo
-      // (ambos reais ou ambos de teste) — deixar o Mercado Pago pedir o e-mail no
-      // próprio checkout evita esse conflito nos dois ambientes.
+      payer_email: payerEmail,
       back_url: "https://peladanamao.com.br",
       notification_url: MERCADOPAGO_WEBHOOK_URL,
       auto_recurring: {
@@ -1198,7 +1200,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
 exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
-  await requireLeagueAdminWithEmail(auth, liga);
+  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
 
   const result = await new Preference(mpClient()).create({
     body: {
@@ -1210,7 +1212,7 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
         currency_id: "BRL",
       }],
       external_reference: liga,
-      // payer.email de propósito ausente — mesmo motivo do PreApproval acima.
+      payer: { email: payerEmail },
       back_urls: {
         success: "https://peladanamao.com.br",
         pending: "https://peladanamao.com.br",

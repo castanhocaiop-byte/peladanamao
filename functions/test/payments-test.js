@@ -119,10 +119,9 @@ const reset = () => {
 
   const resMonthly = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
   check('mensal: devolve o link de pagamento', resMonthly.initPoint === 'https://mp.test/preapproval/xyz');
-  // Regressão: enviar payer_email faz o Mercado Pago recusar a criação quando o coletor
-  // (conta de teste) e o pagador (e-mail real) não são do mesmo tipo (confirmado em teste
-  // real — MPBadRequestError "Both payer and collector must be real or test users").
-  check('mensal: não manda payer_email (deixa o Mercado Pago pedir no checkout)', calls.preApprovalCreate[0].payer_email === undefined);
+  // Regressão: payer_email é obrigatório (a API recusa sem ele, mesmo o SDK marcando como
+  // opcional — confirmado em teste real: MPBadRequestError "payer_email is required").
+  check('mensal: manda o e-mail do admin', calls.preApprovalCreate[0].payer_email === 'adm@x.com');
   check('mensal: external_reference é a liga', calls.preApprovalCreate[0].external_reference === 'L');
   check('mensal: valor e frequência corretos', calls.preApprovalCreate[0].auto_recurring.transaction_amount === 29.9 && calls.preApprovalCreate[0].auto_recurring.frequency_type === 'months');
   // Regressão: a URL configurada no painel do Mercado Pago não cobre pagamentos via
@@ -143,7 +142,7 @@ const reset = () => {
   check('anual: valor correto no item', calls.preferenceCreate[0].items[0].unit_price === 238.8);
   check('anual: external_reference é a liga', calls.preferenceCreate[0].external_reference === 'L');
   check('anual: informa a URL do webhook explicitamente', calls.preferenceCreate[0].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook');
-  check('anual: não manda payer.email (mesmo motivo do mensal)', calls.preferenceCreate[0].payer === undefined);
+  check('anual: manda o e-mail do admin', calls.preferenceCreate[0].payer.email === 'adm@x.com');
 
   // ───────── mercadoPagoWebhook ─────────
   reset();
