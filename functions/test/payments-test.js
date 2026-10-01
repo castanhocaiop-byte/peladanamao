@@ -39,14 +39,21 @@ const calls = { preApprovalCreate: [], preferenceCreate: [] };
 let preApprovalGetResult = null;
 let paymentGetResult = null;
 let getShouldThrow = false;
+let createShouldThrowMessage = null; // simula o SDK do Mercado Pago recusando a criação
 
 class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
 class PreApproval {
-  async create({ body }) { calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/preapproval/xyz' }; }
+  async create({ body }) {
+    if (createShouldThrowMessage) { const e = new Error(createShouldThrowMessage); e.status = 400; throw e; }
+    calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/preapproval/xyz' };
+  }
   async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...preApprovalGetResult }; }
 }
 class Preference {
-  async create({ body }) { calls.preferenceCreate.push(body); return { init_point: 'https://mp.test/preference/xyz' }; }
+  async create({ body }) {
+    if (createShouldThrowMessage) { const e = new Error(createShouldThrowMessage); e.status = 400; throw e; }
+    calls.preferenceCreate.push(body); return { init_point: 'https://mp.test/preference/xyz' };
+  }
 }
 class Payment {
   async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...paymentGetResult }; }
@@ -100,6 +107,7 @@ const reset = () => {
   preApprovalGetResult = null;
   paymentGetResult = null;
   getShouldThrow = false;
+  createShouldThrowMessage = null;
   signatureShouldFail = false;
   webhookSecretValue = 'a-real-webhook-secret';
 };
@@ -143,6 +151,22 @@ const reset = () => {
   check('anual: external_reference é a liga', calls.preferenceCreate[0].external_reference === 'L');
   check('anual: informa a URL do webhook explicitamente', calls.preferenceCreate[0].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook');
   check('anual: manda o e-mail do admin', calls.preferenceCreate[0].payer.email === 'adm@x.com');
+
+  // ───────── Regressão: erro do Mercado Pago chega com mensagem clara ─────────
+  // Confirmado em produção: sem este tratamento, o SDK lança uma exceção que o Firebase
+  // converte num "internal" genérico sem nenhum detalhe — o app parecia travado, sem
+  // nenhuma mensagem visível ao usuário.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  createShouldThrowMessage = 'Both payer and collector must be real or test users';
+
+  const monthlyErr = await (async () => { try { await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
+  check('mensal: erro do Mercado Pago vira failed-precondition (não internal)', monthlyErr?.code === 'failed-precondition');
+  check('mensal: mensagem do erro inclui a causa real do Mercado Pago', monthlyErr?.message?.includes('Both payer and collector must be real or test users'));
+
+  const annualErr = await (async () => { try { await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
+  check('anual: erro do Mercado Pago também vira failed-precondition', annualErr?.code === 'failed-precondition');
 
   // ───────── mercadoPagoWebhook ─────────
   reset();

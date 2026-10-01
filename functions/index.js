@@ -1169,6 +1169,19 @@ async function requireLeagueAdminWithEmail(auth, liga) {
   return user.email;
 }
 
+// O SDK do Mercado Pago lança exceções próprias (MPBadRequestError etc.) que, sem
+// tratamento, o Firebase Functions converte num "internal" genérico sem detalhe nenhum
+// para quem chamou — o app ficava parecendo travado, sem nenhuma mensagem visível.
+// Envolver a chamada aqui devolve sempre um erro com a causa real.
+async function callMp(action, factory) {
+  try {
+    return await factory();
+  } catch (e) {
+    logger.warn(`Mercado Pago recusou ${action}`, { message: e?.message, status: e?.status });
+    throw fail("failed-precondition", `O Mercado Pago recusou a solicitação: ${e?.message || "erro desconhecido"}.`);
+  }
+}
+
 exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
@@ -1179,7 +1192,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
   // de uma conta de teste, o Mercado Pago exige que este e-mail também seja de uma conta
   // de teste ("Both payer and collector must be real or test users") — isso nunca ocorre
   // em produção, onde as duas pontas já são contas reais.
-  const result = await new PreApproval(mpClient()).create({
+  const result = await callMp("a criação da assinatura mensal", () => new PreApproval(mpClient()).create({
     body: {
       reason: `Pelada na Mão — ${MP_PLANS.monthly.label}`,
       external_reference: liga,
@@ -1193,7 +1206,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
         currency_id: "BRL",
       },
     },
-  });
+  }));
   return { initPoint: result.init_point };
 });
 
@@ -1202,7 +1215,7 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
   const liga = leagueIdOf(request.data);
   const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
 
-  const result = await new Preference(mpClient()).create({
+  const result = await callMp("a criação da cobrança anual", () => new Preference(mpClient()).create({
     body: {
       items: [{
         id: `annual-${liga}`,
@@ -1221,7 +1234,7 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
       auto_return: "approved",
       notification_url: MERCADOPAGO_WEBHOOK_URL,
     },
-  });
+  }));
   return { initPoint: result.init_point };
 });
 
