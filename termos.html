@@ -1,0 +1,374 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Termos de Uso</title>
+<meta name="description" content="Termos de Uso do Pelada na Mão, redigidos com base na LGPD, no Código de Defesa do Consumidor e em práticas de mercado para plataformas de software.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F5F1;
+    --paper: #FFFFFF;
+    --ink: #1E1B16;
+    --ink2: #4B463E;
+    --ink3: #8B8478;
+    --border: #E4DFD5;
+    --border2: #EDE9E0;
+    --accent: #8A5A2B;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #8A5A2B14;
+    --warn: #9A3B2E;
+    --warn-soft: #9A3B2E12;
+    --warn-border: #9A3B2E3A;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16140F;
+      --paper: #1E1B15;
+      --ink: #F3EFE6;
+      --ink2: #C9C2B3;
+      --ink3: #8C8576;
+      --border: #37322A;
+      --border2: #2A2620;
+      --accent: #D3A46B;
+      --accent-ink: #1E1B15;
+      --accent-soft: #D3A46B1E;
+      --warn: #E5877A;
+      --warn-soft: #E5877A16;
+      --warn-border: #E5877A3D;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16140F;
+    --paper: #1E1B15;
+    --ink: #F3EFE6;
+    --ink2: #C9C2B3;
+    --ink3: #8C8576;
+    --border: #37322A;
+    --border2: #2A2620;
+    --accent: #D3A46B;
+    --accent-ink: #1E1B15;
+    --accent-soft: #D3A46B1E;
+    --warn: #E5877A;
+    --warn-soft: #E5877A16;
+    --warn-border: #E5877A3D;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Source Sans 3', system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px 80px; }
+
+  .masthead {
+    padding: 44px 0 28px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1.title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(30px, 6vw, 42px);
+    line-height: 1.08;
+    letter-spacing: -.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .subtitle { color: var(--ink2); font-size: 15px; max-width: 52ch; margin: 0; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+    margin-top: 20px; font-size: 12.5px; color: var(--ink3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .banner {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--warn-soft); border: 1px solid var(--warn-border);
+    border-radius: 10px; padding: 14px 16px; margin: 22px 0 8px;
+  }
+  .banner .ic { font-size: 18px; line-height: 1.4; flex-shrink: 0; }
+  .banner b { color: var(--warn); }
+  .banner p { margin: 0; font-size: 13.5px; color: var(--ink2); line-height: 1.55; }
+
+  nav.toc {
+    background: var(--paper); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; margin: 28px 0 36px;
+  }
+  nav.toc .toc-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--ink3);
+    margin-bottom: 10px;
+  }
+  nav.toc ol {
+    columns: 2; column-gap: 24px; margin: 0; padding: 0; list-style: none;
+  }
+  nav.toc li { break-inside: avoid; margin-bottom: 6px; }
+  nav.toc a {
+    color: var(--ink2); text-decoration: none; font-size: 13px;
+    display: flex; gap: 8px;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .n {
+    font-family: 'JetBrains Mono', monospace; color: var(--accent);
+    font-size: 12px; flex-shrink: 0; width: 1.4em;
+  }
+  @media (max-width: 520px) { nav.toc ol { columns: 1; } }
+
+  section.clause { padding: 30px 0; border-bottom: 1px solid var(--border2); scroll-margin-top: 16px; }
+  section.clause:last-of-type { border-bottom: none; }
+  h2.h {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: 'Fraunces', Georgia, serif; font-weight: 600;
+    font-size: 20px; margin: 0 0 14px; color: var(--ink);
+  }
+  h2.h .num {
+    font-family: 'JetBrains Mono', monospace; font-weight: 500;
+    font-size: 13px; color: var(--accent-ink); background: var(--accent);
+    border-radius: 6px; padding: 2px 7px; flex-shrink: 0;
+  }
+  section.clause p { margin: 0 0 12px; color: var(--ink2); }
+  section.clause p:last-child { margin-bottom: 0; }
+  section.clause strong { color: var(--ink); font-weight: 600; }
+  section.clause ul, section.clause ol.plain {
+    margin: 0 0 12px; padding-left: 22px; color: var(--ink2);
+  }
+  section.clause li { margin-bottom: 6px; }
+  section.clause li:last-child { margin-bottom: 0; }
+
+  .callout {
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 10px; padding: 14px 16px; margin: 14px 0;
+  }
+  .callout .lbl {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+    margin-bottom: 6px; font-weight: 600;
+  }
+  .callout p { margin: 0; font-size: 14px; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace; font-size: .88em;
+    background: var(--border2); border-radius: 4px; padding: 1px 5px;
+  }
+
+  footer.sig {
+    margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--border);
+    color: var(--ink3); font-size: 12.5px; line-height: 1.7;
+  }
+  footer.sig .lbl { color: var(--ink2); font-weight: 600; }
+</style>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="kicker">Pelada na Mão · Documento legal</div>
+    <h1 class="title">Termos de Uso</h1>
+    <p class="subtitle">As regras de uso da plataforma Pelada na Mão, escritas em linguagem simples sempre que possível, para reger a relação entre o Pelada na Mão, os administradores de liga e os jogadores.</p>
+    <div class="meta-row">
+      <span>Versão: 1.0</span>
+      <span>Vigente desde: 01/10/2026</span>
+      <span>Idioma: português (Brasil)</span>
+    </div>
+  </div>
+
+  <div class="banner">
+    <span class="ic">ℹ️</span>
+    <p><b>Sobre este documento.</b> Estes Termos foram redigidos com base no funcionamento real do sistema, na Lei Geral de Proteção de Dados (Lei 13.709/2018) e em práticas de mercado para plataformas de software — mas não substituem uma consulta a um advogado, especialmente se o Pelada na Mão passar a cobrar por planos, mudar de porte ou enfrentar uma disputa concreta.</p>
+  </div>
+
+  <nav class="toc" aria-label="Sumário">
+    <div class="toc-label">Cláusulas</div>
+    <ol>
+      <li><a href="#c1"><span class="n">01</span> Aceitação dos Termos</a></li>
+      <li><a href="#c2"><span class="n">02</span> O que é o Pelada na Mão</a></li>
+      <li><a href="#c3"><span class="n">03</span> Definições</a></li>
+      <li><a href="#c4"><span class="n">04</span> Cadastro e Elegibilidade</a></li>
+      <li><a href="#c5"><span class="n">05</span> Ligas e Papéis de Acesso</a></li>
+      <li><a href="#c6"><span class="n">06</span> Responsabilidades do Admin</a></li>
+      <li><a href="#c7"><span class="n">07</span> Conteúdo Inserido no Pelada na Mão</a></li>
+      <li><a href="#c8"><span class="n">08</span> Controle Financeiro da Liga</a></li>
+      <li><a href="#c9"><span class="n">09</span> Notificações</a></li>
+      <li><a href="#c10"><span class="n">10</span> Preço e Planos</a></li>
+      <li><a href="#c11"><span class="n">11</span> Uso Aceitável</a></li>
+      <li><a href="#c12"><span class="n">12</span> Propriedade Intelectual</a></li>
+      <li><a href="#c13"><span class="n">13</span> Dados Pessoais</a></li>
+      <li><a href="#c14"><span class="n">14</span> Seus Direitos sobre os Dados</a></li>
+      <li><a href="#c15"><span class="n">15</span> Disponibilidade e Garantias</a></li>
+      <li><a href="#c16"><span class="n">16</span> Limitação de Responsabilidade</a></li>
+      <li><a href="#c17"><span class="n">17</span> Suspensão e Encerramento</a></li>
+      <li><a href="#c18"><span class="n">18</span> Alterações destes Termos</a></li>
+      <li><a href="#c19"><span class="n">19</span> Lei Aplicável e Foro</a></li>
+      <li><a href="#c20"><span class="n">20</span> Contato</a></li>
+    </ol>
+  </nav>
+
+  <section class="clause" id="c1">
+    <h2 class="h"><span class="num">01</span> Aceitação dos Termos</h2>
+    <p>Estes Termos de Uso regem o acesso e o uso do Pelada na Mão, uma plataforma para organização de ligas de futebol amador ("Pelada na Mão", "plataforma" ou "serviço"). Ao criar uma conta, aceitar um convite de liga ou usar o Pelada na Mão de qualquer forma, você concorda integralmente com estes Termos e com a Política de Privacidade, disponível dentro do próprio aplicativo.</p>
+    <p>Se você não concorda com algum ponto destes Termos, a orientação é não usar o Pelada na Mão. Quem cria uma liga aceita estes Termos também em nome da própria liga, nos limites da cláusula 6.</p>
+  </section>
+
+  <section class="clause" id="c2">
+    <h2 class="h"><span class="num">02</span> O que é o Pelada na Mão</h2>
+    <p>O Pelada na Mão é uma ferramenta de gestão para grupos de futebol amador: convocação de jogos, sorteio de times, registro de resultados, estatísticas e conquistas dos jogadores, controle financeiro interno (mensalidades e despesas) e comunicação por notificação.</p>
+    <p>O Pelada na Mão <strong>não organiza, patrocina, arbitra nem participa</strong> das partidas de futebol em si — essas continuam sendo combinadas e disputadas pelos próprios jogadores, fora da plataforma. O Pelada na Mão também <strong>não processa nem intermedia pagamentos</strong>: ele registra quem pagou o quê dentro do grupo, mas qualquer transferência de dinheiro (como um PIX) acontece diretamente entre os jogadores e o administrador da liga, por fora do aplicativo.</p>
+  </section>
+
+  <section class="clause" id="c3">
+    <h2 class="h"><span class="num">03</span> Definições</h2>
+    <ul>
+      <li><strong>Liga:</strong> um grupo independente cadastrado no Pelada na Mão (por exemplo, o grupo de futebol de um bairro ou empresa), com seus próprios membros, campeonatos e financeiro.</li>
+      <li><strong>Administrador (Admin):</strong> quem cria ou gerencia uma Liga, com acesso a todos os dados daquela Liga e poder de aprovar, promover ou remover membros.</li>
+      <li><strong>Jogador:</strong> membro aprovado de uma Liga, vinculado ou não a um jogador do elenco.</li>
+      <li><strong>Conta:</strong> o cadastro individual de acesso (e-mail, login por Google ou link mágico) usado para entrar no Pelada na Mão.</li>
+      <li><strong>Conteúdo:</strong> qualquer informação inserida no Pelada na Mão por um Admin ou Jogador — nomes, fotos, resultados, valores financeiros, mensagens.</li>
+    </ul>
+  </section>
+
+  <section class="clause" id="c4">
+    <h2 class="h"><span class="num">04</span> Cadastro e Elegibilidade</h2>
+    <p>Para usar o Pelada na Mão é preciso criar uma Conta com e-mail válido (diretamente, com conta Google, ou por link de acesso). Você é responsável por manter a segurança da sua Conta e por tudo que acontecer nela.</p>
+    <p>O uso do Pelada na Mão é destinado a pessoas com <strong>18 anos completos ou emancipadas</strong>. Menores de idade só podem ser cadastrados como jogadores do elenco (sem conta própria) pelo Admin, que assume a responsabilidade por esse cadastro perante o responsável legal do menor.</p>
+    <p>Cada Conta deve corresponder a uma pessoa real. Contas falsas, compartilhadas para fins de fraude, ou criadas para burlar limites da plataforma podem ser suspensas.</p>
+  </section>
+
+  <section class="clause" id="c5">
+    <h2 class="h"><span class="num">05</span> Ligas e Papéis de Acesso</h2>
+    <p>Uma Conta pode participar de mais de uma Liga. Dentro de cada Liga, o papel (Admin, Jogador ou Pendente) é independente das demais — ser Admin de uma Liga não dá nenhum acesso a outra.</p>
+    <p>A entrada em uma Liga acontece por convite do Admin (link de uso único) ou por criação de uma nova Liga, que automaticamente torna quem criou o primeiro Admin dela. Cada Conta pode criar até um número limitado de Ligas, informado na própria plataforma.</p>
+  </section>
+
+  <section class="clause" id="c6">
+    <h2 class="h"><span class="num">06</span> Responsabilidades do Administrador</h2>
+    <p>O Admin de uma Liga é responsável, perante os demais membros dela e perante a lei, por:</p>
+    <ul>
+      <li>ter avisado e obtido o consentimento adequado dos jogadores antes de cadastrar dados pessoais deles (nome, WhatsApp, foto) no Pelada na Mão;</li>
+      <li>usar o controle financeiro da Liga de forma honesta e correta — o Pelada na Mão não audita, garante nem se responsabiliza pela exatidão dos valores lançados pelo Admin;</li>
+      <li>decidir quem entra, é promovido ou é removido da Liga;</li>
+      <li>garantir que o uso da Liga por seus membros respeita a lei e estes Termos.</li>
+    </ul>
+    <p>O Pelada na Mão não participa nem se responsabiliza por disputas entre o Admin e os membros da Liga (por exemplo, sobre valores cobrados, resultados de jogos ou remoção de um membro).</p>
+  </section>
+
+  <section class="clause" id="c7">
+    <h2 class="h"><span class="num">07</span> Conteúdo Inserido no Pelada na Mão</h2>
+    <p>Você mantém todos os direitos sobre o Conteúdo que insere no Pelada na Mão (fotos, nomes, textos). Ao inserir Conteúdo, você concede ao Pelada na Mão uma licença para armazená-lo, processá-lo e exibi-lo dentro da plataforma, exclusivamente para prestar o serviço — o Pelada na Mão não vende, licencia a terceiros nem usa esse Conteúdo para fins publicitários.</p>
+    <p>Fotos de perfil são enviadas a um serviço de terceiro (Cloudinary) especializado em hospedagem de imagens. Você declara ter o direito de enviar a foto que escolher, inclusive quando for a foto de outra pessoa vinculada ao mesmo cadastro de jogador.</p>
+    <p>O Pelada na Mão pode remover Conteúdo que viole a lei ou estes Termos, mediante aviso ao Admin da Liga responsável quando possível.</p>
+  </section>
+
+  <section class="clause" id="c8">
+    <h2 class="h"><span class="num">08</span> Controle Financeiro da Liga</h2>
+    <p>O módulo financeiro do Pelada na Mão é uma <strong>planilha compartilhada</strong>: ele registra valores, datas e status de pagamento informados pelo Admin, para organizar as contas da Liga (mensalidades, churrasco, despesas, cobranças avulsas).</p>
+    <div class="callout">
+      <div class="lbl">Importante</div>
+      <p>O Pelada na Mão <strong>não é uma instituição de pagamento, não processa transações e não guarda dinheiro de ninguém</strong>. Qualquer chave PIX exibida é cadastrada pelo próprio Admin, e o pagamento acontece diretamente entre os jogadores e o Admin, fora da plataforma. O Pelada na Mão não é parte nem garante essas transações.</p>
+    </div>
+  </section>
+
+  <section class="clause" id="c9">
+    <h2 class="h"><span class="num">09</span> Notificações</h2>
+    <p>O Pelada na Mão pode enviar notificações (convocação de jogo, resultado, cobrança, conquistas) para quem autorizar isso no navegador. Essa autorização pode ser revogada a qualquer momento nas configurações do próprio navegador ou aparelho.</p>
+  </section>
+
+  <section class="clause" id="c10">
+    <h2 class="h"><span class="num">10</span> Preço e Planos</h2>
+    <p>Nesta data, o uso do Pelada na Mão é <strong>gratuito</strong>, incluindo o período de teste inicial de cada Liga. O Pelada na Mão se reserva o direito de, no futuro, oferecer planos pagos com recursos adicionais ou limitar recursos de contas que não assinarem um plano pago, sempre com as seguintes garantias:</p>
+    <ul>
+      <li>nenhuma cobrança é iniciada sem uma ação explícita de contratação por quem administra a Liga;</li>
+      <li>uma Liga já existente será avisada com antecedência razoável, dentro do próprio aplicativo, antes de qualquer mudança no que está disponível gratuitamente passar a valer para ela;</li>
+      <li>o histórico já registrado por uma Liga (campeonatos, estatísticas, títulos) não é apagado nem fica refém de uma futura cobrança — o que pode ser limitado são recursos de uso contínuo, como o registro de novos resultados.</li>
+    </ul>
+    <p>Quando houver cobrança, uma nova versão destes Termos detalhará preço, forma de pagamento, política de cancelamento e de reembolso, em conformidade com o Código de Defesa do Consumidor.</p>
+  </section>
+
+  <section class="clause" id="c11">
+    <h2 class="h"><span class="num">11</span> Uso Aceitável</h2>
+    <p>Ao usar o Pelada na Mão, você concorda em não:</p>
+    <ul>
+      <li>inserir Conteúdo ilegal, ofensivo, discriminatório ou que viole direitos de terceiros;</li>
+      <li>tentar acessar dados de outra Liga ou de outro usuário sem autorização;</li>
+      <li>tentar burlar, sobrecarregar ou explorar falhas técnicas da plataforma;</li>
+      <li>usar o Pelada na Mão para qualquer finalidade ilegal ou não autorizada por estes Termos.</li>
+    </ul>
+  </section>
+
+  <section class="clause" id="c12">
+    <h2 class="h"><span class="num">12</span> Propriedade Intelectual</h2>
+    <p>O software, o design, a marca e a identidade visual do Pelada na Mão pertencem a <strong>Caio da Mata Pires Castanho</strong>, inscrito no CPF sob o nº <strong>391.795.148-71</strong>, responsável por operar a plataforma como pessoa física. Estes Termos não transferem nenhuma propriedade intelectual sobre a plataforma para o usuário.</p>
+  </section>
+
+  <section class="clause" id="c13">
+    <h2 class="h"><span class="num">13</span> Dados Pessoais</h2>
+    <p>O tratamento de dados pessoais no Pelada na Mão segue a Política de Privacidade, disponível dentro do próprio aplicativo (tela de login e aba "Meu Craque"), que detalha quais dados são coletados, quem tem acesso a cada um e por quê, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
+  </section>
+
+  <section class="clause" id="c14">
+    <h2 class="h"><span class="num">14</span> Seus Direitos sobre os Dados</h2>
+    <p>Você pode, a qualquer momento, direto no aplicativo, sem depender do Admin da Liga:</p>
+    <ul>
+      <li><strong>excluir sua Conta</strong>, apagando seu login e seus dados pessoais (WhatsApp, foto, cadastro);</li>
+      <li><strong>anonimizar seu nome</strong> no histórico esportivo da Liga, substituindo-o por um identificador anônimo.</li>
+    </ul>
+    <p>O nome de um jogador em campeonatos já disputados é tratado como registro esportivo da Liga (histórico de resultados), e permanece salvo se você optar por excluir a Conta sem também anonimizar o nome.</p>
+  </section>
+
+  <section class="clause" id="c15">
+    <h2 class="h"><span class="num">15</span> Disponibilidade e Garantias</h2>
+    <p>O Pelada na Mão é fornecido "como está" ("as is"), sem garantia de disponibilidade contínua, ausência de erros, ou de que os cálculos e estatísticas exibidos são absolutamente precisos. O Pelada na Mão faz esforços razoáveis para manter o serviço no ar e corrigir problemas relatados, mas não garante um nível específico de disponibilidade.</p>
+  </section>
+
+  <section class="clause" id="c16">
+    <h2 class="h"><span class="num">16</span> Limitação de Responsabilidade</h2>
+    <p>Na máxima extensão permitida pela lei, o Pelada na Mão não se responsabiliza por:</p>
+    <ul>
+      <li>disputas entre membros de uma Liga, incluindo sobre valores financeiros, resultados de jogos ou decisões do Admin;</li>
+      <li>danos indiretos, lucros cessantes ou perda de dados decorrentes do uso ou da impossibilidade de uso do serviço;</li>
+      <li>conteúdo inserido por Admins ou Jogadores.</li>
+    </ul>
+    <p>Caso, apesar do disposto acima, seja reconhecida alguma responsabilidade do Pelada na Mão por um dano decorrente do uso da plataforma, essa responsabilidade fica limitada, em qualquer hipótese, ao total pago pela Liga ao Pelada na Mão nos 12 (doze) meses anteriores ao fato gerador — o que, enquanto o serviço for gratuito, corresponde a R$ 0,00 (zero reais). Nada nesta cláusula exclui responsabilidade por dolo, nem direitos que a lei brasileira considere irrenunciáveis em relações de consumo.</p>
+  </section>
+
+  <section class="clause" id="c17">
+    <h2 class="h"><span class="num">17</span> Suspensão e Encerramento</h2>
+    <p>O Pelada na Mão pode suspender ou encerrar o acesso de uma Conta que viole estes Termos, avisando quando possível. Um Admin pode encerrar sua própria Liga a qualquer momento; um Jogador pode sair de uma Liga ou excluir a Conta a qualquer momento, pelo próprio aplicativo.</p>
+  </section>
+
+  <section class="clause" id="c18">
+    <h2 class="h"><span class="num">18</span> Alterações destes Termos</h2>
+    <p>Estes Termos podem ser atualizados para refletir mudanças no serviço ou na legislação. Mudanças relevantes serão avisadas dentro do aplicativo. O uso continuado do Pelada na Mão após uma atualização representa a aceitação dos novos Termos.</p>
+  </section>
+
+  <section class="clause" id="c19">
+    <h2 class="h"><span class="num">19</span> Lei Aplicável e Foro</h2>
+    <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Antes de qualquer disputa ser levada ao Judiciário, as partes buscarão resolvê-la de forma amigável, pelo contato indicado na cláusula 20. Não havendo acordo, fica eleito o foro da comarca de <strong>São Paulo, Estado de São Paulo</strong>, para dirimir quaisquer controvérsias, com renúncia a qualquer outro, por mais privilegiado que seja — ressalvado o foro do domicílio do consumidor, quando a lei assegurar essa escolha a ele.</p>
+  </section>
+
+  <section class="clause" id="c20">
+    <h2 class="h"><span class="num">20</span> Contato</h2>
+    <p>Dúvidas sobre estes Termos, sobre dados pessoais ou qualquer outro assunto relacionado ao Pelada na Mão podem ser enviadas para <strong>contato@peladanamao.com.br</strong>.</p>
+  </section>
+
+  <footer class="sig">
+    <p><span class="lbl">Responsável:</span> Caio da Mata Pires Castanho, CPF 391.795.148-71, operando o Pelada na Mão como pessoa física.</p>
+    <p><span class="lbl">Status:</span> versão 1.0, vigente desde 01/10/2026. Redigida a partir do funcionamento real do sistema, da LGPD e de práticas de mercado — uma revisão por advogado continua recomendável antes de uma mudança relevante no modelo de negócio (como o início de cobrança).</p>
+  </footer>
+
+</div>
+
+</body></html>

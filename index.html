@@ -1175,6 +1175,7 @@ function deleteAccountLink() {
   return `<div style="text-align:center;margin:26px 0 8px;display:flex;flex-direction:column;gap:10px">
     <button onclick="openDeleteAccount()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🗑️ Excluir minha conta</button>
     <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🔒 Privacidade</button>
+    <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text3);font-size:12px;text-decoration:underline;font-family:inherit">📄 Termos de Uso</a>
   </div>`;
 }
 
@@ -4075,7 +4076,10 @@ function vLogin() {
       ${body}
       <div id="login-err" style="margin-top:14px;color:var(--danger);font-size:13px;text-align:center"></div>
     </div>
-    <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit;margin-top:20px">🔒 Privacidade</button>
+    <div style="display:flex;gap:16px;margin-top:20px">
+      <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🔒 Privacidade</button>
+      <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text3);font-size:12px;text-decoration:underline;font-family:inherit">📄 Termos de Uso</a>
+    </div>
   </div>`;
 }
 
