@@ -61,8 +61,16 @@ Module._load = function (request, ...rest) {
   if (request === 'firebase-admin') return admin;
   if (request === 'firebase-functions') return { logger: { info() {}, warn() {}, error() {} } };
   if (request === 'firebase-admin/firestore') return { FieldValue: { arrayRemove: t => ({ __arrayRemove: t }), delete: () => ({ __delete: true }) }, FieldPath: FieldPathMock };
-  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => h, HttpsError: class extends Error { constructor(code, message) { super(message); this.code = code; } } };
+  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => h, onRequest: (opts, h) => h, HttpsError: class extends Error { constructor(code, message) { super(message); this.code = code; } } };
   if (request === 'firebase-functions/params') return { defineSecret: name => ({ value: () => secretVals[name] || '' }) };
+  // Mínimo para o módulo carregar: este arquivo não exercita o fluxo de pagamento.
+  if (request === 'mercadopago') return {
+    MercadoPagoConfig: class { constructor() {} },
+    PreApproval: class { async create() { return {}; } async get() { return {}; } },
+    Preference: class { async create() { return {}; } },
+    Payment: class { async get() { return {}; } },
+    WebhookSignatureValidator: class { static validate() {} },
+  };
   return origLoad.call(this, request, ...rest);
 };
 const secretVals = { CLOUDINARY_API_KEY: '', CLOUDINARY_API_SECRET: '' }; // vazio = "não configurado ainda" (comportamento padrão)

@@ -1,11 +1,12 @@
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const crypto = require("crypto");
 const admin = require("firebase-admin");
 const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
+const { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator } = require("mercadopago");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -335,6 +336,21 @@ const CLOUDINARY_API_SECRET = defineSecret("CLOUDINARY_API_SECRET");
 //   firebase functions:secrets:set RESEND_API_KEY
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const RESEND_FROM = "Pelada na Mão <avisos@notificacoes.peladanamao.com.br>";
+
+// Pagamento via Mercado Pago (pessoa física). MERCADOPAGO_ACCESS_TOKEN autentica as
+// chamadas à API; MERCADOPAGO_WEBHOOK_SECRET confere a assinatura das notificações (só
+// existe depois de cadastrar a URL do webhook em Suas integrações → Notificações →
+// Webhooks no painel do Mercado Pago, que só existe depois do primeiro deploy — por isso
+// nasce com o valor-marcador abaixo, igual às chaves do Cloudinary). Configuradas com:
+//   firebase functions:secrets:set MERCADOPAGO_ACCESS_TOKEN
+//   firebase functions:secrets:set MERCADOPAGO_WEBHOOK_SECRET
+const MERCADOPAGO_ACCESS_TOKEN = defineSecret("MERCADOPAGO_ACCESS_TOKEN");
+const MERCADOPAGO_WEBHOOK_SECRET = defineSecret("MERCADOPAGO_WEBHOOK_SECRET");
+const MERCADOPAGO_WEBHOOK_NOT_CONFIGURED = "PENDENTE_CONFIGURAR";
+const MP_PLANS = {
+  monthly: { amount: 29.9, label: "Assinatura mensal" },
+  annual: { amount: 238.8, label: "Assinatura anual" },
+};
 
 // Extrai o public_id (com eventual pasta, sem extensão) de uma URL de entrega do
 // Cloudinary. Ex.: ".../image/upload/v123/aceoma/abc123.jpg" → "aceoma/abc123".
@@ -1128,5 +1144,134 @@ exports.checkAbandonedLeagues = onSchedule(
     }
 
     logger.info("checkAbandonedLeagues concluída", { ligasAvisadas: warned, ligasAnonimizadas: anonymized });
+  }
+);
+
+// ── Pagamento via Mercado Pago ───────────────────────────────────────────────────────────
+// Dois produtos: assinatura mensal recorrente (Preapproval, cobrada automaticamente todo
+// mês) e cobrança anual única (Preference/Checkout Pro, parcelável em até 12x — o Mercado
+// Pago repassa o valor integral de uma vez, mesmo parcelado, então não exige renovação
+// automática). Nenhuma das duas telas aparece dentro do app empacotado nas lojas; só no
+// site, e por e-mail. A liga só é marcada como paga quando o webhook confirma a cobrança —
+// os dois onCall abaixo só abrem o link de pagamento, nunca marcam nada como pago.
+function mpClient() {
+  return new MercadoPagoConfig({ accessToken: MERCADOPAGO_ACCESS_TOKEN.value() });
+}
+
+async function requireLeagueAdminWithEmail(auth, liga) {
+  const user = (await db.doc(`users/${auth.uid}`).get()).data() || {};
+  if (user.leagues?.[liga]?.role !== "admin") throw fail("permission-denied", "Só o admin da liga pode assinar.");
+  if (!user.email) throw fail("failed-precondition", "Sua conta precisa de um e-mail para assinar.");
+  return user.email;
+}
+
+exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
+  const auth = requireAuth(request);
+  const liga = leagueIdOf(request.data);
+  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
+
+  const result = await new PreApproval(mpClient()).create({
+    body: {
+      reason: `Pelada na Mão — ${MP_PLANS.monthly.label} (${liga})`,
+      external_reference: liga,
+      payer_email: payerEmail,
+      back_url: "https://peladanamao.com.br",
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: "months",
+        transaction_amount: MP_PLANS.monthly.amount,
+        currency_id: "BRL",
+      },
+    },
+  });
+  return { initPoint: result.init_point };
+});
+
+exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
+  const auth = requireAuth(request);
+  const liga = leagueIdOf(request.data);
+  const payerEmail = await requireLeagueAdminWithEmail(auth, liga);
+
+  const result = await new Preference(mpClient()).create({
+    body: {
+      items: [{
+        id: `annual-${liga}`,
+        title: `Pelada na Mão — ${MP_PLANS.annual.label} (${liga})`,
+        quantity: 1,
+        unit_price: MP_PLANS.annual.amount,
+        currency_id: "BRL",
+      }],
+      external_reference: liga,
+      payer: { email: payerEmail },
+      back_urls: {
+        success: "https://peladanamao.com.br",
+        pending: "https://peladanamao.com.br",
+        failure: "https://peladanamao.com.br",
+      },
+      auto_return: "approved",
+    },
+  });
+  return { initPoint: result.init_point };
+});
+
+// Marca a liga como paga até a data informada. Chamado só pelo webhook, depois de
+// confirmar a cobrança diretamente com a API do Mercado Pago (nunca a partir de dados que
+// vêm só na notificação, que podem ser forjados).
+async function activateSubscription(liga, plan, activeUntil) {
+  if (!liga) return; // notificação sem external_reference: nada a fazer
+  await db.doc(`leagues/${liga}`).update({ subscriptionActiveUntil: activeUntil, subscriptionPlan: plan });
+  logger.info("Assinatura ativada", { liga, plan, activeUntil });
+}
+
+// Endpoint HTTP puro (não onCall) exposto publicamente para o Mercado Pago chamar. Por
+// estar na internet aberta, a assinatura da notificação é sempre conferida antes de
+// confiar em qualquer dado — inclusive recusando quando o segredo ainda não foi
+// configurado (falha fechada), nunca aceitando sem validar.
+exports.mercadoPagoWebhook = onRequest(
+  { secrets: [MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_WEBHOOK_SECRET], region: "us-east1" },
+  async (req, res) => {
+    const webhookSecret = MERCADOPAGO_WEBHOOK_SECRET.value();
+    if (!webhookSecret || webhookSecret === MERCADOPAGO_WEBHOOK_NOT_CONFIGURED) {
+      logger.error("MERCADOPAGO_WEBHOOK_SECRET ainda não configurado: recusando notificação");
+      res.status(503).send("webhook not configured");
+      return;
+    }
+    try {
+      WebhookSignatureValidator.validate({
+        xSignature: req.headers["x-signature"],
+        xRequestId: req.headers["x-request-id"],
+        dataId: req.query["data.id"],
+        secret: webhookSecret,
+        toleranceSeconds: 300,
+      });
+    } catch (e) {
+      logger.warn("Webhook do Mercado Pago com assinatura inválida", { message: e?.message, reason: e?.reason });
+      res.status(401).send("invalid signature");
+      return;
+    }
+
+    const topic = req.query.type || req.query.topic;
+    const id = req.query["data.id"] || req.body?.data?.id;
+    try {
+      const client = mpClient();
+      if (topic === "subscription_preapproval" || topic === "preapproval") {
+        const result = await new PreApproval(client).get({ id });
+        if (result.status === "authorized") {
+          // Margem de alguns dias sobre a próxima cobrança, tolerando um pequeno atraso do
+          // próprio Mercado Pago sem derrubar o acesso da liga antes da hora.
+          const base = result.next_payment_date ? new Date(result.next_payment_date) : new Date();
+          await activateSubscription(result.external_reference, "monthly", new Date(base.getTime() + 5 * 86400000).toISOString());
+        }
+      } else if (topic === "payment") {
+        const result = await new Payment(client).get({ id });
+        if (result.status === "approved") {
+          await activateSubscription(result.external_reference, "annual", new Date(Date.now() + 365 * 86400000).toISOString());
+        }
+      }
+      res.status(200).send("ok");
+    } catch (e) {
+      logger.error("Falha ao processar webhook do Mercado Pago", { message: e?.message, topic, id });
+      res.status(500).send("error");
+    }
   }
 );

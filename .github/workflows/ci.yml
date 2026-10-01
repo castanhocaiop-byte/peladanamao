@@ -58,3 +58,7 @@ jobs:
       - name: Testes das Cloud Functions (ligas abandonadas)
         working-directory: functions
         run: node test/abandoned-leagues-test.js
+
+      - name: Testes das Cloud Functions (pagamento via Mercado Pago)
+        working-directory: functions
+        run: node test/payments-test.js

@@ -111,13 +111,21 @@ global.fetch = async (url, opts) => {
 const origLoad = Module._load;
 Module._load = function (request, ...rest) {
   if (request === 'firebase-functions/v2/firestore') return { onDocumentWritten: (p, h) => h };
-  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => { callableOpts.push(opts); return h; }, HttpsError };
+  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => { callableOpts.push(opts); return h; }, onRequest: (opts, h) => h, HttpsError };
   if (request === 'firebase-functions/v2/scheduler') return { onSchedule: (opts, h) => h };
   if (request === 'firebase-admin') return admin;
   if (request === 'firebase-admin/firestore') return { FieldValue, FieldPath };
   if (request === 'firebase-functions') return { logger: { info: (m, d) => logs.push({ level: 'info', m, d }), warn: (m, d) => logs.push({ level: 'warn', m, d }), error: (m, d) => logs.push({ level: 'error', m, d }) } };
   if (request === 'firebase-functions/params') return { defineSecret: () => ({ value: () => 'fake-resend-key' }) };
   if (request === '@google-cloud/firestore') return { v1: { FirestoreAdminClient: class {} } };
+  // Mínimo para o módulo carregar: este arquivo não exercita o fluxo de pagamento.
+  if (request === 'mercadopago') return {
+    MercadoPagoConfig: class { constructor() {} },
+    PreApproval: class { async create() { return {}; } async get() { return {}; } },
+    Preference: class { async create() { return {}; } },
+    Payment: class { async get() { return {}; } },
+    WebhookSignatureValidator: class { static validate() {} },
+  };
   return origLoad.call(this, request, ...rest);
 };
 const fns = require(path);

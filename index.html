@@ -785,10 +785,16 @@ function col(name) { return DB.collection(`leagues/${st.leagueId}/${name}`); }
 function ldoc(path) { return DB.doc(`leagues/${st.leagueId}/${path}`); }
 
 function isAdmin() { return st.userRole === 'admin'; }
-// Liga "free" = trial de 30 dias já vencido. Sem trialEndsAt (ligas antigas) conta como não-free.
+// Liga "free" = trial de 30 dias vencido e sem assinatura ativa. Sem trialEndsAt (ligas
+// antigas) conta como não-free. Uma assinatura ativa (subscriptionActiveUntil no futuro)
+// sempre libera a liga, independente do trial.
 function isLeagueFree() {
-  const trialEndsAt = st.availableLeagues.find(l => l.id === st.leagueId)?.trialEndsAt;
-  return !!trialEndsAt && new Date(trialEndsAt).getTime() < Date.now();
+  const league = st.availableLeagues.find(l => l.id === st.leagueId);
+  if (!league) return false;
+  const trialEndsAt = league.trialEndsAt;
+  if (!trialEndsAt || new Date(trialEndsAt).getTime() >= Date.now()) return false; // trial ainda não acabou
+  const activeUntil = league.subscriptionActiveUntil;
+  return !activeUntil || new Date(activeUntil).getTime() < Date.now();
 }
 function isBadgeImpossible(b) {
   if (!b.minGoalsMatch) return false;
@@ -1006,7 +1012,7 @@ function initFirebase() {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -1015,6 +1021,7 @@ function initFirebase() {
               name: d.exists ? d.data().name : leagueKeys[i],
               role: leagues[leagueKeys[i]]?.role,
               trialEndsAt: d.exists ? (d.data().trialEndsAt || null) : null,
+              subscriptionActiveUntil: d.exists ? (d.data().subscriptionActiveUntil || null) : null,
             }));
             st.leagueId = null;
             st.userRole = null;
@@ -2009,7 +2016,8 @@ async function rememberLeague(id, role, name) {
   const doc = await DB.doc(`leagues/${id}`).get().catch(() => null);
   if (!name) name = doc?.exists ? doc.data().name : id;
   const trialEndsAt = doc?.exists ? (doc.data().trialEndsAt || null) : null;
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt }];
+  const subscriptionActiveUntil = doc?.exists ? (doc.data().subscriptionActiveUntil || null) : null;
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -5243,6 +5251,72 @@ function mMjTeamDetail() {
   </div>`;
 }
 
+/* ── Assinatura ────────────────────────────────────────────────────────────
+   Nunca aparece dentro do app empacotado nas lojas (ver isNativeApp()) — só no site e
+   por e-mail, para não violar as regras de pagamento da Apple/Google. */
+function mSubscription() {
+  if (st.modal?.type !== 'subscription') return '';
+  const league = st.availableLeagues.find(l => l.id === st.leagueId);
+  const trialEndsAt = league?.trialEndsAt ? new Date(league.trialEndsAt) : null;
+  const activeUntil = league?.subscriptionActiveUntil ? new Date(league.subscriptionActiveUntil) : null;
+  const hasActiveSub = activeUntil && activeUntil.getTime() > Date.now();
+  const trialActive = trialEndsAt && trialEndsAt.getTime() > Date.now();
+
+  const fmt = d => d.toLocaleDateString('pt-BR');
+  let statusHtml;
+  if (hasActiveSub) {
+    statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">✅ Assinatura <strong>${league.subscriptionPlan === 'annual' ? 'anual' : 'mensal'}</strong> ativa</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Renova ou precisa de ação até ${fmt(activeUntil)}</div>
+    </div>`;
+  } else if (trialActive) {
+    statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">🎁 Período de teste até <strong>${fmt(trialEndsAt)}</strong></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Assine antes do fim do teste para não perder os recursos completos.</div>
+    </div>`;
+  } else {
+    statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">⚠️ Plano gratuito — sem registro de gols, ranking e conquistas novas</div>
+    </div>`;
+  }
+
+  const busy = !!st._subBusy;
+  return `<div class="overlay" onclick="st.modal=null;render()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:17px;font-weight:800;margin-bottom:12px">💳 Assinatura</div>
+      ${statusHtml}
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
+          style="padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
+          Mensal — R$ 29,90/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês</div>
+        </button>
+        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
+          style="padding:14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
+          Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+        </button>
+      </div>
+      <div id="sub-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
+      <button onclick="st.modal=null;render()" style="width:100%;padding:12px;margin-top:14px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Fechar</button>
+    </div>
+  </div>`;
+}
+
+async function startSubscription(plan) {
+  if (st._subBusy) return;
+  st._subBusy = true; render();
+  const err = document.getElementById('sub-err');
+  try {
+    const fn = plan === 'annual' ? 'createAnnualPayment' : 'createMonthlySubscription';
+    const res = await callFn(fn, { liga: st.leagueId });
+    if (res.initPoint) window.location.href = res.initPoint;
+  } catch(e) {
+    if (err) err.textContent = e.message || 'Não foi possível iniciar a assinatura agora.';
+  } finally {
+    st._subBusy = false; render();
+  }
+}
+
 function mAdminPanel() {
   const m = st.modal;
   if (!m || m.type !== 'adminPanel') return '';
@@ -5589,7 +5663,7 @@ function render() {
     case 'financeiro': content=vFinanceiro(); break;
   }
   if(main) main.innerHTML=notifBanner()+content;
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -5702,6 +5776,9 @@ function buildShell() {
       ${isAdmin()?`<button onclick="st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()"
         style="background:none;border:none;color:var(--text3);font-size:19px;cursor:pointer;padding:4px 6px;line-height:1;position:relative"
         title="Painel Admin">⚙️<span id="admin-badge" style="position:absolute;top:2px;right:2px;min-width:16px;height:16px;background:var(--danger);border-radius:8px;font-size:10px;font-weight:800;color:#fff;display:none;align-items:center;justify-content:center;padding:0 4px;line-height:1;font-family:inherit"></span></button>`:''}
+      ${isAdmin()?`<button onclick="st.modal={type:'subscription'};render()"
+        style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1"
+        title="Assinatura">💳</button>`:''}
       <a href="/manual.html" target="_blank" rel="noopener"
         style="background:none;border:1px solid var(--border);border-radius:50%;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;padding:0;line-height:1;width:26px;height:26px;display:flex;align-items:center;justify-content:center;text-decoration:none;flex-shrink:0"
         title="Manual do sistema">?</a>

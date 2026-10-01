@@ -121,10 +121,21 @@ const admin = {
   } }),
 };
 
+// Mínimo para o módulo carregar: nenhum teste deste arquivo exercita o fluxo de pagamento
+// (ver test/payments-test.js para isso), então os métodos nunca são chamados de verdade.
+const mercadoPagoMock = {
+  MercadoPagoConfig: class { constructor() {} },
+  PreApproval: class { async create() { return {}; } async get() { return {}; } },
+  Preference: class { async create() { return {}; } },
+  Payment: class { async get() { return {}; } },
+  WebhookSignatureValidator: class { static validate() {} },
+};
+
 const origLoad = Module._load;
 Module._load = function (request, ...rest) {
   if (request === 'firebase-functions/v2/firestore') return { onDocumentWritten: (p, h) => h };
-  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => { callableOpts.push(opts); return h; }, HttpsError };
+  if (request === 'firebase-functions/v2/https') return { onCall: (opts, h) => { callableOpts.push(opts); return h; }, onRequest: (opts, h) => h, HttpsError };
+  if (request === 'mercadopago') return mercadoPagoMock;
   if (request === 'firebase-admin') return admin;
   if (request === 'firebase-admin/firestore') return { FieldValue, FieldPath };
   if (request === 'firebase-functions') return { logger: { info: (m, d) => logs.push({ level: 'info', m, d }), warn: (m, d) => logs.push({ level: 'warn', m, d }), error: (m, d) => logs.push({ level: 'error', m, d }) } };
@@ -163,7 +174,7 @@ const reset = () => {
 
 (async () => {
   // opções das funções
-  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 10 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
+  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 12 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
 
   // ───────── joinLeague ─────────
   reset();
