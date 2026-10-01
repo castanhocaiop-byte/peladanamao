@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checar sintaxe do index.html
+        run: |
+          node -e "
+            const fs = require('fs');
+            const html = fs.readFileSync('index.html', 'utf8');
+            const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+            let m, i = 0;
+            while ((m = re.exec(html))) {
+              i++;
+              fs.writeFileSync('/tmp/inline-' + i + '.js', m[1]);
+            }
+            console.log('blocos inline encontrados:', i);
+            if (i === 0) { console.error('nenhum bloco <script> inline encontrado'); process.exit(1); }
+          "
+          for f in /tmp/inline-*.js; do
+            echo "Checando $f"
+            node --check "$f"
+          done
+
+      - name: Instalar dependências das Cloud Functions
+        working-directory: functions
+        run: npm install
+
+      - name: Checar sintaxe das Cloud Functions
+        working-directory: functions
+        run: node --check index.js
+
+      - name: Testes das Cloud Functions (callables e triggers)
+        working-directory: functions
+        run: node test/members-test.js
+
+      - name: Testes das Cloud Functions (notificações)
+        working-directory: functions
+        run: node test/functions-test.js
+
+      - name: Testes das Cloud Functions (plano free e backup)
+        working-directory: functions
+        run: node test/free-mode-test.js
