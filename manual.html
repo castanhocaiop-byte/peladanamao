@@ -1464,7 +1464,7 @@ p strong {
       <p>Novos usuários que criaram conta ficam com status <em>pendente</em> até o admin aprovar ou rejeitar. Ao aprovar, o admin pode vincular o usuário a um jogador do elenco ao mesmo tempo. O badge no ⚙️ é atualizado ao abrir o aplicativo, ao voltar para ele (se passou mais de 1 minuto) e ao abrir o Painel Admin. A lista de membros vem do servidor, pela função <code>listMembers</code>, que só responde ao admin da liga. Aprovar, rejeitar, promover a admin e vincular jogadores são executados <strong>pelo servidor</strong>, que confirma que quem clicou é admin daquela liga (ver a seção 20). Se aparecer um erro dizendo que só administradores podem fazer aquilo, recarregue a página e tente de novo.</p>
 
       <h3>Solicitações de vinculação de perfil</h3>
-      <p>Um usuário já aprovado mas sem perfil vinculado verá a tela "Perfil não configurado" com o botão <strong>Solicitar vinculação</strong>. Ao clicar, uma solicitação é registrada; o badge no ⚙️ do admin a mostra na próxima atualização (ao abrir o aplicativo, voltar para ele ou abrir o Painel Admin).</p>
+      <p>Um usuário já aprovado mas sem perfil vinculado verá a tela "Perfil não configurado", com um campo opcional de <strong>WhatsApp</strong> e o botão <strong>Solicitar vinculação</strong>. Ao clicar, uma solicitação é registrada (com o WhatsApp, se foi preenchido); o badge no ⚙️ do admin a mostra na próxima atualização (ao abrir o aplicativo, voltar para ele ou abrir o Painel Admin). Se o WhatsApp foi informado, ele aparece junto da solicitação no Painel Admin, e é movido automaticamente para os contatos da liga assim que o admin aprova a vinculação — ninguém precisa perguntar o número por fora depois.</p>
       <p>O admin escolhe o jogador correspondente na lista suspensa e clica <strong>Vincular</strong>, ou <strong>Descartar</strong> para ignorar a solicitação sem vincular.</p>
 
       <h3>Notificações push</h3>
@@ -2050,6 +2050,10 @@ p strong {
       <div class="callout">
         <div class="callout-label">Apagar o arquivo da foto no Cloudinary <span class="tag">Técnico</span></div>
         Uma função (<code>onPlayerPhotoDeleted</code>) apaga também o arquivo no Cloudinary sempre que o documento da foto é removido, por qualquer caminho (admin, o próprio jogador, anonimização ou exclusão de conta). As chaves do Cloudinary (Configurações → Security, no painel do Cloudinary) foram configuradas como Firebase Secrets — <code>CLOUDINARY_API_KEY</code> e <code>CLOUDINARY_API_SECRET</code> — e a exclusão real do arquivo foi confirmada em produção em 28/09/2026. Para trocar as chaves no futuro (por exemplo, se o Cloudinary for regenerado): <code>firebase functions:secrets:set NOME_DA_CHAVE --project seriebaceoma --force --data-file "caminho\do\arquivo.txt"</code> — apontando para um arquivo local com só o valor dentro, apagado logo depois. Evite colar o valor direto num campo de terminal: se o comando falhar antes de pedir o valor (por exemplo, projeto não detectado), o que for colado em seguida fica exposto na tela e no histórico de comandos.
+      </div>
+      <div class="callout warn">
+        <div class="callout-label warn">App Check — ainda em modo de observação <span class="tag">Técnico</span></div>
+        O app registra uma chave do Firebase App Check (reCAPTCHA Enterprise) a cada carregamento, que prova para o servidor que a requisição vem mesmo do site oficial, não de um script externo chamando as Cloud Functions ou o Firestore diretamente. Por enquanto isso roda só em modo de observação — o servidor ainda aceita requisições sem esse selo. Antes de exigir o selo de verdade (bloqueando quem não tiver), é preciso conferir no Firebase Console que o tráfego real está passando com o selo válido, para não travar acidentalmente os próprios usuários.
       </div>
     </section>
 

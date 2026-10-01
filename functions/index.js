@@ -524,7 +524,7 @@ exports.leaveLeague = onCall(CALLABLE, async request => {
 // vincular a um jogador e responder pedidos de vínculo.
 exports.manageMember = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);
-  await checkRateLimit(auth.uid, "manageMember", 30);
+  await checkRateLimit(auth.uid, "manageMember", 60);
   const liga = leagueIdOf(request.data);
   const action = text(request.data?.action, 20);
   const targetUid = idText(request.data?.uid, 128);
@@ -567,8 +567,14 @@ exports.manageMember = onCall(CALLABLE, async request => {
 
     case "linkRequest": {
       const approve = request.data?.approve === true && !!key;
+      const reqRef = db.doc(`leagues/${liga}/link_requests/${targetUid}`);
+      if (approve) {
+        const reqSnap = await reqRef.get();
+        const whatsapp = reqSnap.data()?.whatsapp;
+        if (whatsapp) await db.doc(`leagues/${liga}/contacts/${key}`).set({ whatsapp });
+      }
       await targetRef.update(...(approve ? linkFields(key) : []), new FieldPath("linkRequestSent"), false);
-      await db.doc(`leagues/${liga}/link_requests/${targetUid}`).delete();
+      await reqRef.delete();
       break;
     }
 
