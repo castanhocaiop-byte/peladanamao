@@ -471,6 +471,14 @@ async function requireLeagueAdmin(auth, liga) {
   }
 }
 
+// Admin mais antigo da liga que não seja `excludeUid` (quem está saindo); null se não houver outro.
+async function oldestOtherAdmin(liga, excludeUid) {
+  const admins = await db.collection("users").where(new FieldPath("leagues", liga, "role"), "==", "admin").get();
+  const joined = d => String(d.data().leagues?.[liga]?.joinedAt || "");
+  const others = admins.docs.filter(d => d.id !== excludeUid).sort((a, b) => joined(a).localeCompare(joined(b)));
+  return others.length ? others[0].id : null;
+}
+
 const newUserDoc = (auth, now, leagues = {}) => ({
   email: auth.token?.email || "",
   displayName: auth.token?.name || "",
@@ -540,13 +548,32 @@ exports.createLeague = onCall(CALLABLE, async request => {
   return { slug };
 });
 
-// Sair de uma liga (o usuário só mexe no próprio vínculo).
+// Sair de uma liga (o usuário só mexe no próprio vínculo). O único admin não sai: a liga ficaria
+// sem ninguém para administrá-la — ele promove outro admin ou encerra a liga (deleteLeague).
+// Se quem sai é o criador da liga, a liga passa para o admin mais antigo que ficar.
 exports.leaveLeague = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
   const userRef = db.doc(`users/${auth.uid}`);
-  const snap = await userRef.get();
-  if (snap.data()?.leagues?.[liga]) await userRef.update(new FieldPath("leagues", liga), FieldValue.delete());
+  const entry = (await userRef.get()).data()?.leagues?.[liga];
+  if (!entry) return { ok: true };
+
+  const leagueRef = db.doc(`leagues/${liga}`);
+  const leagueSnap = await leagueRef.get();
+  // Liga que já não existe (vínculo que sobrou): não há o que administrar, a pessoa só sai.
+  if (entry.role === "admin" && leagueSnap.exists) {
+    const league = leagueSnap.data();
+    const next = await oldestOtherAdmin(liga, auth.uid);
+    if (!next) {
+      const name = league.name || liga;
+      throw new HttpsError("failed-precondition",
+        `Você é o único admin de ${name}. Promova outro admin ou encerre a liga antes de sair.`,
+        { reason: "last-admin", ligas: [name] });
+    }
+    if (league.ownerId === auth.uid) await leagueRef.update({ ownerId: next });
+  }
+
+  await userRef.update(new FieldPath("leagues", liga), FieldValue.delete());
   return { ok: true };
 });
 
@@ -817,18 +844,13 @@ exports.deleteMyAccount = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
   const nextOwner = {};
   for (const liga of ligas) {
     if (leagues[liga]?.role !== "admin") continue;
-    const admins = await db.collection("users").where(new FieldPath("leagues", liga, "role"), "==", "admin").get();
-    const others = admins.docs.filter(d => d.id !== uid);
-    if (!others.length) {
-      orphaned.push((await db.doc(`leagues/${liga}`).get()).data()?.name || liga);
-    } else {
-      const joined = d => String(d.data().leagues?.[liga]?.joinedAt || "");
-      nextOwner[liga] = others.sort((a, b) => joined(a).localeCompare(joined(b)))[0].id; // admin mais antigo
-    }
+    const next = await oldestOtherAdmin(liga, uid); // admin mais antigo que ficaria no lugar
+    if (!next) orphaned.push((await db.doc(`leagues/${liga}`).get()).data()?.name || liga);
+    else nextOwner[liga] = next;
   }
   if (orphaned.length) {
     throw new HttpsError("failed-precondition",
-      `Você é o único admin de ${orphaned.join(", ")}. Promova outro admin ou saia da liga antes de excluir a conta.`,
+      `Você é o único admin de ${orphaned.join(", ")}. Promova outro admin ou encerre a liga antes de excluir a conta.`,
       { reason: "last-admin", ligas: orphaned });
   }
 
@@ -1433,3 +1455,100 @@ exports.mercadoPagoWebhook = onRequest(
     }
   }
 );
+
+// ── Encerrar liga ────────────────────────────────────────────────────────────────────────
+//
+// Apaga a liga e tudo o que há dentro dela (elenco, campeonatos, financeiro, contatos, fotos,
+// convites…) e tira o vínculo de todos os membros. É o "um Admin pode encerrar sua própria
+// Liga a qualquer momento" dos Termos de Uso. Quem pode: o criador da liga (ownerId); se ele
+// já não é admin dela, ou a liga é antiga e não guarda o criador, qualquer admin; e o dono do
+// sistema.
+//
+// A ordem foi pensada para ninguém continuar pagando por uma liga que já não existe e para a
+// função poder ser repetida se algo falhar no meio:
+//  1) cancela, no Mercado Pago, toda assinatura ligada à liga — se não conseguir, para aqui,
+//     sem ter apagado nada;
+//  2) marca a liga como "em encerramento" (closingBy): só quem iniciou pode repetir, mesmo
+//     depois de perder o vínculo no passo seguinte;
+//  3) tira o vínculo de todos os membros: perdem o acesso na hora e nada mais é gravado na liga
+//     enquanto ela é apagada;
+//  4) apaga a liga com tudo o que há dentro. O documento da liga é o último a sair, então
+//     "a liga ainda existe" quer dizer "o encerramento não terminou" e pode ser retomado.
+// As fotos vão embora do Cloudinary pelo gatilho onPlayerPhotoDeleted, como em qualquer outra
+// exclusão de foto; os gatilhos de campeonato, cobrança e lembrete ignoram exclusões, então
+// ninguém recebe notificação por causa disto.
+
+async function requireCanCloseLeague(auth, liga, league) {
+  if (isOwner(auth)) return;
+  if (league.closingBy === auth.uid) return; // retomando um encerramento que ele mesmo começou
+  const me = (await db.doc(`users/${auth.uid}`).get()).data();
+  if (me?.leagues?.[liga]?.role !== "admin") {
+    throw fail("permission-denied", "Somente administradores da liga podem encerrá-la.");
+  }
+  const ownerId = league.ownerId;
+  if (!ownerId || ownerId === auth.uid) return;
+  const owner = (await db.doc(`users/${ownerId}`).get()).data();
+  if (owner?.leagues?.[liga]?.role === "admin") {
+    throw fail("permission-denied", "Só quem criou a liga pode encerrá-la.");
+  }
+}
+
+// Cancela toda assinatura (mensal) da liga que ainda não esteja cancelada. Devolve quantas eram.
+// A busca é paginada e confere external_reference de cada resultado: o filtro da API não é
+// confiável o bastante para cancelar com base só nele a assinatura de outra liga.
+async function cancelLeagueSubscriptions(liga) {
+  const client = mpClient();
+  const open = [];
+  try {
+    for (let page = 0; page < 20; page++) {
+      const res = await new PreApproval(client).search({
+        options: { external_reference: liga, sort: "date_created:desc", limit: 50, offset: page * 50 },
+      });
+      const items = res?.results || [];
+      open.push(...items.filter(r => String(r.external_reference) === liga && r.status !== "cancelled"));
+      if (items.length < 50) break;
+    }
+  } catch (e) {
+    logger.warn("deleteLeague: falha ao consultar as assinaturas no Mercado Pago", { liga, message: e?.message });
+    throw fail("failed-precondition", "Não foi possível conferir a assinatura da liga no Mercado Pago agora. Nada foi apagado — tente de novo em alguns minutos.");
+  }
+  for (const pre of open) {
+    try {
+      await new PreApproval(client).update({ id: pre.id, body: { status: "cancelled" } });
+    } catch (e) {
+      logger.warn("deleteLeague: o Mercado Pago não cancelou uma assinatura", { liga, status: pre.status, message: e?.message });
+      // Assinatura ainda "pending" (checkout aberto e nunca concluído) não cobra nada; qualquer outra, sim.
+      if (pre.status !== "pending") {
+        throw fail("failed-precondition", "Não foi possível cancelar a assinatura da liga no Mercado Pago agora. Nada foi apagado — tente de novo em alguns minutos.");
+      }
+    }
+  }
+  return open.length;
+}
+
+exports.deleteLeague = onCall({ ...CALLABLE, timeoutSeconds: 300, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "deleteLeague", 5);
+  const liga = leagueIdOf(request.data);
+  if (request.data?.confirm !== true) throw fail("invalid-argument", "Confirmação ausente.");
+
+  const leagueRef = db.doc(`leagues/${liga}`);
+  const leagueSnap = await leagueRef.get();
+  if (!leagueSnap.exists) throw fail("not-found", "Liga não encontrada.");
+  await requireCanCloseLeague(auth, liga, leagueSnap.data());
+
+  const subscriptions = await cancelLeagueSubscriptions(liga);
+
+  await leagueRef.update({ closingBy: auth.uid, closingAt: new Date().toISOString() });
+
+  const members = await db.collection("users").where(new FieldPath("leagues", liga, "role"), "in", MEMBER_ROLES).get();
+  for (const chunk of chunksOf(members.docs, 400)) {
+    const batch = db.batch();
+    chunk.forEach(d => batch.update(d.ref, new FieldPath("leagues", liga), FieldValue.delete()));
+    await batch.commit();
+  }
+
+  await db.recursiveDelete(leagueRef);
+  logger.info("deleteLeague concluída", { liga, membros: members.size, assinaturasCanceladas: subscriptions });
+  return { ok: true };
+});

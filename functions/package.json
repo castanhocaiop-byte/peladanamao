@@ -2,7 +2,8 @@
   "name": "aceoma-functions",
   "description": "Firebase Cloud Functions for Aceoma",
   "scripts": {
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test:emulators": "node test/run-emulators.js"
   },
   "engines": {
     "node": "22"

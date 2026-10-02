@@ -174,7 +174,7 @@ const reset = () => {
 
 (async () => {
   // opções das funções
-  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 13 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
+  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 14 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
 
   // ───────── joinLeague ─────────
   reset();
@@ -261,6 +261,29 @@ const reset = () => {
   check('leave: repetir não dá erro', (await call(fns.leaveLeague, { liga: 'L' }, authOf('ana'))).ok === true);
   check('leave: sem documento não dá erro', (await call(fns.leaveLeague, { liga: 'L' }, authOf('fantasma'))).ok === true && !store.has('users/fantasma'));
   check('leave: não mexe em outro usuário', user('adm').leagues.L.role === 'admin');
+
+  // o único admin não sai (a liga ficaria sem ninguém); com outro admin, sai e o criador passa adiante
+  reset();
+  let lx = await call(fns.leaveLeague, { liga: 'B' }, authOf('admB')).catch(x => x);
+  check('leave: único admin → bloqueado, dizendo qual liga e o que fazer', lx.code === 'failed-precondition' && lx.details && lx.details.reason === 'last-admin' && lx.details.ligas[0] === 'Liga B' && /Liga B/.test(lx.message) && /encerre a liga/.test(lx.message), lx);
+  check('leave: bloqueado não muda nada', user('admB').leagues.B.role === 'admin' && store.get('leagues/B').ownerId === 'admB');
+  store.set('users/ana', { ...user('ana'), leagues: { L: { role: 'player', playerKey: 'ana' }, B: { role: 'player' } } });
+  check('leave: jogador de uma liga que só tem um admin sai normalmente', (await call(fns.leaveLeague, { liga: 'B' }, authOf('ana'))).ok === true && !user('ana').leagues.B);
+  reset();
+  check('leave: admin que NÃO é o criador sai e o criador continua o mesmo', (await call(fns.leaveLeague, { liga: 'L' }, authOf('adm'))).ok === true && !user('adm').leagues.L && store.get('leagues/L').ownerId === 'dono', store.get('leagues/L'));
+  reset();
+  check('leave: admin que é o criador sai e a liga passa para o outro admin', (await call(fns.leaveLeague, { liga: 'L' }, authOf('dono'))).ok === true && !user('dono').leagues.L && store.get('leagues/L').ownerId === 'adm', store.get('leagues/L'));
+  reset();
+  store.set('users/adm', { ...user('adm'), leagues: { L: { role: 'admin', joinedAt: '2026-05-01' } } });
+  store.set('users/dono', { ...user('dono'), leagues: { L: { role: 'admin', joinedAt: '2026-01-01' } } });
+  store.set('users/terceiro', { email: 't@x.com', role: 'pending', leagues: { L: { role: 'admin', joinedAt: '2026-03-01' } } });
+  await call(fns.leaveLeague, { liga: 'L' }, authOf('dono'));
+  check('leave: o criador que sai passa a liga para o admin MAIS ANTIGO que fica', store.get('leagues/L').ownerId === 'terceiro', store.get('leagues/L'));
+  reset();
+  store.set('users/pend', { ...user('pend'), leagues: { L: { role: 'pending' } } });
+  check('leave: pendente e rejeitado saem sem a regra de admin', (await call(fns.leaveLeague, { liga: 'L' }, authOf('pend'))).ok === true && !user('pend').leagues.L);
+  store.set('users/resto', { email: 'resto@x.com', role: 'pending', leagues: { Gone: { role: 'admin' } } });
+  check('leave: admin de uma liga que já não existe (vínculo que sobrou) consegue sair', (await call(fns.leaveLeague, { liga: 'Gone' }, authOf('resto'))).ok === true && !user('resto').leagues.Gone, user('resto'));
 
   // ───────── manageMember ─────────
   reset();
@@ -566,7 +589,7 @@ const reset = () => {
   store.set('leagues/Solo/invite_tokens/s1', { role: 'player', used: false, createdBy: 'ana' });
   store.set('users/ana', { ...store.get('users/ana'), leagues: { ...store.get('users/ana').leagues, Solo: { role: 'admin', joinedAt: '2026-01-05' } } });
   ex = await dm({ confirm: true }, authOf('ana')).catch(x => x);
-  check('excluir: único admin de uma liga → bloqueado, dizendo qual', ex.code === 'failed-precondition' && ex.details && ex.details.reason === 'last-admin' && /Liga Solitária/.test(ex.message) && ex.details.ligas[0] === 'Liga Solitária', ex);
+  check('excluir: único admin de uma liga → bloqueado, dizendo qual', ex.code === 'failed-precondition' && ex.details && ex.details.reason === 'last-admin' && /Liga Solitária/.test(ex.message) && /encerre a liga/.test(ex.message) && ex.details.ligas[0] === 'Liga Solitária', ex);
   check('excluir: bloqueado não apaga nada', store.has('users/ana') && store.has('leagues/L/contacts/ana') && authDeleted.length === 0 && store.get('leagues/Solo').ownerId === 'ana');
   store.set('users/bia', { email: 'bia@x.com', role: 'pending', leagues: { L: { role: 'player', playerKey: 'bia' }, Solo: { role: 'admin', joinedAt: '2026-03-01' } } });
   store.set('users/nova', { email: 'nova@x.com', role: 'pending', leagues: { Solo: { role: 'admin', joinedAt: '2026-02-01' } } });

@@ -63,6 +63,46 @@ jobs:
         working-directory: functions
         run: node test/payments-test.js
 
+      - name: Testes das Cloud Functions (encerrar liga)
+        working-directory: functions
+        run: node test/delete-league-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js
+
+      - name: Testes do app (encerrar liga)
+        working-directory: functions
+        run: node test/client-close-league-test.js
+
+  # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
+  # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
+  # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
+  emulators:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # O emulador do Firestore é um programa Java.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-15.28.2
+
+      - name: Instalar dependências das Cloud Functions
+        working-directory: functions
+        run: npm install
+
+      - name: Testes de ponta a ponta nos emuladores (regras e funções)
+        working-directory: functions
+        run: npm run test:emulators

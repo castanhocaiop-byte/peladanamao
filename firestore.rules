@@ -17,14 +17,14 @@ service cloud.firestore {
 
     function isGlobalAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'castanho.caiop@gmail.com' ||
+        isOwnerVerified() ||
         userGlobalRole() == 'admin'
       );
     }
 
     function isLeagueAdmin(leagueId) {
       return isSignedIn() && (
-        request.auth.token.email == 'castanho.caiop@gmail.com' ||
+        isOwnerVerified() ||
         userLeagueRole(leagueId) == 'admin'
       );
     }
@@ -106,7 +106,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       // Ligas novas nascem na função createLeague (que também torna o criador admin dela).
       allow create: if false;
-      allow update: if isLeagueAdmin(leagueId);
+      // Plano, assinatura, criador e controle de encerramento só o servidor grava (o Admin SDK
+      // ignora estas regras): se o admin pudesse gravar tudo, daria a si mesmo um plano pago
+      // direto pelo navegador. O admin da liga só renomeia a própria liga.
+      allow update: if isOwnerVerified()
+        || (isLeagueAdmin(leagueId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']));
       allow delete: if isGlobalAdmin();
     }
 

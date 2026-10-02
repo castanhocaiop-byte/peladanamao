@@ -1460,7 +1460,7 @@ p strong {
     <!-- 14. Painel Admin -->
     <section class="section" id="admin">
       <h2 class="section-title"><span class="sn">14</span> Painel Admin</h2>
-      <p>O botão ⚙️ no cabeçalho abre o Painel Admin, exclusivo para administradores. Exibe um badge vermelho com o total de itens pendentes (aprovações + solicitações de vinculação) quando há algo aguardando ação.</p>
+      <p>O botão ⚙️ no cabeçalho abre o Painel Admin, exclusivo para administradores. Exibe um badge vermelho com o total de itens pendentes (aprovações + solicitações de vinculação) quando há algo aguardando ação. No fim do painel, quem criou a liga também encontra a <strong>Zona de perigo</strong>, com o botão <strong>🗑️ Encerrar esta liga</strong> (ver <a href="#encerrar-liga">Encerrar a liga</a>, na seção 17).</p>
 
       <h3>Aprovações pendentes</h3>
       <p>Novos usuários que criaram conta ficam com status <em>pendente</em> até o admin aprovar ou rejeitar. Ao aprovar, o admin pode vincular o usuário a um jogador do elenco ao mesmo tempo. O badge no ⚙️ é atualizado ao abrir o aplicativo, ao voltar para ele (se passou mais de 1 minuto) e ao abrir o Painel Admin. A lista de membros vem do servidor, pela função <code>listMembers</code>, que só responde ao admin da liga. Aprovar, rejeitar, promover a admin e vincular jogadores são executados <strong>pelo servidor</strong>, que confirma que quem clicou é admin daquela liga (ver a seção 20). Se aparecer um erro dizendo que só administradores podem fazer aquilo, recarregue a página e tente de novo.</p>
@@ -1687,7 +1687,7 @@ p strong {
           </tr>
           <tr>
             <td>Sair de uma liga</td>
-            <td>Toque no botão 🚪 ao lado da liga. Pede confirmação antes de remover o vínculo.</td>
+            <td>Toque no botão 🚪 ao lado da liga. Pede confirmação antes de remover o vínculo. O <strong>único admin</strong> da liga não consegue sair: antes é preciso promover outro admin ou <a href="#encerrar-liga">encerrar a liga</a>.</td>
           </tr>
           <tr>
             <td>Criar nova liga</td>
@@ -1698,7 +1698,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Sair de uma liga é permanente</div>
-        Ao sair, o vínculo com a liga é removido — histórico de estatísticas, badges e financeiro daquela liga deixam de ser acessíveis pela conta. Para voltar, é necessário um novo convite (ou aprovação, se a liga permitir cadastro livre). Se a conta for <strong>admin</strong>, o app avisa que, sendo o único, ninguém mais poderá gerenciar a liga depois da saída.
+        Ao sair, o vínculo com a liga é removido — histórico de estatísticas, badges e financeiro daquela liga deixam de ser acessíveis pela conta. Para voltar, é necessário um novo convite (ou aprovação, se a liga permitir cadastro livre). Uma liga nunca fica sem admin por causa de uma saída: se a conta for o <strong>único admin</strong>, o app não deixa sair e explica o que fazer (promover outro admin ou encerrar a liga). Se quem sai é o admin que <strong>criou</strong> a liga e há outros admins, a liga passa para o admin mais antigo que ficar.
       </div>
 
       <h3>Renomear a liga <span class="tag">Admin</span></h3>
@@ -1707,6 +1707,45 @@ p strong {
       <div class="callout">
         <div class="callout-label">O que não muda</div>
         Renomear a liga altera apenas o nome de exibição. O <strong>ID da liga</strong> (usado em links de convite e na URL) permanece o mesmo definido na criação e não pode ser alterado.
+      </div>
+
+      <h3 id="encerrar-liga">Encerrar a liga <span class="tag">Admin</span></h3>
+      <p>Em <strong>⚙️ Painel Admin → Zona de perigo → 🗑️ Encerrar esta liga</strong>, quem criou a liga a apaga de vez. É o caminho para quem é o único admin e quer sair, ou para uma liga que ninguém vai mais usar. Para confirmar, o app pede para digitar <strong>ENCERRAR</strong>; só então o botão é liberado.</p>
+
+      <table class="data-table">
+        <thead><tr><th>O que acontece</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>É apagado</td>
+            <td>Elenco, campeonatos (gols, títulos, votos), financeiro, convites, pedidos de vinculação, contatos (WhatsApp) e fotos — a foto também some do Cloudinary. A liga deixa de existir.</td>
+          </tr>
+          <tr>
+            <td>Os membros</td>
+            <td>Todos perdem o acesso na hora. As <strong>contas</strong> delas continuam (login, e-mail) e também as outras ligas de cada uma.</td>
+          </tr>
+          <tr>
+            <td>Plano pago</td>
+            <td>A assinatura mensal da liga é <strong>cancelada no Mercado Pago antes</strong> de qualquer coisa ser apagada, para ninguém continuar sendo cobrado por uma liga que não existe. Se o Mercado Pago não responder, nada é apagado: o app avisa e basta tentar de novo. <strong>Não há reembolso</strong> do valor já pago (Termos de Uso, cláusula 10).</td>
+          </tr>
+          <tr>
+            <td>Quem vê o botão</td>
+            <td>O admin que <strong>criou</strong> a liga (em liga antiga, sem criador registrado, qualquer admin) e o dono do sistema. Os demais admins não veem a Zona de perigo.</td>
+          </tr>
+          <tr>
+            <td>Quem estava com o app aberto</td>
+            <td>Na próxima ação, o app volta para a lista de ligas com o aviso <em>A liga … foi encerrada ou você não faz mais parte dela.</em></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Não tem volta</div>
+        Encerrar é definitivo: não há lixeira nem desfazer. Só existe a cópia de segurança diária do banco, que é uma restauração manual feita pelo dono do sistema. Quem quer guardar o histórico deve fazê-lo antes (por exemplo, com capturas de tela do ranking e dos campeonatos).
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Se algo falhar no meio</div>
+        A ordem é: cancelar a assinatura → marcar a liga como "em encerramento" → tirar o acesso dos membros → apagar os dados (o documento da liga é o último a sair). Repetir o encerramento conclui o que faltou, mesmo para quem já perdeu o vínculo, desde que seja quem o iniciou.
       </div>
     </section>
 
@@ -1923,7 +1962,13 @@ p strong {
             <td>Sair da liga</td>
             <td><code>leaveLeague</code></td>
             <td>A própria conta</td>
-            <td>Remove apenas o vínculo dela com aquela liga.</td>
+            <td>Remove apenas o vínculo dela com aquela liga. O <strong>único admin não sai</strong> (a liga ficaria sem ninguém para administrar); o criador que sai passa a liga ao admin mais antigo que ficar.</td>
+          </tr>
+          <tr>
+            <td>Encerrar a liga (apagar a liga e tudo o que há nela)</td>
+            <td><code>deleteLeague</code></td>
+            <td>O criador da liga, o dono do sistema e — se o criador já não é admin dela ou a liga é antiga e não tem criador registrado — qualquer admin</td>
+            <td>Pedido com confirmação explícita (<code>confirm: true</code>), máximo de 5 por minuto. Cancela as assinaturas da liga no Mercado Pago (<strong>se não conseguir, não apaga nada</strong>), tira o vínculo de todos os membros e apaga a liga com tudo dentro. O documento da liga é o último a ser apagado, então o pedido pode ser repetido por quem o iniciou se algo falhar no meio.</td>
           </tr>
           <tr>
             <td>Aprovar, rejeitar, promover a admin, vincular a jogador e responder pedido de vinculação</td>
@@ -2084,7 +2129,11 @@ p strong {
       </div>
       <div class="callout">
         <div class="callout-label">Testes</div>
-        As regras e as funções de acesso foram testadas em emuladores locais (Autenticação, Firestore e Funções) com contas de teste, incluindo tentativas de ataque (virar admin, ler dados de outros, criar liga por fora, mexer em convites, ler WhatsApp como jogador). Nada disso toca o Firebase real.
+        As regras e as funções de acesso são testadas <strong>automaticamente a cada alteração</strong> (GitHub Actions) em emuladores do Firebase (Autenticação, Firestore e Funções) com contas de teste, incluindo tentativas de ataque (virar admin, ler dados de outros, criar liga por fora, mexer em convites, ler WhatsApp como jogador, gravar o plano pago direto no banco). Nada disso toca o Firebase real. Para rodar na própria máquina: <code>npm run test:emulators</code>, dentro de <code>functions/</code> (precisa de Java 21).
+      </div>
+      <div class="callout">
+        <div class="callout-label">O documento da liga</div>
+        As regras só deixam o admin da liga alterar o <strong>nome</strong> dela. Plano, fim do teste grátis, assinatura, criador e controle de encerramento só o servidor grava; senão qualquer admin poderia dar a si mesmo um plano pago direto pelo navegador. O dono do sistema (conta Google com e-mail verificado) continua podendo tudo.
       </div>
       <div class="callout">
         <div class="callout-label">Apagar o arquivo da foto no Cloudinary <span class="tag">Técnico</span></div>
@@ -2135,7 +2184,7 @@ p strong {
         </div>
         <div class="ind-card">
           <div class="ind-name">Único admin</div>
-          <div class="ind-desc">Quem é o <strong>único admin</strong> de uma liga não consegue excluir: o app mostra o nome da liga. Promova outro admin (⚙️ Painel Admin → ▲) ou saia da liga antes. Se a conta era a criadora da liga e há outros admins, a liga passa para o admin mais antigo.</div>
+          <div class="ind-desc">Quem é o <strong>único admin</strong> de uma liga não consegue excluir: o app mostra o nome da liga. Promova outro admin (⚙️ Painel Admin → ▲) ou <a href="#encerrar-liga">encerre a liga</a> (⚙️ Painel Admin → Encerrar esta liga) antes. Se a conta era a criadora da liga e há outros admins, a liga passa para o admin mais antigo.</div>
         </div>
         <div class="ind-card">
           <div class="ind-name">Sem volta</div>
@@ -2147,7 +2196,10 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Mensagem</th><th>Significado</th></tr></thead>
         <tbody>
-          <tr><td>Você é o único admin de … Promova outro admin ou saia da liga antes de excluir a conta.</td><td>Falta outro admin na liga citada.</td></tr>
+          <tr><td>Você é o único admin de … Promova outro admin ou encerre a liga antes de excluir a conta.</td><td>Falta outro admin na liga citada.</td></tr>
+          <tr><td>Você é o único admin de … Promova outro admin ou encerre a liga antes de sair.</td><td>Mesma regra, ao tentar sair da liga (🚪) sendo o único admin.</td></tr>
+          <tr><td>Só quem criou a liga pode encerrá-la.</td><td>Outro admin tentou encerrar a liga enquanto o criador ainda é admin dela.</td></tr>
+          <tr><td>Não foi possível conferir (ou cancelar) a assinatura da liga no Mercado Pago agora. Nada foi apagado…</td><td>O Mercado Pago não respondeu ao encerrar uma liga com assinatura; tente de novo em alguns minutos.</td></tr>
           <tr><td>Por segurança, confirme que é você… / digite sua senha…</td><td>O login tem mais de 5 minutos: use o botão de confirmar com o Google ou digite a senha e clique de novo.</td></tr>
           <tr><td>Senha incorreta.</td><td>A senha digitada na confirmação não confere.</td></tr>
           <tr><td>Seus dados pessoais já foram apagados, mas o login ainda existe. Clique no botão de novo para concluir.</td><td>A conexão caiu no último passo. Clicar de novo termina o serviço.</td></tr>
@@ -2198,7 +2250,7 @@ p strong {
       </div>
 
       <h3>Termos de Uso</h3>
-      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, propriedade intelectual, limitação de responsabilidade, foro e contato.</p>
+      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.1, vigente desde 02/10/2026.</p>
       <div class="callout gold">
         <div class="callout-label gold">Responsável e foro</div>
         O documento identifica <strong>Caio da Mata Pires Castanho (CPF 391.795.148-71)</strong> como responsável pela plataforma, operando como pessoa física — decisão deliberada para não abrir CNPJ antes de haver monetização. O foro eleito é a comarca de São Paulo/SP, e o contato é <code>contato@peladanamao.com.br</code>.
@@ -2246,6 +2298,11 @@ p strong {
       <div class="callout">
         <div class="callout-label">Ligas criadas antes de 02/10/2026</div>
         O teste grátis era de 30 dias. A mudança para 8 dias vale só para ligas novas: as que já existiam mantêm o prazo que tinham quando foram criadas.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">O plano free é uma lista pré-selecionada, sujeita a mudança</div>
+        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.1). O histórico já registrado não é apagado nem fica refém de cobrança.
       </div>
 
       <h3>O que continua funcionando no plano free</h3>
@@ -2308,7 +2365,12 @@ p strong {
       </div>
 
       <h3>Cancelar a assinatura</h3>
-      <p>A assinatura mensal é cancelada na conta do Mercado Pago de quem assinou (menu <em>Assinaturas</em>). A liga continua ativa até o fim do período já pago e depois volta ao plano gratuito, sem nenhuma ação no app.</p>
+      <p>A assinatura mensal é cancelada na conta do Mercado Pago de quem assinou (menu <em>Assinaturas</em>). A liga continua ativa até o fim do período já pago e depois volta ao plano gratuito, sem nenhuma ação no app. Quando a liga é <a href="#encerrar-liga">encerrada</a> (seção 17), a assinatura mensal é cancelada automaticamente pelo servidor, antes de qualquer dado ser apagado.</p>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Sem reembolso</div>
+        Os valores pagos <strong>não são reembolsáveis</strong>, nem proporcionalmente, em caso de cancelamento, encerramento da liga, fim do uso ou qualquer outro motivo (Termos de Uso, cláusula 10), ressalvados os direitos que a lei brasileira considere irrenunciáveis em relações de consumo. O aviso aparece na própria tela de assinatura, com o link dos Termos, antes de o pagamento ser iniciado.
+      </div>
 
       <div class="callout warn">
         <div class="callout-label warn">Segurança do webhook <span class="tag">Técnico</span></div>

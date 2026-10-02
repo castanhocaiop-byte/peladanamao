@@ -785,6 +785,14 @@ function col(name) { return DB.collection(`leagues/${st.leagueId}/${name}`); }
 function ldoc(path) { return DB.doc(`leagues/${st.leagueId}/${path}`); }
 
 function isAdmin() { return st.userRole === 'admin'; }
+// Encerrar a liga: quem a criou (em liga antiga, sem criador registrado, qualquer admin) e o dono do
+// sistema. O servidor confere de novo (deleteLeague); aqui só se decide se o botão aparece.
+function canCloseLeague() {
+  if (!isAdmin()) return false;
+  const lg = st.availableLeagues.find(l => l.id === st.leagueId);
+  const systemOwner = st.authUser?.email === 'castanho.caiop@gmail.com' && st.authUser?.emailVerified;
+  return !lg?.ownerId || lg.ownerId === st.authUser?.uid || !!systemOwner;
+}
 // Liga "free" = trial vencido e sem assinatura ativa. Sem trialEndsAt (ligas
 // antigas) conta como não-free. Uma assinatura ativa (subscriptionActiveUntil no futuro)
 // sempre libera a liga, independente do trial.
@@ -817,7 +825,7 @@ function startListeners() {
     st.ready = true;
     if (!wasReady && st.view === 'meuJogador' && activeChamp()) st.view = 'home';
     render();
-  }, () => { st.ready = true; render(); });
+  }, () => { st.ready = true; render(); checkLeagueStillMine(); });
 
   const u2 = col('player_titles').onSnapshot(snap => {
     st.ranks = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
@@ -1022,7 +1030,7 @@ function initFirebase() {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null, subscriptionRenewsAt: _lgDoc?.data()?.subscriptionRenewsAt || null }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, ownerId: _lgDoc?.data()?.ownerId || null, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null, subscriptionRenewsAt: _lgDoc?.data()?.subscriptionRenewsAt || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -1030,6 +1038,7 @@ function initFirebase() {
               id: leagueKeys[i],
               name: d.exists ? d.data().name : leagueKeys[i],
               role: leagues[leagueKeys[i]]?.role,
+              ownerId: d.exists ? (d.data().ownerId || null) : null,
               trialEndsAt: d.exists ? (d.data().trialEndsAt || null) : null,
               subscriptionActiveUntil: d.exists ? (d.data().subscriptionActiveUntil || null) : null,
               subscriptionPlan: d.exists ? (d.data().subscriptionPlan || null) : null,
@@ -1290,7 +1299,7 @@ function openPrivacyPolicy() {
       ${p('Ambas as opções ficam no fim da aba <strong>Meu Craque</strong>. Se quiser tirar seu nome de campeonatos específicos ou sair da liga, fale com o admin.')}
 
       ${h3('Responsável pelos seus dados')}
-      ${p('Cada liga é administrada de forma independente pelo seu admin, que decide quem participa e é o contato para dúvidas sobre os dados daquela liga.')}
+      ${p('Cada liga é administrada de forma independente pelo seu admin, que decide quem participa e é o contato para dúvidas sobre os dados daquela liga. Quem criou a liga pode encerrá-la a qualquer momento: isso apaga, de forma definitiva, o elenco, os resultados, o financeiro, as fotos e os contatos daquela liga, e todos os membros perdem o acesso a ela.')}
 
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);font-size:11px;color:var(--text3);line-height:1.6">
         Este texto descreve como o Pelada na Mão funciona hoje; não é um parecer jurídico.
@@ -1319,7 +1328,7 @@ function openDeleteAccount() {
         <li>o seu vínculo com todas as ligas (você sai delas).</li>
       </ul>
       <p style="margin:0 0 8px"><strong>O que continua:</strong> o nome do jogador nos campeonatos já disputados (elenco, gols e títulos), que é o histórico esportivo da liga. Para tirar seu nome de lá, peça ao admin da liga. O arquivo da foto pode continuar guardado no serviço de imagens, sem ligação com você.</p>
-      <p style="margin:0 0 14px">Se você é o <strong>único admin</strong> de alguma liga, promova outro admin ou saia da liga antes.</p>
+      <p style="margin:0 0 14px">Se você é o <strong>único admin</strong> de alguma liga, promova outro admin ou encerre a liga (⚙️ Painel Admin → Encerrar esta liga) antes.</p>
     </div>
     <label style="display:block;margin-bottom:12px">
       <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:6px">Digite EXCLUIR para confirmar</span>
@@ -1413,6 +1422,93 @@ async function finishAccountDeletion() {
   } catch(_) {}
   await signOutUser();
   toast('Conta excluída. Seus dados pessoais foram apagados.', 'ok');
+}
+
+/* ── Encerrar a liga ──────────────────────────────────────────────────────────────────────
+   Camada solta no <body>, como a de excluir conta, com a mesma confirmação digitada. O trabalho
+   é da função do servidor deleteLeague: cancela a assinatura no Mercado Pago, tira o vínculo de
+   todos os membros e apaga a liga com tudo o que há dentro. Prometido nos Termos de Uso
+   ("um Admin pode encerrar sua própria Liga a qualquer momento"). */
+let _closeLg = { busy: false };
+
+function openCloseLeague() {
+  if (!canCloseLeague()) return;
+  closeCloseLeague();
+  _closeLg = { busy: false };
+  const lg = st.availableLeagues.find(l => l.id === st.leagueId);
+  const paid = !!lg?.subscriptionActiveUntil && new Date(lg.subscriptionActiveUntil).getTime() > Date.now();
+  const root = document.createElement('div');
+  root.id = 'closelg-root';
+  root.className = 'overlay';
+  root.onclick = closeCloseLeague;
+  const field = `width:100%;box-sizing:border-box;padding:12px 14px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:inherit;outline:none`;
+  root.innerHTML = `<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:12px">🗑️ Encerrar a liga “${esc(lg?.name || st.leagueId)}”</div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.6">
+      <p style="margin:0 0 8px">Isto apaga, <strong>de forma definitiva</strong>, a liga e tudo o que há nela:</p>
+      <ul style="margin:0 0 10px;padding-left:20px">
+        <li>elenco, campeonatos, gols, títulos, votos e conquistas;</li>
+        <li>financeiro (mensalidades, despesas e cobranças avulsas);</li>
+        <li>fotos, contatos (WhatsApp), convites e pedidos de vinculação;</li>
+        <li>o vínculo de todos os membros: todos perdem o acesso na hora.</li>
+      </ul>
+      ${paid ? `<p style="margin:0 0 8px"><strong>Plano pago:</strong> a assinatura desta liga é cancelada junto, sem novas cobranças. Não há reembolso do valor já pago.</p>` : ''}
+      <p style="margin:0 0 14px"><strong>Não tem volta.</strong> As contas das pessoas continuam existindo; só a liga some.</p>
+    </div>
+    <label style="display:block;margin-bottom:12px">
+      <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:6px">Digite ENCERRAR para confirmar</span>
+      <input id="closelg-confirm" autocomplete="off" autocapitalize="characters" oninput="_closeLgRefresh()" style="${field}">
+    </label>
+    <div id="closelg-err" style="min-height:18px;margin-bottom:10px;color:var(--danger);font-size:13px;line-height:1.4"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeCloseLeague()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="closelg-go" onclick="confirmCloseLeague()" disabled style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--danger);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;opacity:.45">Encerrar a liga</button>
+    </div>
+  </div>`;
+  document.body.appendChild(root);
+  document.getElementById('closelg-confirm')?.focus();
+}
+
+function closeCloseLeague() {
+  if (_closeLg.busy) return; // não fecha no meio do encerramento
+  document.getElementById('closelg-root')?.remove();
+}
+
+function _closeLgErr(msg) { const el = document.getElementById('closelg-err'); if (el) el.textContent = msg || ''; }
+
+function _closeLgRefresh() {
+  const go = document.getElementById('closelg-go');
+  if (!go) return;
+  const typed = (document.getElementById('closelg-confirm')?.value || '').trim().toUpperCase();
+  const ok = typed === 'ENCERRAR' && !_closeLg.busy;
+  go.disabled = !ok;
+  go.style.opacity = ok ? '1' : '.45';
+  go.textContent = _closeLg.busy ? 'Encerrando…' : 'Encerrar a liga';
+}
+
+async function confirmCloseLeague() {
+  if (_closeLg.busy || !st.leagueId) return;
+  if ((document.getElementById('closelg-confirm')?.value || '').trim().toUpperCase() !== 'ENCERRAR') return;
+  const id = st.leagueId;
+  const name = st.availableLeagues.find(l => l.id === id)?.name || id;
+  _closeLg.busy = true; _closeLgErr(''); _closeLgRefresh();
+  try {
+    await callFn('deleteLeague', { liga: id, confirm: true });
+  } catch(e) {
+    // "não encontrada" = já foi encerrada (por exemplo, a resposta anterior se perdeu): segue como sucesso
+    if (e?.code !== 'not-found') {
+      _closeLgErr(e?.message || 'Não foi possível encerrar agora. Tente de novo.');
+      _closeLg.busy = false; _closeLgRefresh();
+      return;
+    }
+  }
+  _closeLg.busy = false;
+  document.getElementById('closelg-root')?.remove();
+  forgetLeagueLocally(id);
+  st.modal = null;
+  toast(`Liga "${name}" encerrada.`, 'ok');
+  render();
 }
 
 async function sendMagicLink(email) {
@@ -2039,7 +2135,8 @@ async function rememberLeague(id, role, name) {
   const subscriptionActiveUntil = doc?.exists ? (doc.data().subscriptionActiveUntil || null) : null;
   const subscriptionPlan = doc?.exists ? (doc.data().subscriptionPlan || null) : null;
   const subscriptionRenewsAt = doc?.exists ? (doc.data().subscriptionRenewsAt || null) : null;
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil, subscriptionPlan, subscriptionRenewsAt }];
+  const ownerId = doc?.exists ? (doc.data().ownerId || null) : null;
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, ownerId, trialEndsAt, subscriptionActiveUntil, subscriptionPlan, subscriptionRenewsAt }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -5328,6 +5425,7 @@ function mSubscription() {
           style="position:relative;z-index:1;padding:14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
           Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
         </button>
+        <div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Não há reembolso. Ao assinar, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>
       </div>`}
       <div id="sub-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
       <button onclick="st.modal=null;render()" style="position:relative;z-index:1;width:100%;padding:12px;margin-top:14px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Fechar</button>
@@ -5709,6 +5807,12 @@ function mAdminPanel() {
             <div style="font-size:11px;color:var(--text3)">Cores desabilitadas não aparecem no sorteio nem na criação de campeonatos.</div>
           </div>`;
         })()}
+        ${canCloseLeague() ? `
+        <div class="sec-lbl" style="margin-top:24px;color:var(--danger)">Zona de perigo</div>
+        <button onclick="openCloseLeague()" class="btn btn-danger" style="margin-top:0;text-align:left;font-size:14px">
+          🗑️ Encerrar esta liga
+        </button>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Apaga a liga e todos os dados dela, de forma definitiva.</div>` : ''}
         `}
       </div>
     </div>
@@ -5798,24 +5902,50 @@ function switchLeagueView() {
   render();
 }
 
+// Tira a liga da memória do app (depois de a pessoa sair dela ou de ela ser encerrada).
+function forgetLeagueLocally(leagueId) {
+  if (st.userDoc?.leagues) delete st.userDoc.leagues[leagueId];
+  st.availableLeagues = st.availableLeagues.filter(l => l.id !== leagueId);
+  if (st.leagueId === leagueId) {
+    _unsubListeners.forEach(u=>u()); _unsubListeners = [];
+    st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
+    st.leagueId = null; st.userRole = null;
+  }
+}
+
+// Com o app aberto, a pessoa pode perder o acesso à liga (o criador a encerrou, ou ela foi removida): os
+// ouvintes passam a falhar. Confere o cadastro e, se a liga não é mais dela, volta para a lista de ligas
+// em vez de deixar a tela parada com dados antigos.
+let _checkingLeague = false;
+async function checkLeagueStillMine() {
+  const id = st.leagueId;
+  if (!id || !st.authUser || _checkingLeague || _closeLg.busy) return; // quem está encerrando a liga já recebe o próprio aviso
+  _checkingLeague = true;
+  try {
+    const snap = await DB.doc(`users/${st.authUser.uid}`).get();
+    if (st.leagueId !== id || (snap.exists && snap.data().leagues?.[id])) return;
+    const name = st.availableLeagues.find(l => l.id === id)?.name || id;
+    forgetLeagueLocally(id);
+    st.modal = null;
+    toast(`A liga "${name}" foi encerrada ou você não faz mais parte dela.`);
+    render();
+  } catch(_) { /* sem conexão: tenta de novo no próximo erro */ }
+  finally { _checkingLeague = false; }
+}
+
 async function leaveLeague(leagueId) {
   const lg = st.availableLeagues.find(l=>l.id===leagueId);
   const name = lg?.name || leagueId;
-  const warn = lg?.role === 'admin' ? ' Você é admin desta liga — se for o único admin, ninguém mais poderá gerenciá-la depois.' : '';
+  const warn = lg?.role === 'admin' ? ' Você é admin desta liga: se for o único admin, só pode sair depois de promover outro admin ou de encerrar a liga.' : '';
   if (!confirm(`Sair da liga "${name}"?${warn}`)) return;
   try {
     await callFn('leaveLeague', { liga: leagueId });
-    if (st.userDoc?.leagues) delete st.userDoc.leagues[leagueId];
-    st.availableLeagues = st.availableLeagues.filter(l => l.id !== leagueId);
-    if (st.leagueId === leagueId) {
-      _unsubListeners.forEach(u=>u()); _unsubListeners = [];
-      st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
-      st.leagueId = null; st.userRole = null;
-    }
+    forgetLeagueLocally(leagueId);
     toast('Você saiu da liga.');
     render();
   } catch(e) {
-    toast('Erro ao sair da liga: ' + (e?.message||e));
+    if (e?.reason === 'last-admin') alert(`${e.message}\n\nPara encerrar a liga, abra-a e use ⚙️ Painel Admin → Encerrar esta liga.`);
+    else toast('Erro ao sair da liga: ' + (e?.message||e));
   }
 }
 
