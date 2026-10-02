@@ -5305,15 +5305,20 @@ function mSubscription() {
 async function startSubscription(plan) {
   if (st._subBusy) return;
   st._subBusy = true; render();
-  const err = document.getElementById('sub-err');
+  let errorMsg = null;
   try {
     const fn = plan === 'annual' ? 'createAnnualPayment' : 'createMonthlySubscription';
     const res = await callFn(fn, { liga: st.leagueId });
     if (res.initPoint) window.location.href = res.initPoint;
   } catch(e) {
-    if (err) err.textContent = e.message || 'Não foi possível iniciar a assinatura agora.';
+    errorMsg = e.message || 'Não foi possível iniciar a assinatura agora.';
   } finally {
     st._subBusy = false; render();
+    // O elemento só é buscado agora, depois do render(): qualquer referência capturada
+    // antes da chamada assíncrona ficaria obsoleta se o modal tiver sido recriado nesse
+    // meio tempo (a mensagem seria escrita num elemento já fora da tela — exatamente o
+    // que acontecia antes, fazendo o erro existir mas nunca aparecer).
+    if (errorMsg) { const err = document.getElementById('sub-err'); if (err) err.textContent = errorMsg; }
   }
 }
 
