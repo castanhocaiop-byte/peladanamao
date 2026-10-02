@@ -2281,21 +2281,34 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Plano</th><th>Valor</th><th>Como funciona</th></tr></thead>
         <tbody>
-          <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a liga cancelar.</td></tr>
-          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: perto do vencimento, um lembrete por e-mail avisa para pagar de novo.</td></tr>
+          <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a assinatura ser cancelada na conta do Mercado Pago de quem assinou. A liga renova sozinha a cada mês cobrado.</td></tr>
+          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento. O lembrete por e-mail antes do vencimento ainda não foi implementado.</td></tr>
         </tbody>
       </table>
 
       <h3>Como o sistema confirma o pagamento</h3>
-      <p>O botão de assinar não marca nada como pago sozinho — ele só abre o link de pagamento do Mercado Pago. Quem confirma é um <strong>webhook</strong>: o Mercado Pago avisa o servidor quando a cobrança é aprovada, o servidor confere esse aviso diretamente com a API do Mercado Pago (nunca confiando só no que chega na notificação) e só então grava a liga como paga, com uma data de validade (<code>subscriptionActiveUntil</code>).</p>
+      <p>Quem assina <strong>não precisa fazer nada depois de pagar</strong>. O botão de assinar só abre o link de pagamento do Mercado Pago; a ativação da liga é automática e acontece por três caminhos que se complementam:</p>
+      <ul>
+        <li><strong>Ao voltar do Mercado Pago</strong> — o app abre a tela de assinatura mostrando "Confirmando seu pagamento…" e consulta o servidor por alguns segundos, até a liga aparecer como ativa. A escolha de plano some enquanto isso, para ninguém pagar duas vezes por pressa.</li>
+        <li><strong>Ao reabrir o app ou voltar à aba</strong> — se a pessoa fechou tudo antes de voltar, a confirmação acontece sozinha na próxima vez que ela abrir o app, sem nenhum clique.</li>
+        <li><strong>Em segundo plano, no servidor</strong> — a cada 6 horas o servidor confere as assinaturas direto no Mercado Pago. É isso que mantém a liga ativa a cada novo mês cobrado (renovação) e que ativa pagamentos mesmo que ninguém volte ao site. O aviso do Mercado Pago (<strong>webhook</strong>) acelera o processo quando chega, mas o sistema não depende dele.</li>
+      </ul>
+      <p>Em todos os casos o servidor confere o pagamento diretamente com a API do Mercado Pago — nunca confia no que o navegador ou a notificação dizem — e só então grava a liga como paga.</p>
+
+      <h3>Datas na tela de assinatura</h3>
+      <p>No plano mensal aparece <strong>"Próxima cobrança em [data]"</strong>, a data real da próxima cobrança no Mercado Pago. No anual, <strong>"Válida até [data]"</strong>, um ano a partir da aprovação do pagamento. Por dentro o acesso tem 1 dia de tolerância para atrasos de processamento (<code>subscriptionActiveUntil</code>), mas esse dia nunca aparece na tela: um mês é um mês (a data mostrada vem de <code>subscriptionRenewsAt</code>).</p>
+
       <div class="callout">
         <div class="callout-label">Uma assinatura ativa sempre libera a liga</div>
         <code>isLeagueFree()</code> agora confere duas coisas: o trial venceu <em>e</em> não há assinatura ativa. Uma liga com assinatura em dia nunca cai no plano free, mesmo que o trial de 30 dias já tenha acabado há muito tempo.
       </div>
 
+      <h3>Cancelar a assinatura</h3>
+      <p>A assinatura mensal é cancelada na conta do Mercado Pago de quem assinou (menu <em>Assinaturas</em>). A liga continua ativa até o fim do período já pago e depois volta ao plano gratuito, sem nenhuma ação no app.</p>
+
       <div class="callout warn">
         <div class="callout-label warn">Segurança do webhook <span class="tag">Técnico</span></div>
-        O endereço que recebe os avisos do Mercado Pago é público na internet, então qualquer notificação que chegar sem uma assinatura digital válida (conferida com a chave secreta configurada no Mercado Pago) é recusada — inclusive enquanto essa chave ainda não tiver sido configurada, o servidor nunca aceita uma notificação sem conferir.
+        O endereço que recebe os avisos do Mercado Pago é público na internet, então o servidor nunca confia no conteúdo de um aviso: antes de ativar qualquer coisa ele pergunta ao Mercado Pago, com a chave secreta do sistema, qual é a situação real da assinatura ou do pagamento. Avisos com assinatura digital incorreta são recusados (e, enquanto a chave secreta não estiver configurada, todos são recusados). Avisos de assinatura sem o cabeçalho de assinatura — o Mercado Pago às vezes envia assim — são aceitos, porque a conferência acima já os torna inofensivos. Só um pagamento do valor exato do plano anual ativa o plano anual: uma cobrança mensal nunca vira um ano de acesso.
       </div>
 
       <h3>Fora do app empacotado nas lojas</h3>

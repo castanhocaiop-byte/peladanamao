@@ -988,6 +988,7 @@ function initFirebase() {
         st.userRole = null; st.userDoc = null; st.leagueId = null; st.availableLeagues = []; st.ready = true;
         render(); return;
       }
+      let returnedFromCheckout = false;
       try {
         const snap = await DB.doc(`users/${user.uid}`).get();
         if (snap.exists) {
@@ -1006,12 +1007,13 @@ function initFirebase() {
             history.replaceState(null, '', location.pathname);
           }
 
-          // Volta do checkout do Mercado Pago: confirma direto na API antes de montar
-          // availableLeagues, cobrindo o caso do webhook atrasar ou nunca chegar.
+          // Volta do checkout do Mercado Pago: registra o pagamento a confirmar; a confirmação
+          // em si roda no fim do carregamento, sem travar a abertura do app.
           const mpReturnLiga = new URLSearchParams(location.search).get('mpReturn');
           if (mpReturnLiga && curLeagues[mpReturnLiga]) {
+            markPaymentPending(mpReturnLiga);
+            returnedFromCheckout = true;
             history.replaceState(null, '', location.pathname);
-            try { await callFn('checkSubscriptionStatus', { liga: mpReturnLiga }); } catch(e) {}
           }
 
           const leagues = st.userDoc.leagues || {};
@@ -1020,7 +1022,7 @@ function initFirebase() {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null, subscriptionRenewsAt: _lgDoc?.data()?.subscriptionRenewsAt || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -1031,6 +1033,7 @@ function initFirebase() {
               trialEndsAt: d.exists ? (d.data().trialEndsAt || null) : null,
               subscriptionActiveUntil: d.exists ? (d.data().subscriptionActiveUntil || null) : null,
               subscriptionPlan: d.exists ? (d.data().subscriptionPlan || null) : null,
+              subscriptionRenewsAt: d.exists ? (d.data().subscriptionRenewsAt || null) : null,
             }));
             st.leagueId = null;
             st.userRole = null;
@@ -1080,6 +1083,14 @@ function initFirebase() {
         st.ready = true; render();
       }
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') initPush();
+
+      // Pagamento iniciado neste navegador ainda por confirmar. Vindo direto do checkout, abre
+      // a tela de assinatura já mostrando "confirmando…" e insiste por alguns segundos.
+      const pendingPay = readPaymentPending();
+      if (pendingPay) {
+        if (returnedFromCheckout && st.leagueId === pendingPay.liga && isAdmin()) st.modal = { type: 'subscription' };
+        confirmPendingPayment(returnedFromCheckout ? 8 : 2, 4000, returnedFromCheckout);
+      }
     });
   } catch(e) {
     st.ready = true; render();
@@ -2027,7 +2038,8 @@ async function rememberLeague(id, role, name) {
   const trialEndsAt = doc?.exists ? (doc.data().trialEndsAt || null) : null;
   const subscriptionActiveUntil = doc?.exists ? (doc.data().subscriptionActiveUntil || null) : null;
   const subscriptionPlan = doc?.exists ? (doc.data().subscriptionPlan || null) : null;
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil, subscriptionPlan }];
+  const subscriptionRenewsAt = doc?.exists ? (doc.data().subscriptionRenewsAt || null) : null;
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil, subscriptionPlan, subscriptionRenewsAt }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -5271,13 +5283,23 @@ function mSubscription() {
   const activeUntil = league?.subscriptionActiveUntil ? new Date(league.subscriptionActiveUntil) : null;
   const hasActiveSub = activeUntil && activeUntil.getTime() > Date.now();
   const trialActive = trialEndsAt && trialEndsAt.getTime() > Date.now();
+  // Mostra a data real da próxima cobrança, sem a margem técnica de tolerância somada em
+  // subscriptionActiveUntil (essa margem é só para não cortar acesso por atraso de
+  // notificação — não deve aparecer como se o usuário tivesse ganhado dias extras).
+  const renewsAt = league?.subscriptionRenewsAt ? new Date(league.subscriptionRenewsAt) : activeUntil;
 
   const fmt = d => d.toLocaleDateString('pt-BR');
+  const checking = !!st._payChecking && !hasActiveSub;
   let statusHtml;
-  if (hasActiveSub) {
+  if (checking) {
+    statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">⏳ Confirmando seu pagamento…</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Leva só alguns segundos. Você não precisa fazer nada.</div>
+    </div>`;
+  } else if (hasActiveSub) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:13px;color:var(--text2)">✅ Assinatura <strong>${league.subscriptionPlan === 'annual' ? 'anual' : 'mensal'}</strong> ativa</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:4px">Renova ou precisa de ação até ${fmt(activeUntil)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${league.subscriptionPlan === 'annual' ? 'Válida até' : 'Próxima cobrança em'} ${fmt(renewsAt)}</div>
     </div>`;
   } else if (trialActive) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -5291,12 +5313,13 @@ function mSubscription() {
   }
 
   const busy = !!st._subBusy;
+  // Enquanto o pagamento é confirmado os planos somem: evita pagar duas vezes por pressa.
   return `<div class="overlay" onclick="st.modal=null;render()">
     <div class="sheet" onclick="event.stopPropagation()" style="animation:none;position:relative;z-index:1">
       <div class="sheet-handle"></div>
       <div style="font-size:17px;font-weight:800;margin-bottom:12px">💳 Assinatura</div>
       ${statusHtml}
-      <div style="display:flex;flex-direction:column;gap:10px">
+      ${checking ? '' : `<div style="display:flex;flex-direction:column;gap:10px">
         <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
           style="position:relative;z-index:1;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
           Mensal — R$ 29,90/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês</div>
@@ -5305,8 +5328,7 @@ function mSubscription() {
           style="position:relative;z-index:1;padding:14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
           Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
         </button>
-      </div>
-      ${!hasActiveSub?`<button ${busy?'disabled':''} onclick="checkSubscriptionNow()" style="position:relative;z-index:1;background:none;border:none;color:var(--text3);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:12px;padding:0;width:100%;font-family:inherit">Já pagou e não atualizou? Verificar agora</button>`:''}
+      </div>`}
       <div id="sub-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
       <button onclick="st.modal=null;render()" style="position:relative;z-index:1;width:100%;padding:12px;margin-top:14px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Fechar</button>
     </div>
@@ -5320,7 +5342,10 @@ async function startSubscription(plan) {
   try {
     const fn = plan === 'annual' ? 'createAnnualPayment' : 'createMonthlySubscription';
     const res = await callFn(fn, { liga: st.leagueId });
-    if (res.initPoint) window.location.href = res.initPoint;
+    if (res.initPoint) {
+      markPaymentPending(st.leagueId); // ao voltar (ou reabrir o app), a confirmação acontece sozinha
+      window.location.href = res.initPoint;
+    }
   } catch(e) {
     errorMsg = e.message || 'Não foi possível iniciar a assinatura agora.';
   } finally {
@@ -5333,29 +5358,60 @@ async function startSubscription(plan) {
   }
 }
 
-// Fallback manual para quando o webhook do Mercado Pago atrasa ou não chega: consulta
-// a Cloud Function, que confirma direto na API do Mercado Pago antes de ativar qualquer
-// coisa (nunca confia só no retorno do checkout no navegador).
-async function checkSubscriptionNow() {
-  if (st._subBusy) return;
-  st._subBusy = true; render();
-  let msg = null;
+// Confirmação automática do pagamento. Ao ir para o checkout do Mercado Pago fica marcado
+// neste navegador que há um pagamento a confirmar; ao voltar (ou reabrir o app, ou voltar à
+// aba) o app consulta o servidor, que confere direto no Mercado Pago — nunca se confia no
+// que o navegador diz. A pessoa não clica em nada. O webhook e a reconciliação periódica do
+// servidor são a rede de segurança caso ela nunca volte ao site.
+const PAY_PENDING_KEY = 'aceoma_pay_pending';
+function markPaymentPending(liga) { try { localStorage.setItem(PAY_PENDING_KEY, JSON.stringify({ liga, at: Date.now() })); } catch(e) {} }
+function clearPaymentPending() { try { localStorage.removeItem(PAY_PENDING_KEY); } catch(e) {} }
+function readPaymentPending() {
   try {
-    const res = await callFn('checkSubscriptionStatus', { liga: st.leagueId });
-    if (res.status === 'active') {
-      const cur = st.availableLeagues.find(l => l.id === st.leagueId);
-      await rememberLeague(st.leagueId, cur?.role || st.userRole, cur?.name);
-      toast('Assinatura confirmada! 🎉');
-    } else {
-      msg = 'Ainda não encontramos seu pagamento. Se você acabou de pagar, aguarde um minuto e tente de novo.';
+    const p = JSON.parse(localStorage.getItem(PAY_PENDING_KEY) || 'null');
+    if (p?.liga && Date.now() - p.at < 48 * 3600000) return p;
+    if (p) clearPaymentPending();
+  } catch(e) {}
+  return null;
+}
+
+// Logo depois de pagar a assinatura pode levar alguns segundos para constar no Mercado
+// Pago, por isso várias tentativas espaçadas ao voltar do checkout.
+async function confirmPendingPayment(attempts = 1, delayMs = 4000, announce = false) {
+  const pending = readPaymentPending();
+  if (!pending || st._payChecking) return false;
+  if (!st.userDoc?.leagues?.[pending.liga]) { clearPaymentPending(); return false; }
+  st._payChecking = true; render();
+  let confirmed = false;
+  try {
+    for (let i = 0; i < attempts && !confirmed; i++) {
+      try {
+        confirmed = (await callFn('checkSubscriptionStatus', { liga: pending.liga })).status === 'active';
+      } catch(e) {
+        if (e.code === 'permission-denied' || e.code === 'invalid-argument') { clearPaymentPending(); return false; }
+      }
+      if (!confirmed && i < attempts - 1) await new Promise(r => setTimeout(r, delayMs));
     }
-  } catch(e) {
-    msg = e.message || 'Não foi possível verificar agora.';
+    if (confirmed) {
+      clearPaymentPending();
+      const cur = st.availableLeagues.find(l => l.id === pending.liga);
+      await rememberLeague(pending.liga, cur?.role || st.userDoc.leagues[pending.liga]?.role, cur?.name);
+      toast('Assinatura confirmada! 🎉', 'ok');
+    } else if (announce) {
+      toast('Pagamento em confirmação. A assinatura será ativada automaticamente.', 'ok');
+    }
+    return confirmed;
   } finally {
-    st._subBusy = false; render();
-    if (msg) { const err = document.getElementById('sub-err'); if (err) err.textContent = msg; }
+    st._payChecking = false; render();
   }
 }
+
+let _payCheckAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !st.authUser || Date.now() - _payCheckAt < 30000) return;
+  _payCheckAt = Date.now();
+  confirmPendingPayment(1);
+});
 
 function mAdminPanel() {
   const m = st.modal;

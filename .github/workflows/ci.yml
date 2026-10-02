@@ -62,3 +62,7 @@ jobs:
       - name: Testes das Cloud Functions (pagamento via Mercado Pago)
         working-directory: functions
         run: node test/payments-test.js
+
+      - name: Testes do app (confirmação automática do pagamento)
+        working-directory: functions
+        run: node test/client-payment-test.js

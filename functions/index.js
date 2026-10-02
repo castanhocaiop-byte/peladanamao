@@ -355,6 +355,9 @@ const MP_PLANS = {
   monthly: { amount: 29.9, label: "Assinatura mensal" },
   annual: { amount: 238.8, label: "Assinatura anual" },
 };
+// Tolerância técnica a atraso de notificação/processamento do Mercado Pago — nunca
+// mostrada ao usuário (a UI exibe a data real da próxima cobrança, sem este acréscimo).
+const SUBSCRIPTION_GRACE_DAYS = 1;
 
 // Extrai o public_id (com eventual pasta, sem extensão) de uma URL de entrega do
 // Cloudinary. Ex.: ".../image/upload/v123/aceoma/abc123.jpg" → "aceoma/abc123".
@@ -1238,13 +1241,52 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
   return { initPoint: result.init_point };
 });
 
-// Marca a liga como paga até a data informada. Chamado pelo webhook e pelo fallback
-// abaixo, sempre depois de confirmar a cobrança diretamente com a API do Mercado Pago
-// (nunca a partir de dados que vêm só na notificação, que podem ser forjados).
-async function activateSubscription(liga, plan, activeUntil) {
-  if (!liga) return; // notificação sem external_reference: nada a fazer
-  await db.doc(`leagues/${liga}`).update({ subscriptionActiveUntil: activeUntil, subscriptionPlan: plan });
-  logger.info("Assinatura ativada", { liga, plan, activeUntil });
+const DAY_MS = 86400000;
+
+// Data real da próxima cobrança de uma assinatura mensal (ISO). Sem a data, assume um ciclo
+// de 30 dias: assinatura autorizada sempre tem cobrança prevista.
+function monthlyRenewsAt(pre) {
+  const d = pre?.next_payment_date ? new Date(pre.next_payment_date) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : new Date(Date.now() + 30 * DAY_MS).toISOString();
+}
+
+// Pagamento aprovado do plano anual? O valor é o que distingue das cobranças mensais da
+// assinatura (R$ 29,90): sem isso, uma cobrança mensal notificada como "payment"
+// concederia um ano inteiro de acesso.
+function isApprovedAnnualPayment(p) {
+  return p?.status === "approved"
+    && p.operation_type !== "recurring_payment"
+    && Math.abs(Number(p.transaction_amount) - MP_PLANS.annual.amount) < 0.005;
+}
+
+// Fim da validade do plano anual: um ano a partir da APROVAÇÃO, não de "agora" — assim
+// repetir a consulta ou a notificação meses depois não renova de graça o mesmo pagamento.
+function annualRenewsAt(p) {
+  const base = new Date(p.date_approved || p.date_created || Date.now());
+  return new Date(base.getTime() + 365 * DAY_MS).toISOString();
+}
+
+// Marca a liga como paga a partir da data real da próxima cobrança (renewsAt — é o que a
+// UI mostra ao usuário). subscriptionActiveUntil soma a margem técnica de tolerância e é
+// só o que controla acesso (isLeagueFree), nunca exibido. Chamado pelo webhook, pelo
+// fallback e pela reconciliação, sempre depois de confirmar a cobrança diretamente com a
+// API do Mercado Pago (nunca a partir de dados que vêm só na notificação, que podem ser
+// forjados). Devolve true só quando gravou algo novo.
+async function activateSubscription(liga, plan, renewsAt) {
+  if (!LEAGUE_ID_RE.test(String(liga || ""))) return false; // sem external_reference válido: nada a fazer
+  const activeUntil = new Date(new Date(renewsAt).getTime() + SUBSCRIPTION_GRACE_DAYS * DAY_MS).toISOString();
+  if (new Date(activeUntil).getTime() <= Date.now()) return false; // pagamento antigo: já venceu
+  const ref = db.doc(`leagues/${liga}`);
+  const snap = await ref.get();
+  if (!snap.exists) { logger.warn("Assinatura de liga inexistente ignorada", { liga }); return false; }
+  const cur = snap.data();
+  if (cur.subscriptionPlan === plan && cur.subscriptionRenewsAt === renewsAt && cur.subscriptionActiveUntil === activeUntil) return false;
+  // Plano diferente com validade maior já vigente (ex.: anual em dia e uma assinatura mensal
+  // esquecida): não rebaixa o que a liga já pagou.
+  if (cur.subscriptionPlan && cur.subscriptionPlan !== plan && cur.subscriptionActiveUntil > activeUntil) return false;
+  await ref.update({ subscriptionActiveUntil: activeUntil, subscriptionRenewsAt: renewsAt, subscriptionPlan: plan });
+  logger.info("Assinatura ativada", { liga, plan, renewsAt, activeUntil });
+  return true;
 }
 
 // Fallback do webhook: o app chama isto quando o admin volta do checkout do Mercado
@@ -1259,29 +1301,67 @@ exports.checkSubscriptionStatus = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_AC
 
   const client = mpClient();
 
+  // A busca de assinaturas espera o campo e a direção combinados numa única string
+  // ("date_created:desc") — diferente da busca de pagamentos abaixo, que usa sort/criteria
+  // separados. Confirmado em teste real: "date_created" sozinho dá "Invalid sorting value".
   const preResult = await callMp("a consulta de assinaturas", () => new PreApproval(client).search({
-    options: { external_reference: liga, status: "authorized", sort: "date_created", criteria: "desc", limit: 10 },
+    options: { external_reference: liga, status: "authorized", sort: "date_created:desc", limit: 10 },
   }));
   const authorizedPre = (preResult?.results || []).find(r => String(r.external_reference) === liga);
-  if (authorizedPre) {
-    const base = authorizedPre.next_payment_date ? new Date(authorizedPre.next_payment_date) : new Date();
-    const activeUntil = new Date(base.getTime() + 5 * 86400000).toISOString();
-    await activateSubscription(liga, "monthly", activeUntil);
-    return { status: "active", plan: "monthly", activeUntil };
-  }
 
   const paymentResult = await callMp("a consulta de pagamentos", () => new Payment(client).search({
     options: { external_reference: liga, sort: "date_created", criteria: "desc", limit: 10 },
   }));
-  const approvedPayment = (paymentResult?.results || []).find(r => r.external_reference === liga && r.status === "approved");
-  if (approvedPayment) {
-    const activeUntil = new Date(Date.now() + 365 * 86400000).toISOString();
-    await activateSubscription(liga, "annual", activeUntil);
-    return { status: "active", plan: "annual", activeUntil };
+  const annualPayment = (paymentResult?.results || []).find(r => r.external_reference === liga && isApprovedAnnualPayment(r));
+
+  // Havendo mensal e anual, vale a de validade mais longa.
+  const candidates = [];
+  if (authorizedPre) candidates.push({ plan: "monthly", renewsAt: monthlyRenewsAt(authorizedPre) });
+  if (annualPayment) candidates.push({ plan: "annual", renewsAt: annualRenewsAt(annualPayment) });
+  candidates.sort((a, b) => b.renewsAt.localeCompare(a.renewsAt));
+  for (const c of candidates) {
+    if (new Date(c.renewsAt).getTime() + SUBSCRIPTION_GRACE_DAYS * DAY_MS <= Date.now()) continue; // anual de mais de um ano atrás
+    await activateSubscription(liga, c.plan, c.renewsAt);
+    return { status: "active", plan: c.plan, renewsAt: c.renewsAt };
   }
 
   return { status: "pending" };
 });
+
+// Rede de segurança do servidor: não depende do webhook nem de o admin voltar ao site.
+// Mantém em dia a data da próxima cobrança das assinaturas mensais (é isso que renova a
+// liga a cada mês — o webhook só avisa de mudanças de status) e ativa pagamentos cuja
+// notificação se perdeu. Idempotente: só grava quando algo mudou.
+exports.reconcileSubscriptions = onSchedule(
+  { schedule: "every 6 hours", timeZone: "America/Sao_Paulo", region: "us-east1", secrets: [MERCADOPAGO_ACCESS_TOKEN], timeoutSeconds: 300 },
+  async () => {
+    const client = mpClient();
+    let monthly = 0, annual = 0;
+
+    for (let page = 0; page < 20; page++) {
+      const res = await new PreApproval(client).search({
+        options: { status: "authorized", sort: "date_created:desc", limit: 50, offset: page * 50 },
+      });
+      const items = res?.results || [];
+      for (const pre of items) {
+        if (await activateSubscription(String(pre.external_reference || ""), "monthly", monthlyRenewsAt(pre))) monthly++;
+      }
+      if (items.length < 50) break;
+    }
+
+    const paid = await new Payment(client).search({
+      options: {
+        status: "approved", sort: "date_approved", criteria: "desc", range: "date_approved", limit: 50,
+        begin_date: new Date(Date.now() - 3 * DAY_MS).toISOString(), end_date: new Date().toISOString(),
+      },
+    });
+    for (const p of paid?.results || []) {
+      if (isApprovedAnnualPayment(p) && await activateSubscription(String(p.external_reference || ""), "annual", annualRenewsAt(p))) annual++;
+    }
+
+    logger.info("Reconciliação de assinaturas concluída", { monthly, annual });
+  }
+);
 
 // Endpoint HTTP puro (não onCall) exposto publicamente para o Mercado Pago chamar. Por
 // estar na internet aberta, a assinatura da notificação é sempre conferida antes de
@@ -1327,15 +1407,14 @@ exports.mercadoPagoWebhook = onRequest(
       if (topic === "subscription_preapproval" || topic === "preapproval") {
         const result = await new PreApproval(client).get({ id });
         if (result.status === "authorized") {
-          // Margem de alguns dias sobre a próxima cobrança, tolerando um pequeno atraso do
-          // próprio Mercado Pago sem derrubar o acesso da liga antes da hora.
-          const base = result.next_payment_date ? new Date(result.next_payment_date) : new Date();
-          await activateSubscription(result.external_reference, "monthly", new Date(base.getTime() + 5 * 86400000).toISOString());
+          await activateSubscription(result.external_reference, "monthly", monthlyRenewsAt(result));
         }
       } else if (topic === "payment") {
+        // Só o pagamento do plano anual ativa por aqui; cobranças mensais da assinatura
+        // também chegam como "payment" e são tratadas pela assinatura e pela reconciliação.
         const result = await new Payment(client).get({ id });
-        if (result.status === "approved") {
-          await activateSubscription(result.external_reference, "annual", new Date(Date.now() + 365 * 86400000).toISOString());
+        if (isApprovedAnnualPayment(result)) {
+          await activateSubscription(result.external_reference, "annual", annualRenewsAt(result));
         }
       }
       res.status(200).send("ok");

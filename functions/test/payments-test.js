@@ -3,6 +3,7 @@ const path = require('path').join(__dirname, '..', 'index.js');
 
 // ── Firestore falso em memória (mesma base dos outros harnesses) ────────────
 const store = new Map();
+let updateCount = 0; // quantas gravações (update) o código fez — prova que repetir é idempotente
 const clone = o => (o === undefined ? undefined : JSON.parse(JSON.stringify(o)));
 class FieldPath { constructor(...segments) { this.segments = segments; } }
 const FieldValue = { delete: () => ({ __delete: true }) };
@@ -27,6 +28,7 @@ function refOf(p) {
     set: async d => { store.set(p, clone(d)); },
     update: async patch => {
       if (!store.has(p)) throw new Error('NOT_FOUND ' + p);
+      updateCount++;
       store.set(p, applyUpdate(store.get(p), patch));
     },
   };
@@ -115,8 +117,12 @@ const fakeRes = () => {
   r.status = code => { r.statusCode = code; return { send: msg => { r.body = msg; } }; };
   return r;
 };
+const DAY = 86400000;
+// Pagamento do plano anual como o Mercado Pago devolve (valor do plano, aprovado agora).
+const annualPay = extra => ({ id: 'pay1', status: 'approved', external_reference: 'L', transaction_amount: 238.8, date_approved: new Date().toISOString(), ...extra });
 const reset = () => {
   store.clear();
+  updateCount = 0;
   calls.preApprovalCreate.length = 0;
   calls.preferenceCreate.length = 0;
   calls.preApprovalSearch.length = 0;
@@ -191,6 +197,9 @@ const reset = () => {
   check('check: liga não mexida quando nada encontrado', !store.get('leagues/L').subscriptionActiveUntil);
   check('check: filtra a busca de assinaturas pela liga', calls.preApprovalSearch[0].external_reference === 'L');
   check('check: filtra a busca de pagamentos pela liga', calls.paymentSearch[0].external_reference === 'L');
+  // Regressão: a busca de assinaturas recusou "sort: date_created" sozinho em produção
+  // ("Invalid sorting value") — exige campo e direção combinados numa única string.
+  check('check: busca de assinaturas usa sort no formato campo:direção', calls.preApprovalSearch[0].sort === 'date_created:desc');
 
   // Regressão: o webhook de subscription_preapproval chegou sem x-signature em produção
   // mesmo com o secret certo (ver mercadoPagoWebhook); este fallback cobre esse caso
@@ -203,8 +212,9 @@ const reset = () => {
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
   check('check: encontra assinatura autorizada e ativa como mensal', resCheck.status === 'active' && resCheck.plan === 'monthly');
   check('check: liga ativada de fato (não só a resposta)', store.get('leagues/L').subscriptionPlan === 'monthly');
+  check('check: subscriptionRenewsAt é a data real, sem margem', store.get('leagues/L').subscriptionRenewsAt === '2027-01-15T00:00:00.000Z');
   const checkActiveUntil = new Date(store.get('leagues/L').subscriptionActiveUntil);
-  check('check: ativo até ~5 dias depois do próximo pagamento', Math.abs(checkActiveUntil.getTime() - new Date('2027-01-20T00:00:00.000Z').getTime()) < 1000);
+  check('check: ativo até ~1 dia depois do próximo pagamento (margem técnica)', Math.abs(checkActiveUntil.getTime() - new Date('2027-01-16T00:00:00.000Z').getTime()) < 1000);
 
   // Resultado de outra liga (mesmo comprador) não deve ativar a liga L
   reset();
@@ -218,10 +228,40 @@ const reset = () => {
   reset();
   store.set('leagues/L', { name: 'Liga L' });
   store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
-  paymentSearchResults = [{ id: 'pay1', status: 'approved', external_reference: 'L' }];
+  paymentSearchResults = [annualPay()];
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
   check('check: encontra pagamento aprovado e ativa como anual', resCheck.status === 'active' && resCheck.plan === 'annual');
   check('check: liga ativada como anual de fato', store.get('leagues/L').subscriptionPlan === 'annual');
+
+  // Regressão grave: a cobrança mensal da assinatura (R$ 29,90) também aparece como pagamento
+  // aprovado com a referência da liga — não pode virar um ano inteiro de acesso.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  paymentSearchResults = [annualPay({ transaction_amount: 29.9 })];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: cobrança mensal (R$ 29,90) não conta como plano anual', resCheck.status === 'pending' && !store.get('leagues/L').subscriptionPlan);
+  paymentSearchResults = [annualPay({ operation_type: 'recurring_payment' })];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: pagamento recorrente não conta como plano anual (mesmo com o valor do anual)', resCheck.status === 'pending');
+
+  // Regressão: a validade do anual conta da aprovação; consultar de novo um ano depois não pode
+  // renovar de graça o mesmo pagamento.
+  paymentSearchResults = [annualPay({ date_approved: new Date(Date.now() - 400 * DAY).toISOString() })];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: pagamento anual de mais de um ano atrás não ativa nada', resCheck.status === 'pending' && !store.get('leagues/L').subscriptionPlan);
+  paymentSearchResults = [annualPay({ date_approved: new Date(Date.now() - 10 * DAY).toISOString() })];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: anual vale 365 dias a partir da aprovação, não de agora', Math.abs(new Date(resCheck.renewsAt).getTime() - (Date.now() + 355 * DAY)) < 5000);
+
+  // Mensal e anual ao mesmo tempo: vale a de validade mais longa.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: new Date(Date.now() + 20 * DAY).toISOString() }];
+  paymentSearchResults = [annualPay()];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: com mensal e anual, escolhe a de validade mais longa', resCheck.plan === 'annual' && store.get('leagues/L').subscriptionPlan === 'annual');
 
   reset();
   store.set('leagues/L', { name: 'Liga L' });
@@ -284,8 +324,12 @@ const reset = () => {
   await fns.mercadoPagoWebhook({ ...baseReq }, res);
   check('webhook: preapproval autorizado responde 200', res.statusCode === 200);
   check('webhook: preapproval autorizado ativa a liga como mensal', store.get('leagues/L').subscriptionPlan === 'monthly');
+  // Regressão: a UI mostra subscriptionRenewsAt (a data real, sem margem) — o usuário não
+  // deve ver "1 mês = 1 mês + folga". subscriptionActiveUntil (controle de acesso interno)
+  // soma só 1 dia de tolerância técnica a atraso de notificação, nunca exibido.
+  check('webhook: subscriptionRenewsAt é a data real do próximo pagamento (sem margem)', store.get('leagues/L').subscriptionRenewsAt === '2027-01-15T00:00:00.000Z');
   const activeUntil = new Date(store.get('leagues/L').subscriptionActiveUntil);
-  check('webhook: ativo até ~5 dias depois do próximo pagamento', Math.abs(activeUntil.getTime() - new Date('2027-01-20T00:00:00.000Z').getTime()) < 1000);
+  check('webhook: ativo até ~1 dia depois do próximo pagamento (margem técnica, não exibida)', Math.abs(activeUntil.getTime() - new Date('2027-01-16T00:00:00.000Z').getTime()) < 1000);
 
   reset();
   store.set('leagues/L', { name: 'Liga L' });
@@ -297,17 +341,60 @@ const reset = () => {
 
   reset();
   store.set('leagues/L', { name: 'Liga L' });
-  paymentGetResult = { status: 'approved', external_reference: 'L' };
+  paymentGetResult = annualPay();
   const paymentReq = { ...baseReq, query: { 'data.id': '456', type: 'payment' } };
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
   check('webhook: payment aprovado ativa a liga como anual', store.get('leagues/L').subscriptionPlan === 'annual');
+  check('webhook: subscriptionRenewsAt é ~365 dias (sem a margem técnica)', Math.abs(new Date(store.get('leagues/L').subscriptionRenewsAt).getTime() - (Date.now() + 365 * DAY)) < 5000);
   const annualUntil = new Date(store.get('leagues/L').subscriptionActiveUntil);
-  check('webhook: ativo por ~365 dias', Math.abs(annualUntil.getTime() - (Date.now() + 365 * 86400000)) < 5000);
+  check('webhook: ativo por ~365 dias + 1 dia de margem técnica', Math.abs(annualUntil.getTime() - (Date.now() + 366 * DAY)) < 5000);
+
+  // Regressão grave: a notificação "payment" de uma cobrança mensal da assinatura (R$ 29,90)
+  // não pode conceder um ano de acesso.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  paymentGetResult = annualPay({ transaction_amount: 29.9 });
+  res = fakeRes();
+  await fns.mercadoPagoWebhook(paymentReq, res);
+  check('webhook: payment de R$ 29,90 (cobrança mensal) não ativa o plano anual', !store.get('leagues/L').subscriptionPlan);
+  check('webhook: payment mensal responde 200 mesmo sem ativar', res.statusCode === 200);
+  paymentGetResult = annualPay({ operation_type: 'recurring_payment' });
+  res = fakeRes();
+  await fns.mercadoPagoWebhook(paymentReq, res);
+  check('webhook: payment recorrente não ativa o plano anual', !store.get('leagues/L').subscriptionPlan);
+
+  // A validade conta da aprovação: reentregas tardias da notificação não estendem o prazo.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  paymentGetResult = annualPay({ date_approved: new Date(Date.now() - 10 * DAY).toISOString() });
+  res = fakeRes();
+  await fns.mercadoPagoWebhook(paymentReq, res);
+  check('webhook: anual vale 365 dias a partir da aprovação, não de quando a notificação chegou', Math.abs(new Date(store.get('leagues/L').subscriptionRenewsAt).getTime() - (Date.now() + 355 * DAY)) < 5000);
+  paymentGetResult = annualPay({ date_approved: new Date(Date.now() - 400 * DAY).toISOString() });
+  store.set('leagues/L', { name: 'Liga L' });
+  res = fakeRes();
+  await fns.mercadoPagoWebhook(paymentReq, res);
+  check('webhook: pagamento anual de mais de um ano atrás não ativa nada', !store.get('leagues/L').subscriptionPlan);
+
+  // Assinatura com próxima cobrança já vencida não ativa nada
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  preApprovalGetResult = { status: 'authorized', external_reference: 'L', next_payment_date: '2020-01-01T00:00:00.000Z' };
+  res = fakeRes();
+  await fns.mercadoPagoWebhook({ ...baseReq }, res);
+  check('webhook: data de cobrança já vencida não ativa a liga', !store.get('leagues/L').subscriptionPlan && res.statusCode === 200);
+
+  // Liga que não existe (external_reference de outro lugar): 200, sem erro nem criar nada
+  reset();
+  preApprovalGetResult = { status: 'authorized', external_reference: 'NAO-EXISTE', next_payment_date: '2027-01-15T00:00:00.000Z' };
+  res = fakeRes();
+  await fns.mercadoPagoWebhook({ ...baseReq }, res);
+  check('webhook: liga inexistente responde 200 (não fica reenviando) e não cria nada', res.statusCode === 200 && !store.has('leagues/NAO-EXISTE'));
 
   reset();
   store.set('leagues/L', { name: 'Liga L' });
-  paymentGetResult = { status: 'rejected', external_reference: 'L' };
+  paymentGetResult = { status: 'rejected', external_reference: 'L', transaction_amount: 238.8 };
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
   check('webhook: payment rejeitado não ativa nada', !store.get('leagues/L').subscriptionActiveUntil);
@@ -315,11 +402,68 @@ const reset = () => {
   reset();
   store.set('leagues/L', { name: 'Liga L' });
   getShouldThrow = true;
-  paymentGetResult = { status: 'approved', external_reference: 'L' };
+  paymentGetResult = annualPay();
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
   check('webhook: falha ao consultar a API responde 500 (Mercado Pago tenta de novo depois)', res.statusCode === 500);
   check('webhook: falha ao consultar não ativa nada', !store.get('leagues/L').subscriptionActiveUntil);
+
+  // ───────── reconcileSubscriptions (rede de segurança agendada) ─────────
+  // Renovação mensal: o webhook só avisa de mudanças de status; quem mantém a liga ativa a cada
+  // novo ciclo é esta consulta periódica da próxima cobrança real.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  const nextCycle = new Date(Date.now() + 30 * DAY).toISOString();
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: nextCycle }];
+  await fns.reconcileSubscriptions();
+  check('reconcile: ativa a liga com a próxima cobrança real da assinatura', store.get('leagues/L').subscriptionPlan === 'monthly' && store.get('leagues/L').subscriptionRenewsAt === nextCycle);
+  check('reconcile: pede só assinaturas autorizadas', calls.preApprovalSearch[0].status === 'authorized');
+  const writesAfterFirst = updateCount;
+  await fns.reconcileSubscriptions();
+  check('reconcile: repetir sem mudança não grava de novo (idempotente)', updateCount === writesAfterFirst);
+
+  // Novo ciclo cobrado: a próxima cobrança avançou, a liga acompanha
+  const cycleAfter = new Date(Date.now() + 60 * DAY).toISOString();
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: cycleAfter }];
+  await fns.reconcileSubscriptions();
+  check('reconcile: renovação — a data da liga avança com o novo ciclo', store.get('leagues/L').subscriptionRenewsAt === cycleAfter);
+
+  // Assinatura cancelada deixa de vir como "authorized": a liga só segue até o fim do que pagou
+  preApprovalSearchResults = [];
+  await fns.reconcileSubscriptions();
+  check('reconcile: assinatura que sumiu da lista não derruba a liga antes do fim do período pago', store.get('leagues/L').subscriptionRenewsAt === cycleAfter);
+
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  preApprovalSearchResults = [
+    { id: 'preX', status: 'authorized', external_reference: 'NAO-EXISTE', next_payment_date: nextCycle },
+    { id: 'preY', status: 'authorized', external_reference: '../x', next_payment_date: nextCycle },
+    { id: 'preZ', status: 'authorized', next_payment_date: nextCycle },
+    { id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: nextCycle },
+  ];
+  await fns.reconcileSubscriptions();
+  check('reconcile: referência inexistente, inválida ou ausente é ignorada sem derrubar o resto', store.get('leagues/L').subscriptionPlan === 'monthly' && !store.has('leagues/NAO-EXISTE'));
+
+  // Anual cujo aviso se perdeu: ativa a partir dos pagamentos aprovados recentes
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  paymentSearchResults = [annualPay(), annualPay({ id: 'pay2', external_reference: 'OUTRA', transaction_amount: 29.9 })];
+  await fns.reconcileSubscriptions();
+  check('reconcile: pagamento anual aprovado recente ativa a liga', store.get('leagues/L').subscriptionPlan === 'annual');
+  check('reconcile: procura só pagamentos aprovados dos últimos dias', calls.paymentSearch[0].status === 'approved' && !!calls.paymentSearch[0].begin_date);
+
+  // Não rebaixa o que a liga já pagou: anual vigente + assinatura mensal esquecida
+  reset();
+  const annualEnd = new Date(Date.now() + 200 * DAY).toISOString();
+  store.set('leagues/L', { name: 'Liga L', subscriptionPlan: 'annual', subscriptionRenewsAt: annualEnd, subscriptionActiveUntil: new Date(Date.now() + 201 * DAY).toISOString() });
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: nextCycle }];
+  await fns.reconcileSubscriptions();
+  check('reconcile: assinatura mensal não rebaixa um anual com validade maior', store.get('leagues/L').subscriptionPlan === 'annual' && store.get('leagues/L').subscriptionRenewsAt === annualEnd);
+
+  // Falha do Mercado Pago: o erro sobe, o agendador registra a falha e tenta de novo depois
+  reset();
+  searchShouldThrow = true;
+  check('reconcile: falha ao consultar o Mercado Pago propaga o erro (aparece como falha no agendador)', await codeOf(fns.reconcileSubscriptions()) !== 'ok');
 
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
   if (fails) process.exitCode = 1;
