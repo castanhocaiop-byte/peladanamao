@@ -1691,7 +1691,7 @@ p strong {
           </tr>
           <tr>
             <td>Criar nova liga</td>
-            <td>Botão <strong>＋ Criar nova liga</strong> ao final da lista (também disponível em ⚙️ Painel Admin → Ações). Abre o mesmo formulário do cadastro inicial (nome + ID da liga), com 30 dias grátis. Se cancelado, volta para a liga em que você estava.</td>
+            <td>Botão <strong>＋ Criar nova liga</strong> ao final da lista (também disponível em ⚙️ Painel Admin → Ações). Abre o mesmo formulário do cadastro inicial (nome + ID da liga), com 8 dias grátis. Se cancelado, volta para a liga em que você estava.</td>
           </tr>
         </tbody>
       </table>
@@ -2242,7 +2242,11 @@ p strong {
     <!-- 25. Trial e Plano Free -->
     <section class="section" id="planogratuito">
       <h2 class="section-title"><span class="sn">25</span> Trial e Plano Free</h2>
-      <p>Toda liga nova começa com <strong>30 dias de teste grátis</strong>, com tudo liberado. Quando esse prazo termina, a liga não é bloqueada — ela passa a funcionar no <strong>plano free</strong>, com uma limitação específica.</p>
+      <p>Toda liga nova começa com <strong>8 dias de teste grátis</strong>, com tudo liberado. Quando esse prazo termina, a liga não é bloqueada — ela passa a funcionar no <strong>plano free</strong>, com uma limitação específica.</p>
+      <div class="callout">
+        <div class="callout-label">Ligas criadas antes de 02/10/2026</div>
+        O teste grátis era de 30 dias. A mudança para 8 dias vale só para ligas novas: as que já existiam mantêm o prazo que tinham quando foram criadas.
+      </div>
 
       <h3>O que continua funcionando no plano free</h3>
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
@@ -2300,7 +2304,7 @@ p strong {
 
       <div class="callout">
         <div class="callout-label">Uma assinatura ativa sempre libera a liga</div>
-        <code>isLeagueFree()</code> agora confere duas coisas: o trial venceu <em>e</em> não há assinatura ativa. Uma liga com assinatura em dia nunca cai no plano free, mesmo que o trial de 30 dias já tenha acabado há muito tempo.
+        <code>isLeagueFree()</code> agora confere duas coisas: o trial venceu <em>e</em> não há assinatura ativa. Uma liga com assinatura em dia nunca cai no plano free, mesmo que o trial já tenha acabado há muito tempo.
       </div>
 
       <h3>Cancelar a assinatura</h3>

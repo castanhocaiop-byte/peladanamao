@@ -416,6 +416,7 @@ exports.onPlayerPhotoDeleted = onDocumentWritten(
 const OWNER_EMAIL = "castanho.caiop@gmail.com";
 const CALLABLE = { region: "us-east1", maxInstances: 10 };
 const MAX_OWNED_LEAGUES = 10;
+const TRIAL_DAYS = 8; // só vale para ligas criadas daqui para frente; as existentes mantêm o prazo que já tinham
 
 const LEAGUE_ID_RE = /^[A-Za-z0-9_-]{1,60}$/;   // ligas existentes (aceita ids antigos)
 const NEW_SLUG_RE = /^[a-z0-9-]{2,50}$/;        // ligas novas
@@ -526,7 +527,7 @@ exports.createLeague = onCall(CALLABLE, async request => {
   const leagueRef = db.doc(`leagues/${slug}`);
   const userRef = db.doc(`users/${auth.uid}`);
   const now = new Date().toISOString();
-  const trialEndsAt = new Date(Date.now() + 30 * 86400000).toISOString();
+  const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 86400000).toISOString();
 
   await db.runTransaction(async tx => {
     const [leagueSnap, userSnap] = await Promise.all([tx.get(leagueRef), tx.get(userRef)]);
@@ -1307,7 +1308,7 @@ exports.checkSubscriptionStatus = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_AC
   const preResult = await callMp("a consulta de assinaturas", () => new PreApproval(client).search({
     options: { external_reference: liga, status: "authorized", sort: "date_created:desc", limit: 10 },
   }));
-  const authorizedPre = (preResult?.results || []).find(r => String(r.external_reference) === liga);
+  const monthlyRenewals = (preResult?.results || []).filter(r => String(r.external_reference) === liga).map(monthlyRenewsAt);
 
   const paymentResult = await callMp("a consulta de pagamentos", () => new Payment(client).search({
     options: { external_reference: liga, sort: "date_created", criteria: "desc", limit: 10 },
@@ -1316,7 +1317,7 @@ exports.checkSubscriptionStatus = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_AC
 
   // Havendo mensal e anual, vale a de validade mais longa.
   const candidates = [];
-  if (authorizedPre) candidates.push({ plan: "monthly", renewsAt: monthlyRenewsAt(authorizedPre) });
+  if (monthlyRenewals.length) candidates.push({ plan: "monthly", renewsAt: monthlyRenewals.sort().pop() });
   if (annualPayment) candidates.push({ plan: "annual", renewsAt: annualRenewsAt(annualPayment) });
   candidates.sort((a, b) => b.renewsAt.localeCompare(a.renewsAt));
   for (const c of candidates) {
@@ -1338,15 +1339,23 @@ exports.reconcileSubscriptions = onSchedule(
     const client = mpClient();
     let monthly = 0, annual = 0;
 
+    // Uma liga pode ter mais de uma assinatura autorizada (assinou duas vezes): vale a de
+    // validade mais longa, gravada uma única vez — sem ficar alternando entre as duas.
+    const farthest = new Map(); // liga -> próxima cobrança mais distante
     for (let page = 0; page < 20; page++) {
       const res = await new PreApproval(client).search({
         options: { status: "authorized", sort: "date_created:desc", limit: 50, offset: page * 50 },
       });
       const items = res?.results || [];
       for (const pre of items) {
-        if (await activateSubscription(String(pre.external_reference || ""), "monthly", monthlyRenewsAt(pre))) monthly++;
+        const liga = String(pre.external_reference || "");
+        const renewsAt = monthlyRenewsAt(pre);
+        if (!farthest.has(liga) || renewsAt > farthest.get(liga)) farthest.set(liga, renewsAt);
       }
       if (items.length < 50) break;
+    }
+    for (const [liga, renewsAt] of farthest) {
+      if (await activateSubscription(liga, "monthly", renewsAt)) monthly++;
     }
 
     const paid = await new Payment(client).search({

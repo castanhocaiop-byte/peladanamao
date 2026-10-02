@@ -254,6 +254,18 @@ const reset = () => {
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
   check('check: anual vale 365 dias a partir da aprovação, não de agora', Math.abs(new Date(resCheck.renewsAt).getTime() - (Date.now() + 355 * DAY)) < 5000);
 
+  // Duas assinaturas mensais da mesma liga: vale a de validade mais longa, não a mais recente.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  const farMonthly = new Date(Date.now() + 33 * DAY).toISOString();
+  preApprovalSearchResults = [
+    { id: 'preNova', status: 'authorized', external_reference: 'L', next_payment_date: new Date(Date.now() + 28 * DAY).toISOString() },
+    { id: 'preAntiga', status: 'authorized', external_reference: 'L', next_payment_date: farMonthly },
+  ];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: com duas assinaturas mensais, escolhe a de validade mais longa', resCheck.renewsAt === farMonthly && store.get('leagues/L').subscriptionRenewsAt === farMonthly);
+
   // Mensal e anual ao mesmo tempo: vale a de validade mais longa.
   reset();
   store.set('leagues/L', { name: 'Liga L' });
@@ -451,6 +463,23 @@ const reset = () => {
   await fns.reconcileSubscriptions();
   check('reconcile: pagamento anual aprovado recente ativa a liga', store.get('leagues/L').subscriptionPlan === 'annual');
   check('reconcile: procura só pagamentos aprovados dos últimos dias', calls.paymentSearch[0].status === 'approved' && !!calls.paymentSearch[0].begin_date);
+
+  // Assinou duas vezes a mesma liga: vale a de validade mais longa, gravada uma única vez
+  // (sem alternar entre as duas a cada execução).
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  const nearer = new Date(Date.now() + 28 * DAY).toISOString();
+  const farther = new Date(Date.now() + 33 * DAY).toISOString();
+  preApprovalSearchResults = [
+    { id: 'preNova', status: 'authorized', external_reference: 'L', next_payment_date: farther },
+    { id: 'preAntiga', status: 'authorized', external_reference: 'L', next_payment_date: nearer },
+  ];
+  await fns.reconcileSubscriptions();
+  check('reconcile: duas assinaturas na mesma liga — fica a de validade mais longa', store.get('leagues/L').subscriptionRenewsAt === farther);
+  check('reconcile: duas assinaturas na mesma liga — uma única gravação', updateCount === 1);
+  preApprovalSearchResults = preApprovalSearchResults.reverse();
+  await fns.reconcileSubscriptions();
+  check('reconcile: a ordem em que o Mercado Pago lista não muda o resultado nem regrava', store.get('leagues/L').subscriptionRenewsAt === farther && updateCount === 1);
 
   // Não rebaixa o que a liga já pagou: anual vigente + assinatura mensal esquecida
   reset();

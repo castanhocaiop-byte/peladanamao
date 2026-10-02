@@ -233,7 +233,7 @@ const reset = () => {
   check('create: devolve o slug', r.slug === 'minha-liga', r);
   check('create: documento da liga', lg && lg.name === 'Minha Liga' && lg.slug === 'minha-liga' && lg.ownerId === 'nova' && lg.plan === 'trial' && JSON.stringify(lg.settings) === '{}', lg);
   const days = (new Date(lg.trialEndsAt) - Date.now()) / 86400000;
-  check('create: teste grátis de 30 dias', days > 29.9 && days < 30.1, days);
+  check('create: teste grátis de 8 dias', days > 7.9 && days < 8.1, days);
   check('create: criador vira admin', user('nova').leagues['minha-liga'].role === 'admin', user('nova'));
   check('create: id repetido', await codeOf(call(fns.createLeague, { name: 'Outra', slug: 'minha-liga' }, authOf('ana'))) === 'already-exists');
   check('create: id repetido não troca o dono', store.get('leagues/minha-liga').ownerId === 'nova' && !user('ana').leagues['minha-liga']);

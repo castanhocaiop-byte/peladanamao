@@ -785,7 +785,7 @@ function col(name) { return DB.collection(`leagues/${st.leagueId}/${name}`); }
 function ldoc(path) { return DB.doc(`leagues/${st.leagueId}/${path}`); }
 
 function isAdmin() { return st.userRole === 'admin'; }
-// Liga "free" = trial de 30 dias vencido e sem assinatura ativa. Sem trialEndsAt (ligas
+// Liga "free" = trial vencido e sem assinatura ativa. Sem trialEndsAt (ligas
 // antigas) conta como não-free. Uma assinatura ativa (subscriptionActiveUntil no futuro)
 // sempre libera a liga, independente do trial.
 function isLeagueFree() {
@@ -4279,7 +4279,7 @@ function vOnboarding() {
       <div style="max-width:380px;width:100%">
         <button onclick="cancelCreateLeague()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;margin-bottom:28px;padding:0;display:flex;align-items:center;gap:6px">← Voltar</button>
         <div style="font-size:21px;font-weight:800;color:var(--text);margin-bottom:4px">Criar liga</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:28px">30 dias grátis · sem cartão de crédito</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:28px">8 dias grátis · sem cartão de crédito</div>
         <label style="display:block;margin-bottom:16px">
           <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:6px">Nome da liga</span>
           <input value="${st._obName}" oninput="st._obName=this.value"
@@ -4336,7 +4336,7 @@ function vOnboarding() {
         <button onclick="st._obStep='create';render()" style="background:var(--accent);border:none;border-radius:12px;padding:20px 16px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px">
           <span style="font-size:24px">🏆</span>
           <span style="font-size:14px;font-weight:800;color:#000;line-height:1.3">Criar minha liga</span>
-          <span style="font-size:11px;color:#00000088;font-weight:500">30 dias grátis</span>
+          <span style="font-size:11px;color:#00000088;font-weight:500">8 dias grátis</span>
         </button>
         <button onclick="st._obStep='join';render()" style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px 16px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px">
           <span style="font-size:24px">🔗</span>
