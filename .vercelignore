@@ -1,0 +1,13 @@
+# Só o que é do site vai para a Vercel (lista de permitidos): tudo o mais fica de fora.
+#
+# O "vercel deploy" sobe a pasta inteira do projeto. Com uma lista de permitidos, qualquer arquivo
+# novo (backup, script, código das Cloud Functions, configuração) fica de fora até ser liberado de
+# propósito; numa lista de proibidos, o arquivo novo subiria até alguém lembrar de listá-lo.
+#
+# Se o site passar a usar outro arquivo (imagem, ícone, manifest…), libere-o abaixo com "!nome".
+*
+!index.html
+!manual.html
+!termos.html
+!logo.webp
+!firebase-messaging-sw.js
