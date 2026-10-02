@@ -1197,7 +1197,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
       reason: `Pelada na Mão — ${MP_PLANS.monthly.label}`,
       external_reference: liga,
       payer_email: payerEmail,
-      back_url: "https://peladanamao.com.br",
+      back_url: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
       notification_url: MERCADOPAGO_WEBHOOK_URL,
       auto_recurring: {
         frequency: 1,
@@ -1227,9 +1227,9 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
       external_reference: liga,
       payer: { email: payerEmail },
       back_urls: {
-        success: "https://peladanamao.com.br",
-        pending: "https://peladanamao.com.br",
-        failure: "https://peladanamao.com.br",
+        success: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
+        pending: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
+        failure: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
       },
       auto_return: "approved",
       notification_url: MERCADOPAGO_WEBHOOK_URL,
@@ -1238,14 +1238,50 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
   return { initPoint: result.init_point };
 });
 
-// Marca a liga como paga até a data informada. Chamado só pelo webhook, depois de
-// confirmar a cobrança diretamente com a API do Mercado Pago (nunca a partir de dados que
-// vêm só na notificação, que podem ser forjados).
+// Marca a liga como paga até a data informada. Chamado pelo webhook e pelo fallback
+// abaixo, sempre depois de confirmar a cobrança diretamente com a API do Mercado Pago
+// (nunca a partir de dados que vêm só na notificação, que podem ser forjados).
 async function activateSubscription(liga, plan, activeUntil) {
   if (!liga) return; // notificação sem external_reference: nada a fazer
   await db.doc(`leagues/${liga}`).update({ subscriptionActiveUntil: activeUntil, subscriptionPlan: plan });
   logger.info("Assinatura ativada", { liga, plan, activeUntil });
 }
+
+// Fallback do webhook: o app chama isto quando o admin volta do checkout do Mercado
+// Pago (ver back_url/back_urls acima), caso a notificação ainda não tenha chegado ou
+// tenha se perdido. Consulta a API do Mercado Pago diretamente (nunca confia em nada que
+// o navegador do admin possa ter enviado) e ativa a liga se encontrar uma assinatura ou
+// pagamento confirmado — idempotente, seguro para repetir.
+exports.checkSubscriptionStatus = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
+  const auth = requireAuth(request);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdminWithEmail(auth, liga);
+
+  const client = mpClient();
+
+  const preResult = await callMp("a consulta de assinaturas", () => new PreApproval(client).search({
+    options: { external_reference: liga, status: "authorized", sort: "date_created", criteria: "desc", limit: 10 },
+  }));
+  const authorizedPre = (preResult?.results || []).find(r => String(r.external_reference) === liga);
+  if (authorizedPre) {
+    const base = authorizedPre.next_payment_date ? new Date(authorizedPre.next_payment_date) : new Date();
+    const activeUntil = new Date(base.getTime() + 5 * 86400000).toISOString();
+    await activateSubscription(liga, "monthly", activeUntil);
+    return { status: "active", plan: "monthly", activeUntil };
+  }
+
+  const paymentResult = await callMp("a consulta de pagamentos", () => new Payment(client).search({
+    options: { external_reference: liga, sort: "date_created", criteria: "desc", limit: 10 },
+  }));
+  const approvedPayment = (paymentResult?.results || []).find(r => r.external_reference === liga && r.status === "approved");
+  if (approvedPayment) {
+    const activeUntil = new Date(Date.now() + 365 * 86400000).toISOString();
+    await activateSubscription(liga, "annual", activeUntil);
+    return { status: "active", plan: "annual", activeUntil };
+  }
+
+  return { status: "pending" };
+});
 
 // Endpoint HTTP puro (não onCall) exposto publicamente para o Mercado Pago chamar. Por
 // estar na internet aberta, a assinatura da notificação é sempre conferida antes de
@@ -1269,9 +1305,19 @@ exports.mercadoPagoWebhook = onRequest(
         toleranceSeconds: 300,
       });
     } catch (e) {
-      logger.warn("Webhook do Mercado Pago com assinatura inválida", { message: e?.message, reason: e?.reason });
-      res.status(401).send("invalid signature");
-      return;
+      // Notificações de assinatura (preapproval) do Mercado Pago às vezes chegam sem o
+      // cabeçalho x-signature (comportamento observado do provedor, fora do nosso controle).
+      // Não tratamos isso como inseguro: abaixo nunca confiamos no corpo da notificação, o
+      // status é sempre reconfirmado direto na API do Mercado Pago com nosso Access Token
+      // secreto antes de ativar qualquer coisa — a notificação só diz "vá conferir". Já uma
+      // assinatura presente e incorreta (possível adulteração ou segredo errado) continua
+      // sendo recusada.
+      if (e?.reason !== "MissingSignatureHeader") {
+        logger.warn("Webhook do Mercado Pago com assinatura inválida", { message: e?.message, reason: e?.reason });
+        res.status(401).send("invalid signature");
+        return;
+      }
+      logger.warn("Webhook do Mercado Pago sem cabeçalho de assinatura: prosseguindo, status será reconfirmado na API", { message: e?.message });
     }
 
     const topic = req.query.type || req.query.topic;

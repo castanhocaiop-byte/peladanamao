@@ -1006,13 +1006,21 @@ function initFirebase() {
             history.replaceState(null, '', location.pathname);
           }
 
+          // Volta do checkout do Mercado Pago: confirma direto na API antes de montar
+          // availableLeagues, cobrindo o caso do webhook atrasar ou nunca chegar.
+          const mpReturnLiga = new URLSearchParams(location.search).get('mpReturn');
+          if (mpReturnLiga && curLeagues[mpReturnLiga]) {
+            history.replaceState(null, '', location.pathname);
+            try { await callFn('checkSubscriptionStatus', { liga: mpReturnLiga }); } catch(e) {}
+          }
+
           const leagues = st.userDoc.leagues || {};
           const leagueKeys = Object.keys(leagues);
           if (leagueKeys.length === 1) {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -1022,6 +1030,7 @@ function initFirebase() {
               role: leagues[leagueKeys[i]]?.role,
               trialEndsAt: d.exists ? (d.data().trialEndsAt || null) : null,
               subscriptionActiveUntil: d.exists ? (d.data().subscriptionActiveUntil || null) : null,
+              subscriptionPlan: d.exists ? (d.data().subscriptionPlan || null) : null,
             }));
             st.leagueId = null;
             st.userRole = null;
@@ -2017,7 +2026,8 @@ async function rememberLeague(id, role, name) {
   if (!name) name = doc?.exists ? doc.data().name : id;
   const trialEndsAt = doc?.exists ? (doc.data().trialEndsAt || null) : null;
   const subscriptionActiveUntil = doc?.exists ? (doc.data().subscriptionActiveUntil || null) : null;
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil }];
+  const subscriptionPlan = doc?.exists ? (doc.data().subscriptionPlan || null) : null;
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, trialEndsAt, subscriptionActiveUntil, subscriptionPlan }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -5296,6 +5306,7 @@ function mSubscription() {
           Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
         </button>
       </div>
+      ${!hasActiveSub?`<button ${busy?'disabled':''} onclick="checkSubscriptionNow()" style="position:relative;z-index:1;background:none;border:none;color:var(--text3);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:12px;padding:0;width:100%;font-family:inherit">Já pagou e não atualizou? Verificar agora</button>`:''}
       <div id="sub-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
       <button onclick="st.modal=null;render()" style="position:relative;z-index:1;width:100%;padding:12px;margin-top:14px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Fechar</button>
     </div>
@@ -5319,6 +5330,30 @@ async function startSubscription(plan) {
     // meio tempo (a mensagem seria escrita num elemento já fora da tela — exatamente o
     // que acontecia antes, fazendo o erro existir mas nunca aparecer).
     if (errorMsg) { const err = document.getElementById('sub-err'); if (err) err.textContent = errorMsg; }
+  }
+}
+
+// Fallback manual para quando o webhook do Mercado Pago atrasa ou não chega: consulta
+// a Cloud Function, que confirma direto na API do Mercado Pago antes de ativar qualquer
+// coisa (nunca confia só no retorno do checkout no navegador).
+async function checkSubscriptionNow() {
+  if (st._subBusy) return;
+  st._subBusy = true; render();
+  let msg = null;
+  try {
+    const res = await callFn('checkSubscriptionStatus', { liga: st.leagueId });
+    if (res.status === 'active') {
+      const cur = st.availableLeagues.find(l => l.id === st.leagueId);
+      await rememberLeague(st.leagueId, cur?.role || st.userRole, cur?.name);
+      toast('Assinatura confirmada! 🎉');
+    } else {
+      msg = 'Ainda não encontramos seu pagamento. Se você acabou de pagar, aguarde um minuto e tente de novo.';
+    }
+  } catch(e) {
+    msg = e.message || 'Não foi possível verificar agora.';
+  } finally {
+    st._subBusy = false; render();
+    if (msg) { const err = document.getElementById('sub-err'); if (err) err.textContent = msg; }
   }
 }
 

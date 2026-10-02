@@ -35,10 +35,13 @@ const fakeDb = { doc: p => refOf(p) };
 
 // ── mock do SDK mercadopago: captura os parâmetros enviados e deixa o teste
 // controlar o que cada chamada devolve ──────────────────────────────────────
-const calls = { preApprovalCreate: [], preferenceCreate: [] };
+const calls = { preApprovalCreate: [], preferenceCreate: [], preApprovalSearch: [], paymentSearch: [] };
 let preApprovalGetResult = null;
 let paymentGetResult = null;
+let preApprovalSearchResults = []; // usado pelo fallback checkSubscriptionStatus
+let paymentSearchResults = [];     // idem
 let getShouldThrow = false;
+let searchShouldThrow = false;
 let createShouldThrowMessage = null; // simula o SDK do Mercado Pago recusando a criação
 
 class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
@@ -48,6 +51,10 @@ class PreApproval {
     calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/preapproval/xyz' };
   }
   async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...preApprovalGetResult }; }
+  async search({ options } = {}) {
+    if (searchShouldThrow) throw new Error('falha de rede simulada');
+    calls.preApprovalSearch.push(options); return { results: preApprovalSearchResults };
+  }
 }
 class Preference {
   async create({ body }) {
@@ -57,11 +64,19 @@ class Preference {
 }
 class Payment {
   async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...paymentGetResult }; }
+  async search({ options } = {}) {
+    if (searchShouldThrow) throw new Error('falha de rede simulada');
+    calls.paymentSearch.push(options); return { results: paymentSearchResults };
+  }
 }
-let signatureShouldFail = false;
+let signatureShouldFail = false; // assinatura presente mas incorreta (deve recusar)
+let signatureMissingHeader = false; // sem cabeçalho x-signature (observado em preapproval; deve prosseguir)
 let webhookSecretValue = 'a-real-webhook-secret';
 class WebhookSignatureValidator {
-  static validate() { if (signatureShouldFail) throw new Error('assinatura inválida simulada'); }
+  static validate() {
+    if (signatureMissingHeader) { const e = new Error('x-signature ausente simulado'); e.reason = 'MissingSignatureHeader'; throw e; }
+    if (signatureShouldFail) throw new Error('assinatura inválida simulada');
+  }
 }
 
 const admin = {
@@ -104,11 +119,17 @@ const reset = () => {
   store.clear();
   calls.preApprovalCreate.length = 0;
   calls.preferenceCreate.length = 0;
+  calls.preApprovalSearch.length = 0;
+  calls.paymentSearch.length = 0;
   preApprovalGetResult = null;
   paymentGetResult = null;
+  preApprovalSearchResults = [];
+  paymentSearchResults = [];
   getShouldThrow = false;
+  searchShouldThrow = false;
   createShouldThrowMessage = null;
   signatureShouldFail = false;
+  signatureMissingHeader = false;
   webhookSecretValue = 'a-real-webhook-secret';
 };
 
@@ -135,6 +156,9 @@ const reset = () => {
   // Regressão: a URL configurada no painel do Mercado Pago não cobre pagamentos via
   // Preference (confirmado em teste real — a notificação nunca chega sem isto).
   check('mensal: informa a URL do webhook explicitamente', calls.preApprovalCreate[0].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook');
+  // Regressão: o retorno ao site precisa identificar a liga para o fallback (checkSubscriptionStatus
+  // no boot) saber qual assinatura conferir, caso o webhook atrase ou nunca chegue.
+  check('mensal: back_url identifica a liga para o fallback no retorno', calls.preApprovalCreate[0].back_url === 'https://peladanamao.com.br/?mpReturn=L');
 
   // ───────── createAnnualPayment ─────────
   reset();
@@ -151,6 +175,60 @@ const reset = () => {
   check('anual: external_reference é a liga', calls.preferenceCreate[0].external_reference === 'L');
   check('anual: informa a URL do webhook explicitamente', calls.preferenceCreate[0].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook');
   check('anual: manda o e-mail do admin', calls.preferenceCreate[0].payer.email === 'adm@x.com');
+  check('anual: back_urls identificam a liga para o fallback no retorno', calls.preferenceCreate[0].back_urls.success === 'https://peladanamao.com.br/?mpReturn=L');
+
+  // ───────── checkSubscriptionStatus (fallback quando o webhook atrasa/falha) ─────────
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  store.set('users/jog', { email: 'jog@x.com', leagues: { L: { role: 'player' } } });
+
+  check('check: sem login', await codeOf(call(fns.checkSubscriptionStatus, { liga: 'L' })) === 'unauthenticated');
+  check('check: jogador comum não pode', await codeOf(call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('jog'))) === 'permission-denied');
+
+  let resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: nada encontrado devolve pending', resCheck.status === 'pending');
+  check('check: liga não mexida quando nada encontrado', !store.get('leagues/L').subscriptionActiveUntil);
+  check('check: filtra a busca de assinaturas pela liga', calls.preApprovalSearch[0].external_reference === 'L');
+  check('check: filtra a busca de pagamentos pela liga', calls.paymentSearch[0].external_reference === 'L');
+
+  // Regressão: o webhook de subscription_preapproval chegou sem x-signature em produção
+  // mesmo com o secret certo (ver mercadoPagoWebhook); este fallback cobre esse caso
+  // consultando a API diretamente, sem depender da notificação nunca ter chegado.
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-15T00:00:00.000Z' }];
+
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: encontra assinatura autorizada e ativa como mensal', resCheck.status === 'active' && resCheck.plan === 'monthly');
+  check('check: liga ativada de fato (não só a resposta)', store.get('leagues/L').subscriptionPlan === 'monthly');
+  const checkActiveUntil = new Date(store.get('leagues/L').subscriptionActiveUntil);
+  check('check: ativo até ~5 dias depois do próximo pagamento', Math.abs(checkActiveUntil.getTime() - new Date('2027-01-20T00:00:00.000Z').getTime()) < 1000);
+
+  // Resultado de outra liga (mesmo comprador) não deve ativar a liga L
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  preApprovalSearchResults = [{ id: 'pre2', status: 'authorized', external_reference: 'OUTRA-LIGA' }];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: resultado de outra liga é ignorado (devolve pending)', resCheck.status === 'pending');
+  check('check: liga L não foi ativada com dado de outra liga', !store.get('leagues/L').subscriptionActiveUntil);
+
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  paymentSearchResults = [{ id: 'pay1', status: 'approved', external_reference: 'L' }];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: encontra pagamento aprovado e ativa como anual', resCheck.status === 'active' && resCheck.plan === 'annual');
+  check('check: liga ativada como anual de fato', store.get('leagues/L').subscriptionPlan === 'annual');
+
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  searchShouldThrow = true;
+  const checkErr = await (async () => { try { await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
+  check('check: falha na consulta vira failed-precondition (não internal)', checkErr?.code === 'failed-precondition');
 
   // ───────── Regressão: erro do Mercado Pago chega com mensagem clara ─────────
   // Confirmado em produção: sem este tratamento, o SDK lança uma exceção que o Firebase
@@ -186,6 +264,20 @@ const reset = () => {
   check('webhook: assinatura inválida é recusada (401)', res.statusCode === 401);
   check('webhook: assinatura inválida não mexe na liga', !store.get('leagues/L').subscriptionActiveUntil);
   signatureShouldFail = false;
+
+  // Regressão: notificações de assinatura (preapproval) do Mercado Pago chegaram em
+  // produção sem o cabeçalho x-signature, mesmo com o segredo certo configurado (confirmado
+  // comparando "modo de teste" x "modo de produção" no painel: a assinatura é idêntica, o
+  // problema é o provedor não enviar o cabeçalho). Isso não deve travar a ativação, porque o
+  // status abaixo é sempre reconfirmado na API do Mercado Pago, nunca confiado do payload.
+  signatureMissingHeader = true;
+  preApprovalGetResult = { status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-15T00:00:00.000Z' };
+  res = fakeRes();
+  await fns.mercadoPagoWebhook({ ...baseReq }, res);
+  check('webhook: sem cabeçalho de assinatura ainda processa (200)', res.statusCode === 200);
+  check('webhook: sem cabeçalho de assinatura ainda ativa a liga (status vem da API, não da notificação)', store.get('leagues/L').subscriptionPlan === 'monthly');
+  signatureMissingHeader = false;
+  store.set('leagues/L', { name: 'Liga L' });
 
   preApprovalGetResult = { status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-15T00:00:00.000Z' };
   res = fakeRes();
