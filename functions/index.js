@@ -1552,3 +1552,137 @@ exports.deleteLeague = onCall({ ...CALLABLE, timeoutSeconds: 300, secrets: [MERC
   logger.info("deleteLeague concluída", { liga, membros: members.size, assinaturasCanceladas: subscriptions });
   return { ok: true };
 });
+
+// ── Avisos de cobrança por e-mail ────────────────────────────────────────────────────────
+//
+// Uma vez por dia confere as ligas com plano pago e avisa os admins por e-mail (Resend):
+//  • plano anual, que não renova sozinho: lembrete 30 e 7 dias antes de vencer;
+//  • plano que acabou (anual vencido, ou mensal que não renovou — por exemplo, cobrança
+//    recusada): a liga voltou ao plano gratuito. Avisa uma vez, até 7 dias depois do fim; o que
+//    acabou há mais tempo não gera aviso (evita avisar de coisa velha na 1ª execução ou depois
+//    de uma pane).
+// O que já foi avisado fica em leagues/{liga}.billingNotices, amarrado ao ciclo
+// (subscriptionActiveUntil): um novo pagamento muda o ciclo e libera avisos novos. Só o
+// servidor grava esse campo (as regras só deixam o admin alterar o nome da liga).
+const APP_URL = "https://peladanamao.com.br/";
+const CONTACT_EMAIL = "contato@peladanamao.com.br";
+const BILLING_REMINDER_DAYS = [7, 30]; // do menor para o maior
+const BILLING_ENDED_WINDOW_DAYS = 7;
+
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtBR = iso => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+// Que aviso (se algum) esta liga deve receber agora. Função pura: só olha os dados da liga.
+function billingNoticeFor(league, nowMs) {
+  const plan = league?.subscriptionPlan;
+  if (plan !== "monthly" && plan !== "annual") return null;
+  const cycle = league.subscriptionActiveUntil;
+  const activeUntilMs = Date.parse(cycle);
+  if (!cycle || Number.isNaN(activeUntilMs)) return null;
+  const renewsAt = league.subscriptionRenewsAt || cycle; // a data que a tela mostra (sem a tolerância de 1 dia)
+  const sent = league.billingNotices || {};
+
+  if (activeUntilMs <= nowMs) { // o plano acabou
+    if (nowMs - activeUntilMs > BILLING_ENDED_WINDOW_DAYS * DAY_MS) return null;
+    if (Date.parse(league.trialEndsAt) > nowMs) return null; // ainda no teste grátis: a liga segue completa
+    if (sent.ended === cycle) return null;
+    return { kind: "ended", plan, field: "ended", cycle, renewsAt };
+  }
+
+  if (plan !== "annual") return null; // o mensal renova sozinho: só avisa quando falha
+  const daysLeft = Math.ceil((Date.parse(renewsAt) - nowMs) / DAY_MS);
+  if (!(daysLeft >= 1)) return null; // vencendo hoje (dentro da tolerância): o aviso de "venceu" vem em seguida
+  const stage = BILLING_REMINDER_DAYS.find(d => daysLeft <= d);
+  if (!stage) return null;
+  const field = `annual${stage}`;
+  if (sent[field] === cycle) return null;
+  return { kind: "reminder", plan, stage, field, cycle, renewsAt, daysLeft };
+}
+
+// Monta assunto, HTML e texto simples. Os valores variáveis ({nome}, {data}) entram DEPOIS de o
+// texto fixo ser escapado e de o **negrito** virar marcação, então nada que venha de uma liga
+// (como o nome) consegue criar marcação no e-mail.
+function billingEmailContent(notice, leagueName) {
+  const vars = { nome: leagueName, data: fmtBR(notice.renewsAt) };
+  const how = "Para continuar com todos os recursos, abra o aplicativo, toque em 💳 Assinatura e escolha o plano.";
+  const history = "O histórico de campeonatos, títulos e estatísticas continua guardado.";
+  let subject, paragraphs;
+  if (notice.kind === "reminder") {
+    const falta = notice.daysLeft === 1 ? "falta 1 dia" : `faltam ${notice.daysLeft} dias`;
+    subject = `A assinatura anual da liga "${leagueName}" vence em ${vars.data}`;
+    paragraphs = [
+      `A assinatura anual da liga **{nome}** no Pelada na Mão vale até **{data}** (${falta}).`,
+      `A assinatura anual **não renova sozinha**. ${how}`,
+      `Se não renovar, a liga volta ao plano gratuito, só com os itens básicos. ${history}`,
+    ];
+  } else if (notice.plan === "annual") {
+    subject = `A assinatura anual da liga "${leagueName}" venceu`;
+    paragraphs = [
+      `A assinatura anual da liga **{nome}** venceu em **{data}**, e a liga voltou ao plano gratuito, só com os itens básicos. ${history}`,
+      how,
+    ];
+  } else {
+    subject = `Não conseguimos renovar a assinatura da liga "${leagueName}"`;
+    paragraphs = [
+      `Não recebemos a confirmação da renovação da assinatura mensal da liga **{nome}** (a cobrança prevista era para **{data}**), e a liga voltou ao plano gratuito, só com os itens básicos. ${history}`,
+      "Isso costuma acontecer quando a cobrança é recusada (cartão vencido, sem limite…) ou quando a assinatura foi cancelada no Mercado Pago. O Mercado Pago pode tentar cobrar de novo por alguns dias: se a cobrança for aprovada, a liga volta ao plano pago sozinha.",
+      `Para resolver agora, confira a forma de pagamento da assinatura no Mercado Pago ou assine de novo pelo aplicativo. ${how}`,
+    ];
+  }
+  const footer = `Você recebe este aviso por ser admin da liga {nome} no Pelada na Mão. Dúvidas: ${CONTACT_EMAIL}`;
+  const fill = (s, f) => s.replace(/\{(\w+)\}/g, (_, k) => f(vars[k] ?? ""));
+  const html = [
+    ...paragraphs.map(p => `<p style="margin:0 0 14px;line-height:1.55">${fill(escapeHtml(p).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"), escapeHtml)}</p>`),
+    `<p style="margin:18px 0"><a href="${APP_URL}" style="background:#00d67f;color:#000;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:8px;display:inline-block">Abrir o Pelada na Mão</a></p>`,
+    `<p style="margin:0;color:#6b7280;font-size:12px;line-height:1.5">${fill(escapeHtml(footer), escapeHtml)}</p>`,
+  ].join("");
+  const text = [...paragraphs, `Abrir o Pelada na Mão: ${APP_URL}`, footer].map(p => fill(p.replace(/\*\*/g, ""), x => x)).join("\n\n");
+  return { subject, html, text };
+}
+
+async function sendResendEmail({ to, subject, html, text }) {
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: RESEND_FROM, to, subject, html, text, reply_to: CONTACT_EMAIL }),
+    });
+    if (!res.ok) { logger.warn("Resend não confirmou o envio", { status: res.status }); return false; }
+    return true;
+  } catch (e) {
+    logger.warn("Falha ao chamar a API do Resend", { message: e?.message });
+    return false;
+  }
+}
+
+async function sendBillingNotices() {
+  const nowMs = Date.now();
+  const leagues = await db.collection("leagues").where("subscriptionPlan", "in", ["monthly", "annual"]).get();
+  let sent = 0;
+  for (const leagueDoc of leagues.docs) {
+    try {
+      const league = leagueDoc.data();
+      const notice = billingNoticeFor(league, nowMs);
+      if (!notice) continue;
+      const admins = await db.collection("users").where(new FieldPath("leagues", leagueDoc.id, "role"), "==", "admin").get();
+      const emails = [...new Set(admins.docs.map(d => d.data().email).filter(Boolean))];
+      if (!emails.length) { logger.warn("Aviso de cobrança sem nenhum admin com e-mail", { liga: leagueDoc.id }); continue; }
+      const { subject, html, text } = billingEmailContent(notice, league.name || leagueDoc.id);
+      let delivered = 0;
+      for (const to of emails) if (await sendResendEmail({ to: [to], subject, html, text })) delivered++;
+      // Só marca como avisado se ao menos um e-mail saiu; se todos falharam, tenta de novo amanhã.
+      if (delivered) {
+        await leagueDoc.ref.update(new FieldPath("billingNotices", notice.field), notice.cycle);
+        sent++;
+      }
+    } catch (e) {
+      logger.error("Falha ao avisar sobre a cobrança de uma liga", { liga: leagueDoc.id, message: e?.message });
+    }
+  }
+  logger.info("notifyBillingEmails concluída", { ligasComPlano: leagues.size, avisosEnviados: sent });
+}
+
+exports.notifyBillingEmails = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "America/Sao_Paulo", region: "us-east1", secrets: [RESEND_API_KEY], timeoutSeconds: 300 },
+  async () => { await sendBillingNotices(); }
+);

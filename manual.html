@@ -2343,7 +2343,7 @@ p strong {
         <thead><tr><th>Plano</th><th>Valor</th><th>Como funciona</th></tr></thead>
         <tbody>
           <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a assinatura ser cancelada na conta do Mercado Pago de quem assinou. A liga renova sozinha a cada mês cobrado.</td></tr>
-          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento. O lembrete por e-mail antes do vencimento ainda não foi implementado.</td></tr>
+          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento. O sistema avisa os admins por e-mail 30 e 7 dias antes de vencer (ver "Avisos por e-mail" abaixo).</td></tr>
         </tbody>
       </table>
 
@@ -2362,6 +2362,26 @@ p strong {
       <div class="callout">
         <div class="callout-label">Uma assinatura ativa sempre libera a liga</div>
         <code>isLeagueFree()</code> agora confere duas coisas: o trial venceu <em>e</em> não há assinatura ativa. Uma liga com assinatura em dia nunca cai no plano free, mesmo que o trial já tenha acabado há muito tempo.
+      </div>
+
+      <h3>Avisos por e-mail</h3>
+      <p>Todo dia, às 9h (horário de São Paulo), o servidor confere as ligas com plano pago e avisa por e-mail <strong>todos os admins da liga</strong> (um e-mail para cada um; jogadores nunca recebem). Cada aviso sai <strong>uma vez só</strong> por ciclo de pagamento: um novo pagamento começa um ciclo novo e libera avisos novos.</p>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Plano anual faltando 30 dias para vencer</td><td>Lembrete: a data de vencimento, que a assinatura anual <strong>não renova sozinha</strong> e como assinar de novo (💳 Assinatura). Se a liga só for vista pela primeira vez já faltando menos de 30 dias, o 1º aviso é o dos 7 dias.</td></tr>
+          <tr><td>Plano anual faltando 7 dias</td><td>Segundo e último lembrete antes do vencimento.</td></tr>
+          <tr><td>Plano anual venceu</td><td>Aviso de que venceu e de que a liga voltou ao plano gratuito, com o histórico guardado.</td></tr>
+          <tr><td>Plano mensal não renovou</td><td>Aviso de que a renovação não foi confirmada e a liga voltou ao plano gratuito. Explica as causas comuns (cobrança recusada ou assinatura cancelada no Mercado Pago), que o Mercado Pago pode tentar cobrar de novo por alguns dias (se aprovar, a liga volta ao plano pago sozinha) e como resolver.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <div class="callout-label">Quando NÃO avisa</div>
+        O plano mensal em dia não gera aviso (renova sozinho). O fim de um plano só é avisado até 7 dias depois de acontecer: o que acabou há mais tempo não gera e-mail (evita avisar de coisa velha). Liga ainda no teste grátis também não recebe o aviso de "voltou ao gratuito", porque segue completa. Se o Resend (o serviço de e-mail) falhar para todos os admins, o aviso não é anotado e a tentativa se repete no dia seguinte.
+      </div>
+      <div class="callout warn">
+        <div class="callout-label warn">Técnico</div>
+        Função <code>notifyBillingEmails</code>, e-mails enviados pelo Resend com o mesmo remetente dos avisos de liga abandonada (<code>avisos@notificacoes.peladanamao.com.br</code>; respostas vão para <code>contato@peladanamao.com.br</code>). O que já foi avisado fica em <code>billingNotices</code> no documento da liga (só o servidor grava). O nome da liga é escapado no HTML do e-mail. O log traz só contagens, nunca endereços: <code>firebase functions:log --only notifyBillingEmails</code>.
       </div>
 
       <h3>Cancelar a assinatura</h3>

@@ -67,6 +67,10 @@ jobs:
         working-directory: functions
         run: node test/delete-league-test.js
 
+      - name: Testes das Cloud Functions (avisos de cobrança por e-mail)
+        working-directory: functions
+        run: node test/billing-emails-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js
