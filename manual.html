@@ -462,6 +462,7 @@ p strong {
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
+      <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
     </ul>
   </nav>
 
@@ -496,6 +497,7 @@ p strong {
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
+      <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
     </ul>
   </nav>
 
@@ -2502,6 +2504,48 @@ p strong {
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
         O site publica um manifesto (<code>manifest.webmanifest</code>: nome, cores, ícones de 192 e 512 pixels e uma versão "maskable" do 512, abrindo em <code>standalone</code> na raiz) e as etiquetas de compartilhamento <code>og:*</code> no <code>index.html</code>, com a imagem <code>og-image.png</code> (1200×630) em endereço absoluto do domínio. O iPhone usa o <code>apple-touch-icon.png</code> (180×180, fundo opaco). Há também <code>robots.txt</code> e <code>sitemap.xml</code> para os buscadores, e os arquivos de imagem são gerados a partir do <code>logo.webp</code> por <code>scripts/make-icons.js</code>. O deploy só publica o que está na lista de permitidos do <code>.vercelignore</code>, e um teste automático (<code>pwa-assets-test.js</code>, no CI) confere que tudo que o site cita existe, tem o tamanho certo e está nessa lista — o ícone das notificações push (<code>icon-192.png</code>) dava erro 404 antes disso. O app não registra um service worker de cache de propósito: o único service worker é o das notificações, e um de cache serviria versões antigas do site depois de cada atualização.
+      </div>
+    </section>
+
+    <!-- 28. Métricas do Funil (painel do dono) -->
+    <section class="section" id="metricas-funil">
+      <h2 class="section-title"><span class="sn">28</span> Métricas do Funil (painel do dono)</h2>
+      <p>O botão <strong>📊</strong> abre o painel de métricas: do cadastro até o pagamento, a receita mensal estimada e o uso do app. É <strong>só do dono do sistema</strong> (conta Google com e-mail verificado): o botão aparece no topo do app e na tela "Escolha a liga", e o servidor confere de novo quem está pedindo. Os números são calculados na hora, direto do banco, sem nenhuma ferramenta de terceiros.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Número</th><th>O que significa</th></tr></thead>
+        <tbody>
+          <tr><td>Contas criadas</td><td>Cadastros no app (inclui quem entrou só por convite), com a variação dos últimos 7 e 30 dias.</td></tr>
+          <tr><td>Contas que criaram uma liga</td><td>Donos de liga distintos. A porcentagem é sobre o total de contas: o resto entrou por convite de outra pessoa.</td></tr>
+          <tr><td>Ligas criadas / com campeonato / usadas em 14 dias</td><td>Ligas no total; as que já têm pelo menos 1 campeonato; as que alguém abriu nos últimos 14 dias.</td></tr>
+          <tr><td>Ligas na reta final do teste</td><td>Faltam até 5 dias para o teste acabar, ou ele já acabou: é quando a faixa do plano aparece para o admin.</td></tr>
+          <tr><td>Ligas que iniciaram o checkout</td><td>Ligas em que alguém abriu o pagamento (mensal ou anual) pelo menos uma vez. Só conta a partir da versão que passou a registrar isso.</td></tr>
+          <tr><td>Ligas que já pagaram</td><td>Ligas que alguma vez tiveram plano pago, inclusive as que já venceram.</td></tr>
+          <tr><td>Em teste / Plano gratuito / Ligas antigas</td><td>Em teste: nunca pagaram e o teste não acabou (e quantas acabam em até 3 dias). Plano gratuito: teste acabou e nunca pagaram. Antigas: criadas antes do teste grátis e sem plano; nunca caem no gratuito.</td></tr>
+          <tr><td>Conversão do teste</td><td>Das ligas cujo teste já acabou, quantas já pagaram. A tela mostra a conta ("3 de 4"), para a porcentagem não enganar quando a base é pequena.</td></tr>
+          <tr><td>Receita mensal estimada</td><td>Mensais ativas × R$ 29,90 + anuais ativas × R$ 238,80 ÷ 12. Mensal cancelada não entra (não vai renovar). É uma estimativa do que entra por mês, não o valor recebido no mês.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Uso do app (contadores anônimos)</h3>
+      <p>Alguns passos acontecem só na tela da pessoa, e o servidor não vê sozinho. Para eles o app avisa o servidor, que <strong>soma 1 a um contador do dia</strong>: viram a faixa do plano, tocaram nela, abriram a tela 💳, viram a faixa Instalar, tocaram em Instalar e instalaram o app. Os checkouts (mensal e anual) são contados pelo próprio servidor quando o Mercado Pago aceita criar o pagamento. A tela mostra "7 dias / 30 dias" e as taxas de toque.</p>
+      <ul>
+        <li>Cada aviso conta <strong>uma vez por sessão</strong> (aba aberta): o número representa pessoas e não redesenhos da tela.</li>
+        <li>Os contadores só existem a partir desta versão: antes disso não há histórico de uso.</li>
+        <li>Se o aviso falhar (sem internet, por exemplo), nada acontece e o app segue normal. Um problema ao contar também nunca atrapalha um pagamento.</li>
+      </ul>
+
+      <h3>Evolução</h3>
+      <p>Todo dia, às 3h30 (horário de São Paulo), o servidor guarda um <strong>retrato do funil</strong>: contas, ligas, planos e receita estimada. O painel desenha a evolução dos últimos 60 dias a partir deles. O estado de um dia passado não dá para recalcular depois (um plano que venceu hoje já não diz que estava ativo ontem), por isso o retrato é gravado todo dia; a evolução aparece a partir do segundo dia.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Privacidade (LGPD)</div>
+        O painel e os contadores usam <strong>só números agregados</strong>: nenhum e-mail, nome, identificador de conta ou nome de liga entra na resposta do painel nem nos contadores, e o servidor não guarda quem viu ou tocou em cada coisa. A política de privacidade do app informa isso ("Uso do app: contadores anônimos"). Vale o advogado saber desse recurso ao revisar os Termos.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        Funções <code>getFunnelMetrics</code> (só o dono, com e-mail verificado, no máximo 20 chamadas por minuto), <code>trackEvent</code> (qualquer pessoa logada, só os nomes da lista, 120 por minuto) e <code>snapshotFunnelMetrics</code> (diária). Os dados ficam em <code>metrics_events/AAAA-MM-DD</code> (contadores), <code>metrics_daily/AAAA-MM-DD</code> (retratos) e <code>leagues/{liga}/billing_meta/checkout</code> (marca do checkout, que some junto com a liga ao encerrá-la); as regras do banco fecham as três ao navegador. O cálculo é uma função pura (<code>functions/funnel-metrics.js</code>) coberta por testes, inclusive nos emuladores.
       </div>
     </section>
 

@@ -174,7 +174,7 @@ const reset = () => {
 
 (async () => {
   // opções das funções
-  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 15 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
+  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 17 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
 
   // ───────── joinLeague ─────────
   reset();

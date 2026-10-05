@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
 const { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator } = require("mercadopago");
 const { describeMpError } = require("./mp-errors");
+const funnel = require("./funnel-metrics");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -1288,6 +1289,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
       },
     },
   }));
+  await recordCheckoutStart(liga, "monthly");
   return { initPoint: result.init_point };
 });
 
@@ -1320,6 +1322,7 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
       notification_url: MERCADOPAGO_WEBHOOK_URL,
     },
   }));
+  await recordCheckoutStart(liga, "annual");
   return { initPoint: result.init_point };
 });
 
@@ -1980,4 +1983,116 @@ async function sendBillingNotices() {
 exports.notifyBillingEmails = onSchedule(
   { schedule: "0 9 * * *", timeZone: "America/Sao_Paulo", region: "us-east1", secrets: [RESEND_API_KEY], timeoutSeconds: 300 },
   async () => { await sendBillingNotices(); }
+);
+
+// ── Métricas do funil (painel só do dono) ───────────────────────────────────────────────────────
+// Contadores anônimos de uso (sem dado pessoal: só "quantas vezes", por dia) e um retrato diário do
+// funil. As contas ficam em funnel-metrics.js; aqui só se lê e grava no banco. As coleções metrics_*
+// e a subcoleção billing_meta são fechadas ao navegador (firestore.rules): só o servidor lê e escreve.
+
+// Soma 1 a um contador do dia (horário de São Paulo). Nunca derruba quem chamou: métrica não pode
+// quebrar um pagamento.
+async function bumpEvent(name) {
+  try {
+    await db.doc(`metrics_events/${funnel.dayKeySP(Date.now())}`).set({ [name]: FieldValue.increment(1) }, { merge: true });
+  } catch (e) {
+    logger.warn("Falha ao contar um evento de uso", { evento: name, erro: e?.message });
+  }
+}
+
+// A liga abriu o checkout (mensal ou anual): contador do dia e marca na própria liga (numa subcoleção
+// fechada, que some junto com a liga em deleteLeague), para contar ligas distintas e não só cliques.
+async function recordCheckoutStart(liga, kind) {
+  await bumpEvent(kind === "annual" ? "checkoutAnnual" : "checkoutMonthly");
+  try {
+    await db.doc(`leagues/${liga}/billing_meta/checkout`).set({ starts: FieldValue.increment(1), lastAt: new Date().toISOString() }, { merge: true });
+  } catch (e) {
+    logger.warn("Falha ao marcar o checkout na liga", { liga, erro: e?.message });
+  }
+}
+
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; out[i] = await fn(items[i]); }
+  }));
+  return out;
+}
+
+// Lê do banco o que o cálculo do funil precisa: as ligas (só os campos do plano e da atividade), quantos
+// campeonatos cada uma tem (contagem agregada, sem baixar os campeonatos) e as contas por data.
+async function gatherFunnelInputs(now) {
+  const snap = await db.collection("leagues")
+    .select("ownerId", "createdAt", "trialEndsAt", "subscriptionPlan", "subscriptionActiveUntil", "subscriptionCancelledAt", "lastActivityAt").get();
+  const leagues = await mapLimit(snap.docs, 10, async d => {
+    const [champs, meta] = await Promise.all([
+      db.collection(`leagues/${d.id}/championships`).count().get(),
+      db.doc(`leagues/${d.id}/billing_meta/checkout`).get(),
+    ]);
+    return { ...d.data(), id: d.id, championships: champs.data().count, checkoutStarts: meta.exists ? meta.data().starts : 0 };
+  });
+  const users = db.collection("users");
+  const since = days => new Date(now - days * 86400000).toISOString();
+  const count = async q => (await q.count().get()).data().count;
+  const [total, last7d, last30d] = await Promise.all([
+    count(users), count(users.where("createdAt", ">=", since(7))), count(users.where("createdAt", ">=", since(30))),
+  ]);
+  return { leagues, accounts: { total, last7d, last30d } };
+}
+
+const funnelPrices = () => ({ monthly: MP_PLANS.monthly.amount, annual: MP_PLANS.annual.amount });
+
+// Contadores dos últimos `days` dias: { 'AAAA-MM-DD': { nome: n } } (só os dias que existem).
+async function readEventsByDay(days, now) {
+  const keys = funnel.lastDayKeys(days, now);
+  const docs = await Promise.all(keys.map(k => db.doc(`metrics_events/${k}`).get()));
+  return Object.fromEntries(keys.map((k, i) => [k, docs[i].exists ? docs[i].data() : null]).filter(([, v]) => v));
+}
+
+// Retratos diários dos últimos `days` dias, do mais antigo para o mais novo (para o painel desenhar a evolução).
+async function readDailyHistory(days, now) {
+  const keys = funnel.lastDayKeys(days, now).reverse();
+  const docs = await Promise.all(keys.map(k => db.doc(`metrics_daily/${k}`).get()));
+  return keys.map((k, i) => (docs[i].exists ? { date: k, ...docs[i].data() } : null)).filter(Boolean);
+}
+
+// O app avisa que uma pessoa viu/tocou em algo (faixa do plano, botão Instalar…). Só aceita os nomes da
+// lista, só soma 1 ao contador do dia e não guarda quem foi.
+exports.trackEvent = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  const name = idText(request.data?.name, 40);
+  if (!funnel.EVENT_NAMES_CLIENT.includes(name)) throw fail("invalid-argument", "Evento desconhecido.");
+  await checkRateLimit(auth.uid, "trackEvent", 120);
+  await bumpEvent(name);
+  return { ok: true };
+});
+
+// Painel do dono: o funil de agora, os contadores de uso (7 e 30 dias) e o histórico diário. Só o dono do
+// sistema (e-mail verificado) vê; a resposta tem apenas contagens e valores em reais, nada pessoal.
+exports.getFunnelMetrics = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  if (!isOwner(auth)) throw fail("permission-denied", "Só o dono do sistema vê as métricas.");
+  await checkRateLimit(auth.uid, "getFunnelMetrics", 20);
+  const now = Date.now();
+  const current = funnel.computeFunnel({ ...(await gatherFunnelInputs(now)), now, prices: funnelPrices() });
+  const byDay = await readEventsByDay(30, now);
+  return {
+    funnel: current,
+    events: { last7d: funnel.sumEvents(byDay, 7, now), last30d: funnel.sumEvents(byDay, 30, now) },
+    history: await readDailyHistory(60, now),
+  };
+});
+
+// Todo dia de madrugada guarda um retrato do funil, para o painel mostrar a evolução (o estado de ontem não
+// dá para recalcular depois: um plano que venceu hoje já não diz que estava ativo ontem).
+exports.snapshotFunnelMetrics = onSchedule(
+  { schedule: "30 3 * * *", timeZone: "America/Sao_Paulo", region: "us-east1", timeoutSeconds: 300 },
+  async () => {
+    const now = Date.now();
+    const current = funnel.computeFunnel({ ...(await gatherFunnelInputs(now)), now, prices: funnelPrices() });
+    const day = funnel.dayKeySP(now);
+    await db.doc(`metrics_daily/${day}`).set({ ...funnel.snapshotOf(current), savedAt: new Date(now).toISOString() });
+    logger.info("Retrato diário do funil gravado", { dia: day, ligas: current.leagues.total, contas: current.accounts.total });
+  }
 );

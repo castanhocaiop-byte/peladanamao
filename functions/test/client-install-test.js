@@ -33,7 +33,7 @@ const UA = {
 };
 
 function makeEnv({ ua = UA.android, platform = 'Linux armv81', touchPoints = 5, standalone = false, navStandalone = undefined, authUser = { uid: 'u' }, storage = {}, storageThrows = false } = {}) {
-  const calls = { render: 0, toasts: [] };
+  const calls = { render: 0, toasts: [], events: [] };
   const store = { ...storage };
   const listeners = {};
   // elementos soltos no body, NA ORDEM em que foram postos (um id repetido aparece repetido, como num navegador de verdade)
@@ -57,6 +57,7 @@ function makeEnv({ ua = UA.android, platform = 'Linux armv81', touchPoints = 5, 
     document: doc,
     render: () => { calls.render++; },
     toast: (m, t) => { calls.toasts.push([m, t]); },
+    trackEvent: (n, once = true) => { calls.events.push([n, once]); }, // contador de uso (anônimo)
   };
   const names = Object.keys(env);
   const api = new Function(...names, code + '\nreturn { installOsOf, installBannerInfo, readInstallEnv, installBanner, dismissInstallBanner, installApp, openInstallHelp, getPrompt: () => _installPrompt };')(...names.map(n => env[n]));
@@ -163,6 +164,14 @@ function fakePrompt(outcome) {
   check('instalou (evento appinstalled): guarda a marca, fecha o passo a passo, avisa e redesenha', e.store.aceoma_installed === '1' && !e.layers.has('install-help') && e.calls.toasts.some(([m]) => /App instalado/.test(m)) && e.calls.render === 1, { store: e.store, layers: [...e.layers.keys()], toasts: e.calls.toasts });
   check('…e a faixa não volta mais', e.api.installBanner() === '');
 
+  // ── contadores de uso (anônimos) ──────────────────────────────────────────────────────────
+  e = makeEnv();
+  check('a faixa vem marcada para contar quem a viu (data-ev="installBannerSeen")', /data-ev="installBannerSeen"/.test(e.api.installBanner()));
+  await e.api.installApp();
+  check('tocar em Instalar conta um clique (sempre, não só o primeiro da sessão)', JSON.stringify(e.calls.events) === JSON.stringify([['installClick', false]]), e.calls.events);
+  e.listeners.appinstalled();
+  check('instalar o app conta uma instalação', e.calls.events.some(([n, once]) => n === 'appInstalled' && once === false), e.calls.events);
+  check('nenhum contador carrega dado da pessoa (só o nome do evento)', e.calls.events.every(ev => ev.length === 2 && typeof ev[0] === 'string'));
   // ── onde a faixa aparece na página ────────────────────────────────────────────────────────
   check('a faixa está no topo da liga, depois do aviso de plano e do de notificações', /main\.innerHTML=planBanner\(\)\+notifBanner\(\)\+installBanner\(\)\+content/.test(html));
   const picker = html.slice(html.indexOf('function vSelectLeague()'), html.indexOf('function vPending()'));

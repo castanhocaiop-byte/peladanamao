@@ -201,6 +201,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Marca do checkout de cada liga (quantas vezes abriu o pagamento): alimenta o painel de métricas do dono.
+    // Fica dentro da liga, então some junto com ela no encerramento. Só o servidor lê e escreve.
+    match /leagues/{leagueId}/billing_meta/{docId} {
+      allow read, write: if false;
+    }
+
+    // Métricas do funil (painel só do dono): contadores anônimos de uso por dia e retrato diário do funil.
+    // Nenhum dado pessoal; só o servidor (Admin SDK) lê e escreve.
+    match /metrics_events/{day} {
+      allow read, write: if false;
+    }
+    match /metrics_daily/{day} {
+      allow read, write: if false;
+    }
+
     // Contadores internos de limite de chamadas (rate limiting) das Cloud Functions.
     // Só o servidor (Admin SDK, que ignora estas regras) lê e escreve aqui.
     match /rate_limits/{docId} {

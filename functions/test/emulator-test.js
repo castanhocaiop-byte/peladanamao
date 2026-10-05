@@ -733,6 +733,60 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   w = await webhook(9999);
   check('webhook: pagamento que o Mercado Pago não encontra → 500 (ele tenta de novo depois)', w.status === 500 && (await league()).subscriptionRenewsAt === keep);
 
+  // ═════════════ MÉTRICAS DO FUNIL (painel só do dono + contadores anônimos) ═════════════
+  console.log('── métricas do funil: regras do banco e funções');
+  await seed();
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  // coleções novas, fechadas ao navegador: ninguém (nem o dono) lê ou grava direto
+  await db.set('owner', `metrics_events/${day}`, { planBannerSeen: 1 });
+  await db.set('owner', `metrics_daily/${day}`, { accounts: 1 });
+  await db.set('owner', 'leagues/la/billing_meta/checkout', { starts: 1 });
+  for (const tok of [U.admA.token, U.pl1.token, U.outsider.token, U.owner.token]) {
+    check('ninguém lê os contadores de uso, o retrato diário nem a marca do checkout direto pelas regras → recusado',
+      no(await db.get(tok, `metrics_events/${day}`)) && no(await db.get(tok, `metrics_daily/${day}`)) && no(await db.get(tok, 'leagues/la/billing_meta/checkout')));
+  }
+  check('ninguém grava nos contadores, no retrato diário nem na marca do checkout direto → recusado',
+    no(await db.set(U.admA.token, `metrics_events/${day}`, { planBannerSeen: 999 })) && no(await db.set(U.owner.token, `metrics_daily/${day}`, { mrr: 1000000 })) && no(await db.set(U.admA.token, 'leagues/la/billing_meta/checkout', { starts: 0 })));
+  check('os dados continuam intactos depois das tentativas', docData(await db.get('owner', `metrics_events/${day}`)).planBannerSeen === 1);
+  await db.del('owner', `metrics_events/${day}`);
+  await db.del('owner', `metrics_daily/${day}`);
+
+  // trackEvent: contador anônimo
+  r = await callFn('trackEvent', null, { name: 'planBannerSeen' });
+  check('trackEvent sem login → não autenticado', r.status === 401, r.raw);
+  r = await callFn('trackEvent', U.pl1.token, { name: 'planBannerSeen' });
+  check('trackEvent com login → ok e soma 1 no contador do dia', r.status === 200 && r.result && r.result.ok === true && docData(await db.get('owner', `metrics_events/${day}`)).planBannerSeen === 1, r.raw);
+  await callFn('trackEvent', U.pl2.token, { name: 'planBannerSeen' });
+  const evDoc = docData(await db.get('owner', `metrics_events/${day}`));
+  check('duas pessoas somam no mesmo contador, e o documento guarda só números (nada de quem foi)', evDoc.planBannerSeen === 2 && Object.values(evDoc).every(v => typeof v === 'number') && !JSON.stringify(evDoc).includes(U.pl1.uid), evDoc);
+  r = await callFn('trackEvent', U.pl1.token, { name: 'checkoutMonthly' });
+  check('o app não consegue inflar os eventos que só o servidor conta (checkout) → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+  r = await callFn('trackEvent', U.pl1.token, { name: 'qualquerCoisa' });
+  check('evento desconhecido → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+  // getFunnelMetrics: só o dono (e-mail verificado)
+  r = await callFn('getFunnelMetrics', null, {});
+  check('painel do dono sem login → não autenticado', r.status === 401, r.raw);
+  for (const [quem, tok] of [['jogador', U.pl1.token], ['admin de liga', U.admA.token], ['quem é de fora', U.outsider.token]]) {
+    r = await callFn('getFunnelMetrics', tok, {});
+    check(`painel do dono: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+  }
+  r = await callFn('getFunnelMetrics', U.owner.token, {});
+  const mm = r.result;
+  check('painel do dono: o dono (e-mail verificado) recebe o funil, os eventos e o histórico', r.status === 200 && mm && mm.funnel && mm.events && Array.isArray(mm.history), r.raw);
+  check('…com as ligas do banco de teste (contagem agregada de campeonatos incluída) e as contas', mm.funnel.leagues.total >= 2 && mm.funnel.accounts.total >= 5 && mm.funnel.leagues.withGame >= 1, mm.funnel);
+  check('…e o contador de hoje (2 vezes a faixa do plano vista)', mm.events.last7d.planBannerSeen === 2 && mm.events.last30d.planBannerSeen === 2, mm.events);
+  check('…sem nenhum dado pessoal (e-mails, nomes de pessoas, ids de conta)', !/@teste\.invalid|castanho|Pl Um|Adm A/.test(JSON.stringify(mm)) && !JSON.stringify(mm).includes(U.pl1.uid), JSON.stringify(mm).slice(0, 200));
+
+  // o checkout cria a marca na liga e o contador
+  await db.update('owner', 'leagues/la', { trialEndsAt: new Date(Date.now() + 3 * 86400000).toISOString() });
+  mpState({});
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  const checkoutMark = docData(await db.get('owner', 'leagues/la/billing_meta/checkout'));
+  const evDoc2 = docData(await db.get('owner', `metrics_events/${day}`));
+  check('criar o checkout mensal: devolve o link, soma no contador do dia e marca a liga (subcoleção fechada)', r.status === 200 && !!(r.result && r.result.initPoint) && evDoc2.checkoutMonthly === 1 && checkoutMark.starts === 2, { r: r.raw, evDoc2, checkoutMark });
+  check('…e o documento da liga que os membros leem não ganhou nenhum campo novo', !('checkoutStarts' in docData(await db.get('owner', 'leagues/la'))) && !('lastCheckoutAt' in docData(await db.get('owner', 'leagues/la'))));
+
   console.log(`\n${passes} verificações ok, ${fails} falha(s)`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERRO NO TESTE', e); process.exit(1); });

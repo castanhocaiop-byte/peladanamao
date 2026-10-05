@@ -95,9 +95,21 @@ jobs:
         working-directory: functions
         run: node test/client-plan-banner-test.js
 
+      - name: Testes das métricas do funil (cálculo)
+        working-directory: functions
+        run: node test/funnel-metrics-test.js
+
+      - name: Testes das métricas do funil (funções e contadores)
+        working-directory: functions
+        run: node test/metrics-functions-test.js
+
       - name: Testes do app (botão Instalar o app)
         working-directory: functions
         run: node test/client-install-test.js
+
+      - name: Testes do app (painel do dono e contadores de uso)
+        working-directory: functions
+        run: node test/client-owner-metrics-test.js
 
       - name: Testes do app (encerrar liga)
         working-directory: functions

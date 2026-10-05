@@ -23,7 +23,7 @@ const NOW = Date.parse('2026-10-10T12:00:00.000Z');
 const iso = ms => new Date(ms).toISOString();
 
 function makeEnv({ role = 'admin', league = {}, leagueId = 'L', authUser = { uid: 'u' }, storageThrows = false } = {}) {
-  const calls = { render: 0 };
+  const calls = { render: 0, events: [] };
   const store = {};
   const env = {
     st: { authUser, leagueId, availableLeagues: [{ id: 'L', ...league }], modal: null },
@@ -32,6 +32,7 @@ function makeEnv({ role = 'admin', league = {}, leagueId = 'L', authUser = { uid
       ? { getItem() { throw new Error('indisponível'); }, setItem() { throw new Error('indisponível'); } }
       : { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
     render: () => { calls.render++; },
+    trackEvent: (n, once = true) => { calls.events.push([n, once]); }, // contador de uso (anônimo)
   };
   const names = Object.keys(env);
   const api = new Function(...names, code + '\nreturn { planBannerInfo, planBanner, dismissPlanBanner, openSubscription };')(...names.map(n => env[n]));
@@ -93,7 +94,7 @@ Date.now = () => NOW; // o app olha o relógio ao decidir se a faixa está "esco
 const trial2 = { trialEndsAt: iso(NOW + 2 * DAY) };
 let t = makeEnv({ league: trial2 });
 let h = t.api.planBanner();
-check('admin vê a faixa, com o texto e os dois botões (abrir planos e fechar)', /faltam 2 dias/.test(h) && /onclick="openSubscription\(\)"/.test(h) && />Ver planos</.test(h) && /dismissPlanBanner\('trial'\)/.test(h), h);
+check('admin vê a faixa, com o texto e os dois botões (abrir planos e fechar)', /faltam 2 dias/.test(h) && /openSubscription\(\)"/.test(h) && />Ver planos</.test(h) && /dismissPlanBanner\('trial'\)/.test(h), h);
 const hInfo = makeEnv({ league: { trialEndsAt: iso(NOW + 4 * DAY) } }).api.planBanner();
 check('faixa de alerta usa fundo, borda e botão laranja; a informativa, verde', /background:#F0A50018;border:1px solid #F0A50050/.test(h) && /background:#F0A500;color:#000/.test(h) && !/#00C97A/.test(h) && /background:#00C97A15;border:1px solid #00C97A40/.test(hInfo) && /background:#00C97A;color:#000/.test(hInfo) && !/#F0A500/.test(hInfo), { h: h.slice(0, 200), hInfo: hInfo.slice(0, 200) });
 check('jogador comum (não admin) não vê a faixa', makeEnv({ role: 'player', league: trial2 }).api.planBanner() === '');
@@ -126,6 +127,15 @@ check('o botão da faixa abre a tela de assinatura', t.env.st.modal?.type === 's
 Date.now = realNow;
 
 // ── a faixa está ligada na tela, e os avisos no plano gratuito existem ───────────────────────────
+// ── contadores de uso (anônimos) ──────────────────────────────────────────────────────────
+{
+  const e = makeEnv({ league: { trialEndsAt: iso(Date.now() + 2 * DAY) } });
+  const b = e.api.planBanner();
+  check('a faixa do plano vem marcada para contar quem a viu (data-ev="planBannerSeen")', /data-ev="planBannerSeen"/.test(b), b);
+  check('o botão da faixa conta o toque (planBannerClick, sempre) antes de abrir a tela de assinatura', /onclick="trackEvent\('planBannerClick',false\);openSubscription\(\)"/.test(b), b);
+  e.api.openSubscription();
+  check('abrir a tela de assinatura conta uma abertura (subscriptionOpened, uma vez por sessão)', JSON.stringify(e.calls.events) === JSON.stringify([['subscriptionOpened', true]]), e.calls.events);
+}
 check('a faixa entra no topo de toda aba (antes do aviso de notificações)', /main\.innerHTML=planBanner\(\)\+notifBanner\(\)\+/.test(html));
 check('o ícone 💳 do topo usa o mesmo abridor da tela de assinatura', html.includes('<button onclick="openSubscription()"\n        style="background:none;border:none;color:var(--text3);font-size:18px') || /<button onclick="openSubscription\(\)"\s+style="background:none;border:none;color:var\(--text3\);font-size:18px/.test(html));
 check('criar campeonato no plano gratuito avisa que ele não conta para títulos, ranking e conquistas', /Plano gratuito: campeonatos criados agora não contam para títulos, ranking e conquistas \(nem depois, se a liga assinar\)/.test(html) && /isLeagueFree\(\) \? `<div class="warn-box">/.test(html));
