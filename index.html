@@ -1030,7 +1030,7 @@ function initFirebase() {
             st.leagueId = leagueKeys[0];
             st.userRole = leagues[st.leagueId]?.role || st.userDoc.role || 'pending';
             const _lgDoc = await DB.doc(`leagues/${st.leagueId}`).get().catch(()=>null);
-            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, ownerId: _lgDoc?.data()?.ownerId || null, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null, subscriptionRenewsAt: _lgDoc?.data()?.subscriptionRenewsAt || null }];
+            st.availableLeagues = [{ id: st.leagueId, name: _lgDoc?.exists ? _lgDoc.data().name : st.leagueId, role: st.userRole, ownerId: _lgDoc?.data()?.ownerId || null, trialEndsAt: _lgDoc?.data()?.trialEndsAt || null, subscriptionActiveUntil: _lgDoc?.data()?.subscriptionActiveUntil || null, subscriptionPlan: _lgDoc?.data()?.subscriptionPlan || null, subscriptionRenewsAt: _lgDoc?.data()?.subscriptionRenewsAt || null, subscriptionCancelledAt: _lgDoc?.data()?.subscriptionCancelledAt || null }];
           } else if (leagueKeys.length > 1) {
             // usuário em múltiplas ligas — lê nomes e mostra tela de seleção
             const leagueDocs = await Promise.all(leagueKeys.map(k => DB.doc(`leagues/${k}`).get()));
@@ -1043,6 +1043,7 @@ function initFirebase() {
               subscriptionActiveUntil: d.exists ? (d.data().subscriptionActiveUntil || null) : null,
               subscriptionPlan: d.exists ? (d.data().subscriptionPlan || null) : null,
               subscriptionRenewsAt: d.exists ? (d.data().subscriptionRenewsAt || null) : null,
+              subscriptionCancelledAt: d.exists ? (d.data().subscriptionCancelledAt || null) : null,
             }));
             st.leagueId = null;
             st.userRole = null;
@@ -2135,8 +2136,9 @@ async function rememberLeague(id, role, name) {
   const subscriptionActiveUntil = doc?.exists ? (doc.data().subscriptionActiveUntil || null) : null;
   const subscriptionPlan = doc?.exists ? (doc.data().subscriptionPlan || null) : null;
   const subscriptionRenewsAt = doc?.exists ? (doc.data().subscriptionRenewsAt || null) : null;
+  const subscriptionCancelledAt = doc?.exists ? (doc.data().subscriptionCancelledAt || null) : null;
   const ownerId = doc?.exists ? (doc.data().ownerId || null) : null;
-  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, ownerId, trialEndsAt, subscriptionActiveUntil, subscriptionPlan, subscriptionRenewsAt }];
+  st.availableLeagues = [...(st.availableLeagues || []).filter(l => l.id !== id), { id, name, role, ownerId, trialEndsAt, subscriptionActiveUntil, subscriptionPlan, subscriptionRenewsAt, subscriptionCancelledAt }];
 }
 
 /* ── WhatsApp: fica em "contacts" (só o admin lê), nunca no cadastro do elenco nem nos avulsos ── */
@@ -5372,7 +5374,24 @@ function mMjTeamDetail() {
 
 /* ── Assinatura ────────────────────────────────────────────────────────────
    Nunca aparece dentro do app empacotado nas lojas (ver isNativeApp()) — só no site e
-   por e-mail, para não violar as regras de pagamento da Apple/Google. */
+   por e-mail, para não violar as regras de pagamento da Apple/Google.
+
+   Quem já tem plano pago nunca é barrado: "Estender plano" soma 12 meses ao vencimento atual (o
+   servidor soma a cada pagamento aprovado). Quem pagava o mensal tem a assinatura recorrente
+   cancelada sozinha ao estender, e também pode cancelá-la aqui mesmo, sem ir ao Mercado Pago. */
+
+// Soma meses de calendário a uma data (UTC), sem estourar o fim do mês. É a mesma conta do
+// servidor (addMonths em functions/index.js): a data prevista na tela é a que o pagamento vai dar.
+function addMonthsISO(iso, months) {
+  const d = new Date(iso);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d;
+}
+
 function mSubscription() {
   if (st.modal?.type !== 'subscription') return '';
   const league = st.availableLeagues.find(l => l.id === st.leagueId);
@@ -5384,19 +5403,26 @@ function mSubscription() {
   // subscriptionActiveUntil (essa margem é só para não cortar acesso por atraso de
   // notificação — não deve aparecer como se o usuário tivesse ganhado dias extras).
   const renewsAt = league?.subscriptionRenewsAt ? new Date(league.subscriptionRenewsAt) : activeUntil;
+  const annual = league?.subscriptionPlan === 'annual';
+  const cancelled = !annual && !!league?.subscriptionCancelledAt; // mensal cancelada: vale até o fim do período já pago
 
   const fmt = d => d.toLocaleDateString('pt-BR');
-  const checking = !!st._payChecking && !hasActiveSub;
+  const checking = !!st._payChecking;
   let statusHtml;
   if (checking) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:13px;color:var(--text2)">⏳ Confirmando seu pagamento…</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px">Leva só alguns segundos. Você não precisa fazer nada.</div>
     </div>`;
+  } else if (hasActiveSub && cancelled) {
+    statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">⚠️ Assinatura <strong>mensal</strong> cancelada</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Sua liga continua com o plano até ${fmt(renewsAt)}. Depois dessa data, volta ao plano gratuito.</div>
+    </div>`;
   } else if (hasActiveSub) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
-      <div style="font-size:13px;color:var(--text2)">✅ Assinatura <strong>${league.subscriptionPlan === 'annual' ? 'anual' : 'mensal'}</strong> ativa</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:4px">${league.subscriptionPlan === 'annual' ? 'Válida até' : 'Próxima cobrança em'} ${fmt(renewsAt)}</div>
+      <div style="font-size:13px;color:var(--text2)">✅ Assinatura <strong>${annual ? 'anual' : 'mensal'}</strong> ativa</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${annual ? 'Válida até' : 'Próxima cobrança em'} ${fmt(renewsAt)}</div>
     </div>`;
   } else if (trialActive) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -5410,23 +5436,54 @@ function mSubscription() {
   }
 
   const busy = !!st._subBusy;
+  const terms = what => `<div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Não há reembolso. Ao ${what}, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>`;
+  const planBtn = `position:relative;z-index:1;padding:14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}`;
+
+  let actionsHtml;
+  if (hasActiveSub) {
+    // Plano em vigor: pagar de novo nunca é barrado, estende — soma 12 meses ao vencimento atual.
+    const monthlyRunning = !annual && !cancelled; // há assinatura mensal cobrando todo mês
+    const cancelBox = `<div style="background:var(--s2);border-radius:10px;padding:14px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px">Cancelar a assinatura mensal?</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Você não será cobrado de novo. Sua liga continua com o plano até ${fmt(renewsAt)} e depois volta ao plano gratuito. Não há reembolso do período já pago.</div>
+          <div style="display:flex;gap:8px">
+            <button ${busy?'disabled':''} onclick="st.modal={type:'subscription'};render()"
+              style="position:relative;z-index:1;flex:1;padding:11px;border-radius:10px;border:none;background:var(--s1);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Voltar</button>
+            <button ${busy?'disabled':''} onclick="confirmCancelSubscription()"
+              style="position:relative;z-index:1;flex:1;padding:11px;border-radius:10px;border:none;background:var(--danger);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${busy?'.6':'1'}">Cancelar assinatura</button>
+          </div>
+        </div>`;
+    actionsHtml = `<div style="display:flex;flex-direction:column;gap:10px">
+        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
+          style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
+          Estender plano — R$ 238,80<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
+          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+        </button>
+        ${monthlyRunning ? `<div style="font-size:12px;color:var(--text3);line-height:1.5;text-align:center">Ao estender, a assinatura mensal é cancelada sozinha: você não será cobrado de novo.</div>` : ''}
+        ${monthlyRunning ? (st.modal.cancelAsk ? cancelBox : `<button ${busy?'disabled':''} onclick="askCancelSubscription()"
+          style="position:relative;z-index:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar assinatura mensal</button>`) : ''}
+        ${terms('estender o plano')}
+      </div>`;
+  } else {
+    actionsHtml = `<div style="display:flex;flex-direction:column;gap:10px">
+        <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
+          style="${planBtn};border:1px solid var(--border);background:var(--s1);color:var(--text)">
+          Mensal — R$ 29,90/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês</div>
+        </button>
+        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
+          style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
+          Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+        </button>
+        ${terms('assinar')}
+      </div>`;
+  }
   // Enquanto o pagamento é confirmado os planos somem: evita pagar duas vezes por pressa.
   return `<div class="overlay" onclick="st.modal=null;render()">
     <div class="sheet" onclick="event.stopPropagation()" style="animation:none;position:relative;z-index:1">
       <div class="sheet-handle"></div>
       <div style="font-size:17px;font-weight:800;margin-bottom:12px">💳 Assinatura</div>
       ${statusHtml}
-      ${checking ? '' : `<div style="display:flex;flex-direction:column;gap:10px">
-        <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
-          style="position:relative;z-index:1;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
-          Mensal — R$ 29,90/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês</div>
-        </button>
-        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
-          style="position:relative;z-index:1;padding:14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}">
-          Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
-        </button>
-        <div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Não há reembolso. Ao assinar, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>
-      </div>`}
+      ${checking ? '' : actionsHtml}
       <div id="sub-err" style="margin-top:12px;color:var(--danger);font-size:13px;text-align:center"></div>
       <button onclick="st.modal=null;render()" style="position:relative;z-index:1;width:100%;padding:12px;margin-top:14px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Fechar</button>
     </div>
@@ -5441,7 +5498,11 @@ async function startSubscription(plan) {
     const fn = plan === 'annual' ? 'createAnnualPayment' : 'createMonthlySubscription';
     const res = await callFn(fn, { liga: st.leagueId });
     if (res.initPoint) {
-      markPaymentPending(st.leagueId); // ao voltar (ou reabrir o app), a confirmação acontece sozinha
+      // Ao voltar (ou reabrir o app), a confirmação acontece sozinha. Guarda até quando o plano valia
+      // antes de pagar: é a mudança dessa data que mostra que o pagamento novo entrou (quem já tem
+      // plano continua "ativo" mesmo sem ele).
+      const cur = st.availableLeagues.find(l => l.id === st.leagueId);
+      markPaymentPending(st.leagueId, cur?.subscriptionRenewsAt || null);
       window.location.href = res.initPoint;
     }
   } catch(e) {
@@ -5456,13 +5517,44 @@ async function startSubscription(plan) {
   }
 }
 
+// Cancelar a assinatura mensal sem sair do app: o servidor cancela no Mercado Pago; a liga segue com o
+// plano até o fim do período já pago. Pede confirmação na própria tela (cancelAsk) antes.
+function askCancelSubscription() { st.modal = { type: 'subscription', cancelAsk: true }; render(); }
+async function confirmCancelSubscription() {
+  if (st._subBusy) return;
+  st._subBusy = true; render();
+  let errorMsg = null;
+  try {
+    await callFn('cancelSubscription', { liga: st.leagueId });
+    const cur = st.availableLeagues.find(l => l.id === st.leagueId);
+    await rememberLeague(st.leagueId, cur?.role, cur?.name); // traz do servidor a marca de "cancelada"
+    st.modal = { type: 'subscription' };
+    const lg = st.availableLeagues.find(l => l.id === st.leagueId);
+    const until = lg?.subscriptionRenewsAt ? ' até ' + new Date(lg.subscriptionRenewsAt).toLocaleDateString('pt-BR') : '';
+    toast('Assinatura mensal cancelada. Sua liga continua com o plano' + until + '.', 'ok');
+  } catch(e) {
+    errorMsg = e.message || 'Não foi possível cancelar agora. Tente de novo em alguns minutos.';
+  } finally {
+    st._subBusy = false; render();
+    if (errorMsg) { const err = document.getElementById('sub-err'); if (err) err.textContent = errorMsg; }
+  }
+}
+
 // Confirmação automática do pagamento. Ao ir para o checkout do Mercado Pago fica marcado
 // neste navegador que há um pagamento a confirmar; ao voltar (ou reabrir o app, ou voltar à
 // aba) o app consulta o servidor, que confere direto no Mercado Pago — nunca se confia no
 // que o navegador diz. A pessoa não clica em nada. O webhook e a reconciliação periódica do
 // servidor são a rede de segurança caso ela nunca volte ao site.
 const PAY_PENDING_KEY = 'aceoma_pay_pending';
-function markPaymentPending(liga) { try { localStorage.setItem(PAY_PENDING_KEY, JSON.stringify({ liga, at: Date.now() })); } catch(e) {} }
+// `before` = até quando o plano valia ao sair para pagar (null = não tinha plano). Voltando do checkout
+// não se sabe mais isso: então mantém o que foi guardado na saída.
+function markPaymentPending(liga, before) {
+  try {
+    const prev = JSON.parse(localStorage.getItem(PAY_PENDING_KEY) || 'null');
+    if (before === undefined && prev?.liga === liga && 'before' in prev) before = prev.before;
+    localStorage.setItem(PAY_PENDING_KEY, JSON.stringify({ liga, at: Date.now(), before }));
+  } catch(e) {}
+}
 function clearPaymentPending() { try { localStorage.removeItem(PAY_PENDING_KEY); } catch(e) {} }
 function readPaymentPending() {
   try {
@@ -5480,11 +5572,14 @@ async function confirmPendingPayment(attempts = 1, delayMs = 4000, announce = fa
   if (!pending || st._payChecking) return false;
   if (!st.userDoc?.leagues?.[pending.liga]) { clearPaymentPending(); return false; }
   st._payChecking = true; render();
-  let confirmed = false;
+  let confirmed = false, result = null;
   try {
     for (let i = 0; i < attempts && !confirmed; i++) {
       try {
-        confirmed = (await callFn('checkSubscriptionStatus', { liga: pending.liga })).status === 'active';
+        result = await callFn('checkSubscriptionStatus', { liga: pending.liga });
+        // Quem já tinha plano continua "ativo" mesmo sem o pagamento novo ter entrado: o que mostra que
+        // entrou é o vencimento ter mudado. Sem a data de antes (outro navegador), vale "ativo".
+        confirmed = result.status === 'active' && (pending.before === undefined || result.renewsAt !== pending.before);
       } catch(e) {
         if (e.code === 'permission-denied' || e.code === 'invalid-argument') { clearPaymentPending(); return false; }
       }
@@ -5494,7 +5589,9 @@ async function confirmPendingPayment(attempts = 1, delayMs = 4000, announce = fa
       clearPaymentPending();
       const cur = st.availableLeagues.find(l => l.id === pending.liga);
       await rememberLeague(pending.liga, cur?.role || st.userDoc.leagues[pending.liga]?.role, cur?.name);
-      toast('Assinatura confirmada! 🎉', 'ok');
+      toast(pending.before && result.renewsAt
+        ? `Plano estendido até ${new Date(result.renewsAt).toLocaleDateString('pt-BR')}! 🎉`
+        : 'Assinatura confirmada! 🎉', 'ok');
     } else if (announce) {
       toast('Pagamento em confirmação. A assinatura será ativada automaticamente.', 'ok');
     }

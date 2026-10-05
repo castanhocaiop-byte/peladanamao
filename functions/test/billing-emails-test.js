@@ -161,6 +161,8 @@ const reset = () => {
   check('assunto traz o nome da liga e a data de vencimento', m0.subject === `A assinatura anual da liga "Liga Anual" vence em ${new Date(NOW + 20 * DAY).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`, m0.subject);
   check('texto: diz quantos dias faltam, que não renova sozinha e como assinar de novo', /faltam 20 dias/.test(m0.text) && /não renova sozinha/.test(m0.text) && /💳 Assinatura/.test(m0.text), m0.text);
   check('texto: diz que a liga volta ao gratuito e que o histórico continua', /volta ao plano gratuito/.test(m0.text) && /histórico[^.]*continua guardado/.test(m0.text), m0.text);
+  check('texto: manda usar "Estender plano" e diz que o pagamento soma 12 meses ao vencimento atual (ninguém perde dia pago)', /Estender plano/.test(m0.text) && /soma 12 meses à data de vencimento atual/.test(m0.text) && /nenhum dia já pago/.test(m0.text), m0.text);
+  check('HTML: "Estender plano" sai em negrito', /<strong>Estender plano<\/strong>/.test(m0.html), m0.html);
   check('HTML e texto simples saem juntos, com o link do app', /<a href="https:\/\/peladanamao\.com\.br\/"/.test(m0.html) && m0.text.includes('https://peladanamao.com.br/'));
   check('remetente do Pelada na Mão, resposta para o contato e chave do Resend no cabeçalho', m0.body.from === 'Pelada na Mão <avisos@notificacoes.peladanamao.com.br>' && m0.body.reply_to === 'contato@peladanamao.com.br' && sent[0].headers.Authorization === 'Bearer fake-resend-key' && sent[0].url === 'https://api.resend.com/emails');
   check('anota o aviso na liga, amarrado ao ciclo', league('L').billingNotices?.annual30 === league('L').subscriptionActiveUntil, league('L'));
@@ -184,6 +186,16 @@ const reset = () => {
   check('liga vista pela 1ª vez já faltando 5 dias: manda só o de 7 dias', mails.length === 2 && /faltam 5 dias/.test(mails[0].text) && league('L').billingNotices?.annual7 && !league('L').billingNotices?.annual30, league('L'));
   clock(NOW + 1 * DAY);
   check('…e o de 30 dias nunca vem depois', (await run()).length === 0);
+
+  // Estender o plano muda o ciclo: os lembretes recomeçam para o vencimento novo.
+  reset();
+  store.set('leagues/L', annual(20));
+  await run(); // lembrete de 30 dias do ciclo antigo
+  const L1 = league('L');
+  store.set('leagues/L', { ...L1, subscriptionRenewsAt: iso(Date.parse(L1.subscriptionRenewsAt) + 365 * DAY), subscriptionActiveUntil: iso(Date.parse(L1.subscriptionActiveUntil) + 365 * DAY) }); // pagou "Estender plano"
+  clock(NOW + 360 * DAY); // faltam 25 dias para o vencimento novo
+  mails = await run();
+  check('plano estendido: o vencimento novo recebe os próprios lembretes (o aviso antigo era de outro ciclo)', mails.length === 2 && /faltam 25 dias/.test(mails[0].text) && league('L').billingNotices?.annual30 === league('L').subscriptionActiveUntil, mails.map(m => m.text));
 
   reset();
   store.set('leagues/L', annual(1));
@@ -243,6 +255,11 @@ const reset = () => {
   clock(NOW + 26 * DAY + 3600000); // 1h depois do novo fim
   mails = await run();
   check('…mas logo depois do fim do ciclo novo avisa de novo (o aviso antigo era de outro ciclo)', mails.length === 2 && league('L').billingNotices?.ended === league('L').subscriptionActiveUntil, league('L'));
+
+  // Cancelou a assinatura mensal de propósito (pelo app): o plano acabou como combinado, não é falha.
+  reset();
+  store.set('leagues/L', monthly(-1, { subscriptionRenewsAt: iso(NOW - 2 * DAY), subscriptionActiveUntil: iso(NOW - 1 * DAY), subscriptionCancelledAt: iso(NOW - 20 * DAY) }));
+  check('mensal cancelada de propósito: ao acabar não manda "não conseguimos renovar"', (await run()).length === 0 && !league('L').billingNotices, league('L'));
 
   // ───────── quem recebe ─────────
   reset();

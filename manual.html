@@ -1971,6 +1971,12 @@ p strong {
             <td>Pedido com confirmação explícita (<code>confirm: true</code>), máximo de 5 por minuto. Cancela as assinaturas da liga no Mercado Pago (<strong>se não conseguir, não apaga nada</strong>), tira o vínculo de todos os membros e apaga a liga com tudo dentro. O documento da liga é o último a ser apagado, então o pedido pode ser repetido por quem o iniciou se algo falhar no meio.</td>
           </tr>
           <tr>
+            <td>Cancelar a assinatura mensal (💳 Assinatura → Cancelar assinatura mensal)</td>
+            <td><code>cancelSubscription</code></td>
+            <td>Admin da liga e o dono do sistema</td>
+            <td>Máximo de 5 por minuto. Cancela no Mercado Pago as assinaturas abertas <em>daquela</em> liga (<strong>se não conseguir, nada é marcado como cancelado</strong>) e marca a liga com <code>subscriptionCancelledAt</code>; o plano segue valendo até o fim do período já pago. Repetir é seguro.</td>
+          </tr>
+          <tr>
             <td>Aprovar, rejeitar, promover a admin, vincular a jogador e responder pedido de vinculação</td>
             <td><code>manageMember</code></td>
             <td>Admin da liga e o dono do sistema</td>
@@ -2133,7 +2139,7 @@ p strong {
       </div>
       <div class="callout">
         <div class="callout-label">O documento da liga</div>
-        As regras só deixam o admin da liga alterar o <strong>nome</strong> dela. Plano, fim do teste grátis, assinatura, criador e controle de encerramento só o servidor grava; senão qualquer admin poderia dar a si mesmo um plano pago direto pelo navegador. O dono do sistema (conta Google com e-mail verificado) continua podendo tudo.
+        As regras só deixam o admin da liga alterar o <strong>nome</strong> dela. Plano, fim do teste grátis, assinatura (inclusive a marca de "cancelada"), criador e controle de encerramento só o servidor grava; senão qualquer admin poderia dar a si mesmo um plano pago direto pelo navegador. O registro dos pagamentos já somados ao plano (<code>billing_payments</code>) ninguém lê nem grava pelo navegador. O dono do sistema (conta Google com e-mail verificado) continua podendo tudo.
       </div>
       <div class="callout">
         <div class="callout-label">Apagar o arquivo da foto no Cloudinary <span class="tag">Técnico</span></div>
@@ -2250,7 +2256,7 @@ p strong {
       </div>
 
       <h3>Termos de Uso</h3>
-      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.1, vigente desde 02/10/2026.</p>
+      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.2, vigente desde 05/10/2026.</p>
       <div class="callout gold">
         <div class="callout-label gold">Responsável e foro</div>
         O documento identifica <strong>Caio da Mata Pires Castanho (CPF 391.795.148-71)</strong> como responsável pela plataforma, operando como pessoa física — decisão deliberada para não abrir CNPJ antes de haver monetização. O foro eleito é a comarca de São Paulo/SP, e o contato é <code>contato@peladanamao.com.br</code>.
@@ -2302,7 +2308,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">O plano free é uma lista pré-selecionada, sujeita a mudança</div>
-        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.1). O histórico já registrado não é apagado nem fica refém de cobrança.
+        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.2). O histórico já registrado não é apagado nem fica refém de cobrança.
       </div>
 
       <h3>O que continua funcionando no plano free</h3>
@@ -2342,22 +2348,40 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Plano</th><th>Valor</th><th>Como funciona</th></tr></thead>
         <tbody>
-          <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a assinatura ser cancelada na conta do Mercado Pago de quem assinou. A liga renova sozinha a cada mês cobrado.</td></tr>
-          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento. O sistema avisa os admins por e-mail 30 e 7 dias antes de vencer (ver "Avisos por e-mail" abaixo).</td></tr>
+          <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a assinatura ser cancelada — no próprio app (<strong>💳 Assinatura → Cancelar assinatura mensal</strong>) ou na conta do Mercado Pago de quem assinou. A liga renova sozinha a cada mês cobrado.</td></tr>
+          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento — ou até o admin <strong>estender o plano</strong> (abaixo), que soma mais 12 meses à data de vencimento. O sistema avisa os admins por e-mail 30 e 7 dias antes de vencer (ver "Avisos por e-mail" abaixo).</td></tr>
         </tbody>
       </table>
+
+      <h3 id="estender-plano">Estender plano</h3>
+      <p>Quem já tem plano pago <strong>nunca é impedido de pagar de novo</strong>: com o plano em vigor (mensal ou anual), a tela de assinatura troca "Mensal" e "Anual" por <strong>Estender plano — R$ 238,80</strong>, que mostra a nova data de vencimento antes de pagar. Cada pagamento aprovado <strong>soma 12 meses à data de vencimento</strong> do plano — nenhum dia já pago se perde:</p>
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece ao estender</th></tr></thead>
+        <tbody>
+          <tr><td>Plano anual em vigor, vence em 10/03/2027</td><td>Pagando em 20/12/2026, o plano passa a valer até <strong>10/03/2028</strong> (12 meses contados do vencimento, não de hoje).</td></tr>
+          <tr><td>Plano mensal em vigor, próxima cobrança em 30/12/2026</td><td>O plano vira <strong>anual</strong> e passa a valer até <strong>30/12/2027</strong>. A assinatura mensal é <strong>cancelada sozinha</strong> no Mercado Pago, para a cobrança mensal não continuar em dobro. Avisamos disso na própria tela, antes de pagar.</td></tr>
+          <tr><td>Mensal já cancelada, ainda dentro do período pago</td><td>Soma 12 meses ao fim do período pago, igual ao caso acima.</td></tr>
+          <tr><td>Plano já vencido</td><td>Não há o que estender: a tela volta a oferecer Mensal e Anual, e o anual conta a partir da aprovação do pagamento.</td></tr>
+          <tr><td>Estender de novo (e de novo…)</td><td>Cada pagamento soma 12 meses por cima do anterior. Pagar duas vezes por engano soma 24 meses — e, como não há reembolso (Termos de Uso, cláusula 10), vale conferir antes de confirmar no Mercado Pago.</td></tr>
+        </tbody>
+      </table>
+      <p>O que <strong>não</strong> existe: contratar uma segunda assinatura <em>mensal</em> por cima de um plano em vigor. Seria uma cobrança em duplicidade sem ganho nenhum, então a tela não oferece e o servidor recusa. Quem quer ampliar o plano usa "Estender plano".</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Como o sistema evita somar em dobro <span class="tag">Técnico</span></div>
+        Cada pagamento aprovado do Mercado Pago é somado <strong>uma única vez</strong>: o registro <code>billing_payments/{id do pagamento}</code> é gravado na mesma transação que a data nova, então avisos repetidos ou simultâneos do Mercado Pago, consultas do app e a reconciliação a cada 6 horas não somam em dobro (testado nos emuladores, com avisos simultâneos). Na reconciliação e na consulta do app, a assinatura mensal é lida <em>antes</em> dos pagamentos anuais — o anual soma 12 meses à data que a mensal já tinha dado. Se o Mercado Pago não conseguir cancelar a mensal na hora, o plano estendido fica (a pessoa pagou) e a reconciliação cancela depois. Pagamentos aprovados antes de 05/10/2026 12:00 UTC (só de teste) seguem a regra antiga, "um ano a partir da aprovação", para não serem somados de novo.
+      </div>
 
       <h3>Como o sistema confirma o pagamento</h3>
       <p>Quem assina <strong>não precisa fazer nada depois de pagar</strong>. O botão de assinar só abre o link de pagamento do Mercado Pago; a ativação da liga é automática e acontece por três caminhos que se complementam:</p>
       <ul>
-        <li><strong>Ao voltar do Mercado Pago</strong> — o app abre a tela de assinatura mostrando "Confirmando seu pagamento…" e consulta o servidor por alguns segundos, até a liga aparecer como ativa. A escolha de plano some enquanto isso, para ninguém pagar duas vezes por pressa.</li>
+        <li><strong>Ao voltar do Mercado Pago</strong> — o app abre a tela de assinatura mostrando "Confirmando seu pagamento…" e consulta o servidor por alguns segundos, até a liga aparecer como ativa (para quem estava estendendo o plano, até a <em>data de vencimento mudar</em> — o app guarda a data de antes de sair para pagar —, e então avisa "Plano estendido até [data]!"). A escolha de plano some enquanto isso, para ninguém pagar duas vezes por pressa.</li>
         <li><strong>Ao reabrir o app ou voltar à aba</strong> — se a pessoa fechou tudo antes de voltar, a confirmação acontece sozinha na próxima vez que ela abrir o app, sem nenhum clique.</li>
         <li><strong>Em segundo plano, no servidor</strong> — a cada 6 horas o servidor confere as assinaturas direto no Mercado Pago. É isso que mantém a liga ativa a cada novo mês cobrado (renovação) e que ativa pagamentos mesmo que ninguém volte ao site. O aviso do Mercado Pago (<strong>webhook</strong>) acelera o processo quando chega, mas o sistema não depende dele.</li>
       </ul>
       <p>Em todos os casos o servidor confere o pagamento diretamente com a API do Mercado Pago — nunca confia no que o navegador ou a notificação dizem — e só então grava a liga como paga.</p>
 
       <h3>Datas na tela de assinatura</h3>
-      <p>No plano mensal aparece <strong>"Próxima cobrança em [data]"</strong>, a data real da próxima cobrança no Mercado Pago. No anual, <strong>"Válida até [data]"</strong>, um ano a partir da aprovação do pagamento. Por dentro o acesso tem 1 dia de tolerância para atrasos de processamento (<code>subscriptionActiveUntil</code>), mas esse dia nunca aparece na tela: um mês é um mês (a data mostrada vem de <code>subscriptionRenewsAt</code>).</p>
+      <p>No plano mensal aparece <strong>"Próxima cobrança em [data]"</strong>, a data real da próxima cobrança no Mercado Pago. No anual, <strong>"Válida até [data]"</strong>, 12 meses a partir da aprovação do pagamento (ou do vencimento anterior, se o plano foi estendido). Depois de cancelar a mensal, a tela diz <strong>"Assinatura mensal cancelada — sua liga continua com o plano até [data]"</strong>. Por dentro o acesso tem 1 dia de tolerância para atrasos de processamento (<code>subscriptionActiveUntil</code>), mas esse dia nunca aparece na tela: um mês é um mês (a data mostrada vem de <code>subscriptionRenewsAt</code>).</p>
 
       <div class="callout">
         <div class="callout-label">Uma assinatura ativa sempre libera a liga</div>
@@ -2369,7 +2393,7 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
         <tbody>
-          <tr><td>Plano anual faltando 30 dias para vencer</td><td>Lembrete: a data de vencimento, que a assinatura anual <strong>não renova sozinha</strong> e como assinar de novo (💳 Assinatura). Se a liga só for vista pela primeira vez já faltando menos de 30 dias, o 1º aviso é o dos 7 dias.</td></tr>
+          <tr><td>Plano anual faltando 30 dias para vencer</td><td>Lembrete: a data de vencimento, que a assinatura anual <strong>não renova sozinha</strong> e como continuar (💳 Assinatura → <strong>Estender plano</strong>, que soma 12 meses à data atual, sem perder nenhum dia já pago). Se a liga só for vista pela primeira vez já faltando menos de 30 dias, o 1º aviso é o dos 7 dias. Estender o plano começa um ciclo novo: os lembretes recomeçam para o novo vencimento.</td></tr>
           <tr><td>Plano anual faltando 7 dias</td><td>Segundo e último lembrete antes do vencimento.</td></tr>
           <tr><td>Plano anual venceu</td><td>Aviso de que venceu e de que a liga voltou ao plano gratuito, com o histórico guardado.</td></tr>
           <tr><td>Plano mensal não renovou</td><td>Aviso de que a renovação não foi confirmada e a liga voltou ao plano gratuito. Explica as causas comuns (cobrança recusada ou assinatura cancelada no Mercado Pago), que o Mercado Pago pode tentar cobrar de novo por alguns dias (se aprovar, a liga volta ao plano pago sozinha) e como resolver.</td></tr>
@@ -2377,7 +2401,7 @@ p strong {
       </table>
       <div class="callout">
         <div class="callout-label">Quando NÃO avisa</div>
-        O plano mensal em dia não gera aviso (renova sozinho). O fim de um plano só é avisado até 7 dias depois de acontecer: o que acabou há mais tempo não gera e-mail (evita avisar de coisa velha). Liga ainda no teste grátis também não recebe o aviso de "voltou ao gratuito", porque segue completa. Se o Resend (o serviço de e-mail) falhar para todos os admins, o aviso não é anotado e a tentativa se repete no dia seguinte.
+        O plano mensal em dia não gera aviso (renova sozinho). Uma assinatura mensal que a pessoa <strong>cancelou de propósito</strong> pelo app também não gera o aviso de "não renovou" quando o período pago acaba (foi o combinado, não é falha). O fim de um plano só é avisado até 7 dias depois de acontecer: o que acabou há mais tempo não gera e-mail (evita avisar de coisa velha). Liga ainda no teste grátis também não recebe o aviso de "voltou ao gratuito", porque segue completa. Se o Resend (o serviço de e-mail) falhar para todos os admins, o aviso não é anotado e a tentativa se repete no dia seguinte.
       </div>
       <div class="callout warn">
         <div class="callout-label warn">Técnico</div>
@@ -2385,16 +2409,16 @@ p strong {
       </div>
 
       <h3>Cancelar a assinatura</h3>
-      <p>A assinatura mensal é cancelada na conta do Mercado Pago de quem assinou (menu <em>Assinaturas</em>). A liga continua ativa até o fim do período já pago e depois volta ao plano gratuito, sem nenhuma ação no app. Quando a liga é <a href="#encerrar-liga">encerrada</a> (seção 17), a assinatura mensal é cancelada automaticamente pelo servidor, antes de qualquer dado ser apagado.</p>
+      <p>A assinatura mensal se cancela <strong>sem sair do app</strong>: <strong>💳 Assinatura → Cancelar assinatura mensal</strong>, e a tela pede uma confirmação ("Você não será cobrado de novo. Sua liga continua com o plano até [data]…"). O servidor cancela no Mercado Pago; <strong>se o Mercado Pago não responder, nada muda</strong> e o app avisa para tentar de novo em alguns minutos. Cancelada, a liga continua ativa até o fim do período já pago e depois volta ao plano gratuito, sem nova cobrança. Continua sendo possível cancelar também na conta do Mercado Pago de quem assinou (menu <em>Assinaturas</em>). A assinatura mensal também é cancelada sozinha ao <a href="#estender-plano">estender o plano</a> e quando a liga é <a href="#encerrar-liga">encerrada</a> (seção 17), neste caso antes de qualquer dado ser apagado. O plano anual não renova sozinho, então não há o que cancelar nele.</p>
 
       <div class="callout warn">
         <div class="callout-label warn">Sem reembolso</div>
-        Os valores pagos <strong>não são reembolsáveis</strong>, nem proporcionalmente, em caso de cancelamento, encerramento da liga, fim do uso ou qualquer outro motivo (Termos de Uso, cláusula 10), ressalvados os direitos que a lei brasileira considere irrenunciáveis em relações de consumo. O aviso aparece na própria tela de assinatura, com o link dos Termos, antes de o pagamento ser iniciado.
+        Os valores pagos <strong>não são reembolsáveis</strong>, nem proporcionalmente, em caso de cancelamento (inclusive o automático da assinatura mensal ao estender o plano), encerramento da liga, fim do uso ou qualquer outro motivo (Termos de Uso, cláusula 10), ressalvados os direitos que a lei brasileira considere irrenunciáveis em relações de consumo. O aviso aparece na própria tela de assinatura, com o link dos Termos, antes de o pagamento ser iniciado.
       </div>
 
       <div class="callout warn">
         <div class="callout-label warn">Segurança do webhook <span class="tag">Técnico</span></div>
-        O endereço que recebe os avisos do Mercado Pago é público na internet, então o servidor nunca confia no conteúdo de um aviso: antes de ativar qualquer coisa ele pergunta ao Mercado Pago, com a chave secreta do sistema, qual é a situação real da assinatura ou do pagamento. Avisos com assinatura digital incorreta são recusados (e, enquanto a chave secreta não estiver configurada, todos são recusados). Avisos de assinatura sem o cabeçalho de assinatura — o Mercado Pago às vezes envia assim — são aceitos, porque a conferência acima já os torna inofensivos. Só um pagamento do valor exato do plano anual ativa o plano anual: uma cobrança mensal nunca vira um ano de acesso.
+        O endereço que recebe os avisos do Mercado Pago é público na internet, então o servidor nunca confia no conteúdo de um aviso: antes de ativar qualquer coisa ele pergunta ao Mercado Pago, com a chave secreta do sistema, qual é a situação real da assinatura ou do pagamento. Avisos com assinatura digital incorreta são recusados (e, enquanto a chave secreta não estiver configurada, todos são recusados). Avisos de assinatura sem o cabeçalho de assinatura — o Mercado Pago às vezes envia assim — são aceitos, porque a conferência acima já os torna inofensivos. Só um pagamento do valor exato do plano anual ativa (ou estende) o plano anual: uma cobrança mensal nunca vira um ano de acesso. E cada pagamento só é somado uma vez, mesmo que o aviso chegue repetido.
       </div>
 
       <h3>Fora do app empacotado nas lojas</h3>

@@ -18,7 +18,8 @@ const FN_URL = `http://127.0.0.1:5001/${PROJECT}/us-east1`;
 // arquivo, que este teste escreve (assinaturas "existentes") e lê (cancelamentos que a função fez).
 const MP_FILE = process.env.MP_STUB_FILE;
 if (!MP_FILE) { console.error('Defina MP_STUB_FILE (use npm run test:emulators, em functions/).'); process.exit(1); }
-const mpSet = preapprovals => fs.writeFileSync(MP_FILE, JSON.stringify({ preapprovals, updates: [] }));
+const mpState = partial => fs.writeFileSync(MP_FILE, JSON.stringify({ preapprovals: [], payments: [], updates: [], created: [], preferences: [], ...partial }));
+const mpSet = preapprovals => mpState({ preapprovals });
 const mpGet = () => JSON.parse(fs.readFileSync(MP_FILE, 'utf8'));
 
 // ── HTTP e codificação do Firestore REST ─────────────────────────────────────
@@ -539,6 +540,7 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   await db.set('owner', 'leagues/la/player_titles/pl_um', { name: 'Pl Um', titles: 1 });
   await db.set('owner', 'leagues/la/player_photos/pl_um', { url: CLOUDINARY, uid: U.pl1.uid, updatedAt: NOW });
   await db.set('owner', 'leagues/la/financeiro_mensalidades/2026-09', { pagamentos: { 'Pl Um': true } });
+  await db.set('owner', 'leagues/la/billing_payments/9001', { paymentId: '9001', amount: 238.8, renewsAtAfter: '2027-10-05T00:00:00.000Z' });
   await db.set('owner', 'leagues/la/link_requests/' + U.pl2.uid, { uid: U.pl2.uid, status: 'pending' });
   await db.set('owner', 'leagues/lb/player_registry/b1', { name: 'B Um' });
   mpSet([
@@ -547,10 +549,10 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   ]);
   const countDocs = async p => ((await db.list('owner', p)).json.documents || []).length;
   const LA_COLS = ['championships', 'championships/c1/extra', 'player_registry', 'player_titles', 'player_photos', 'contacts', 'financeiro_config',
-    'financeiro_mensalidades', 'financeiro_avulsos', 'app_config', 'link_requests', 'invite_tokens'];
+    'financeiro_mensalidades', 'financeiro_avulsos', 'app_config', 'link_requests', 'invite_tokens', 'billing_payments'];
   const laTotal = async () => { let n = 0; for (const c of LA_COLS) n += await countDocs('leagues/la/' + c); return n; };
   const laBefore = await laTotal();
-  check('(a liga de teste tem dados em todas as áreas)', laBefore >= 14, laBefore);
+  check('(a liga de teste tem dados em todas as áreas, inclusive o registro de pagamentos)', laBefore >= 15, laBefore);
 
   r = await callFn('deleteLeague', null, { liga: 'la', confirm: true });
   check('sem login → não autenticado', r.status === 401, r.raw);
@@ -612,6 +614,124 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   S3.token = (await signIn(S3.email)).json.idToken;
   r = await callFn('deleteMyAccount', S3.token, { confirm: true });
   check('agora a conta pode ser excluída', r.status === 200 && r.result.ok === true, r.raw);
+
+  // ═════════════ ESTENDER PLANO ═════════════
+  // Cada pagamento anual aprovado SOMA 12 meses ao vencimento (transação de verdade no emulador, com
+  // avisos repetidos e simultâneos); a assinatura mensal é cancelada sozinha ao estender, ou a pedido,
+  // pelo app. O Mercado Pago é o simulado (test/mp-stub.js).
+  console.log('── estender plano: pagamento anual soma 12 meses; mensal é cancelada; cancelar pelo app');
+  await seed();
+  const DAYMS = 86400000;
+  const plus12 = iso => { const d = new Date(iso); const y = d.getUTCFullYear() + 1, m = d.getUTCMonth(); return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), new Date(Date.UTC(y, m + 1, 0)).getUTCDate()), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds())).toISOString(); };
+  const agoIso = ms => new Date(Date.now() - ms).toISOString();
+  // Aprovações de poucos minutos atrás: sempre depois do corte da soma de períodos (ANNUAL_STACKING_FROM).
+  const pay = (id, extra) => ({ id, external_reference: 'la', status: 'approved', operation_type: 'regular_payment', transaction_amount: 238.8, date_approved: agoIso(2 * 60000), ...extra });
+  const webhook = (id, headers = {}) => fetch(`${FN_URL}/mercadoPagoWebhook?type=payment&data.id=${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}' }).then(async res => ({ status: res.status, text: await res.text() }));
+  const league = async () => docData(await db.get('owner', 'leagues/la'));
+  const records = async () => ((await db.list('owner', 'leagues/la/billing_payments')).json.documents || []).length;
+  const setLeague = extra => db.set('owner', 'leagues/la', { name: 'Liga A', ownerId: U.admA.uid, plan: 'trial', ...extra });
+  const planUntil = (plan, renewsAt, extra) => ({ subscriptionPlan: plan, subscriptionRenewsAt: renewsAt, subscriptionActiveUntil: new Date(Date.parse(renewsAt) + DAYMS).toISOString(), ...extra });
+
+  mpState({});
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  check('liga sem plano: cria a assinatura mensal (link de pagamento, com a liga e o e-mail do admin)', r.status === 200 && /mp\.test\/preapproval/.test(r.result.initPoint) && mpGet().created.length === 1 && mpGet().created[0].external_reference === 'la' && mpGet().created[0].payer_email === U.admA.email, r.raw);
+  r = await callFn('createAnnualPayment', U.admA.token, { liga: 'la' });
+  check('liga sem plano: cria a cobrança anual com o título normal e o valor do plano', r.status === 200 && mpGet().preferences[0].items[0].title === 'Pelada na Mão — Assinatura anual' && mpGet().preferences[0].items[0].unit_price === 238.8, r.raw);
+
+  const approved1 = agoIso(5 * 60000);
+  mpState({ payments: [pay(7001, { date_approved: approved1 })] });
+  let w = await webhook(7001);
+  let L = await league();
+  check('pagamento anual aprovado: a liga fica anual por 12 meses a partir da aprovação (+1 dia de tolerância)', w.status === 200 && L.subscriptionPlan === 'annual' && L.subscriptionRenewsAt === plus12(approved1) && L.subscriptionActiveUntil === new Date(Date.parse(plus12(approved1)) + DAYMS).toISOString(), { w, L });
+  let rec = docData(await db.get('owner', 'leagues/la/billing_payments/7001'));
+  check('…e o pagamento fica registrado (valor e datas de antes e depois)', !!rec && rec.paymentId === '7001' && rec.amount === 238.8 && rec.renewsAtBefore === null && rec.renewsAtAfter === plus12(approved1), rec);
+  w = await webhook(7001);
+  check('o mesmo aviso de novo não soma outra vez', w.status === 200 && (await league()).subscriptionRenewsAt === plus12(approved1) && (await records()) === 1);
+
+  check('ninguém lê o registro de pagamentos direto (admin, jogador, quem é de fora, listagem) → recusado', no(await db.get(U.admA.token, 'leagues/la/billing_payments/7001')) && no(await db.get(U.pl1.token, 'leagues/la/billing_payments/7001')) && no(await db.get(U.outsider.token, 'leagues/la/billing_payments/7001')) && no(await db.list(U.admA.token, 'leagues/la/billing_payments')));
+  check('ninguém grava, altera ou apaga o registro direto → recusado', no(await db.set(U.admA.token, 'leagues/la/billing_payments/7999', { paymentId: '7999' })) && no(await db.update(U.admA.token, 'leagues/la/billing_payments/7001', { amount: 1 })) && no(await db.del(U.admA.token, 'leagues/la/billing_payments/7001')) && no(await db.set(U.owner.token, 'leagues/la/billing_payments/7999', { paymentId: '7999' })));
+  check('admin NÃO marca a assinatura como cancelada direto no banco → recusado', no(await db.update(U.admA.token, 'leagues/la', { subscriptionCancelledAt: NOW })));
+  check('o registro continua intacto depois das tentativas', (await records()) === 1 && docData(await db.get('owner', 'leagues/la/billing_payments/7001')).amount === 238.8);
+
+  // Com plano em vigor: nada de segunda mensal; o anual vira "Estender plano".
+  mpState({ payments: [pay(7001, { date_approved: approved1 })] });
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  check('com plano em vigor: nova assinatura mensal é barrada (cobrança em dobro) e nada é criado no Mercado Pago', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /Estender plano/.test(r.error.message) && mpGet().created.length === 0, r.raw);
+  r = await callFn('createAnnualPayment', U.admA.token, { liga: 'la' });
+  check('com plano em vigor: "Estender plano" cria a cobrança anual com título de extensão', r.status === 200 && mpGet().preferences[0].items[0].title === 'Pelada na Mão — Estender plano (+12 meses)' && mpGet().preferences[0].items[0].unit_price === 238.8, r.raw);
+
+  // Estender: o pagamento novo soma 12 meses ao vencimento atual (consulta do app, que também devolve o plano).
+  const approved2 = agoIso(3 * 60000);
+  mpState({ payments: [pay(7001, { date_approved: approved1 }), pay(7002, { date_approved: approved2 })] });
+  r = await callFn('checkSubscriptionStatus', U.admA.token, { liga: 'la' });
+  check('estender: o pagamento novo soma 12 meses ao vencimento atual (24 meses no total)', r.status === 200 && r.result.status === 'active' && r.result.plan === 'annual' && r.result.renewsAt === plus12(plus12(approved1)) && (await league()).subscriptionRenewsAt === plus12(plus12(approved1)), { r: r.raw, L: await league() });
+  check('estender: o pagamento antigo não foi somado de novo, só o novo (2 registros)', (await records()) === 2);
+  r = await callFn('checkSubscriptionStatus', U.admA.token, { liga: 'la' });
+  check('estender: consultar de novo não soma outra vez', r.status === 200 && r.result.renewsAt === plus12(plus12(approved1)) && (await records()) === 2, r.raw);
+  r = await callFn('checkSubscriptionStatus', U.pl1.token, { liga: 'la' });
+  check('jogador comum não consulta a assinatura', r.status === 403, r.raw);
+
+  // Avisos simultâneos (o Mercado Pago repete notificações): a transação garante uma soma só.
+  const base = (await league()).subscriptionRenewsAt;
+  mpState({ payments: [pay(7003)] });
+  const same = await Promise.all([webhook(7003), webhook(7003), webhook(7003)]);
+  check('3 avisos simultâneos do mesmo pagamento: todos respondem 200 e somam uma vez só', same.every(x => x.status === 200) && (await league()).subscriptionRenewsAt === plus12(base) && (await records()) === 3, { same, L: await league() });
+  const base2 = (await league()).subscriptionRenewsAt;
+  mpState({ payments: [pay(7004), pay(7005)] });
+  const two = await Promise.all([webhook(7004), webhook(7005)]);
+  check('2 pagamentos diferentes ao mesmo tempo: somam os dois (24 meses), sem perder nenhum', two.every(x => x.status === 200) && (await league()).subscriptionRenewsAt === plus12(plus12(base2)) && (await records()) === 5, { two, L: await league() });
+
+  // Quem pagava o mensal e estende: soma depois da próxima cobrança e a assinatura mensal é cancelada.
+  const R = new Date(Date.now() + 10 * DAYMS).toISOString();
+  await setLeague(planUntil('monthly', R));
+  mpState({ preapprovals: [{ id: 'sub-m1', external_reference: 'la', status: 'authorized', next_payment_date: R }], payments: [pay(7010)] });
+  w = await webhook(7010);
+  L = await league();
+  check('mensal que estende: vira anual com 12 meses somados à próxima cobrança', w.status === 200 && L.subscriptionPlan === 'annual' && L.subscriptionRenewsAt === plus12(R), { w, L });
+  check('…e a assinatura mensal foi cancelada no Mercado Pago (não cobra em dobro)', JSON.stringify(mpGet().updates) === JSON.stringify([{ id: 'sub-m1', body: { status: 'cancelled' } }]) && mpGet().preapprovals[0].status === 'cancelled', mpGet());
+
+  // Cancelar a assinatura mensal pelo app.
+  const R2 = new Date(Date.now() + 15 * DAYMS).toISOString();
+  await setLeague(planUntil('monthly', R2));
+  mpState({ preapprovals: [{ id: 'sub-m2', external_reference: 'la', status: 'authorized', next_payment_date: R2 }, { id: 'sub-outra', external_reference: 'lb', status: 'authorized', next_payment_date: R2 }] });
+  r = await callFn('cancelSubscription', null, { liga: 'la' });
+  check('cancelar: sem login → não autenticado', r.status === 401, r.raw);
+  r = await callFn('cancelSubscription', U.pl1.token, { liga: 'la' });
+  check('cancelar: jogador não cancela', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+  r = await callFn('cancelSubscription', U.admB.token, { liga: 'la' });
+  check('cancelar: admin de OUTRA liga não cancela', r.status === 403, r.raw);
+  r = await callFn('cancelSubscription', U.admA.token, { liga: '../x' });
+  check('cancelar: liga com caracteres perigosos → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+  check('cancelar: nenhuma negativa cancelou algo nem marcou a liga', mpGet().updates.length === 0 && !('subscriptionCancelledAt' in (await league())));
+  r = await callFn('cancelSubscription', U.admA.token, { liga: 'la' });
+  check('cancelar: o admin cancela a assinatura mensal pelo app', r.status === 200 && r.result.ok === true && r.result.canceled === 1, r.raw);
+  check('cancelar: só a assinatura da liga dele é cancelada no Mercado Pago (a de outra liga não)', JSON.stringify(mpGet().updates.map(u => u.id)) === JSON.stringify(['sub-m2']) && mpGet().preapprovals.find(p => p.id === 'sub-outra').status === 'authorized', mpGet());
+  L = await league();
+  check('cancelar: a liga é marcada como cancelada e segue com o plano até o fim do período pago', typeof L.subscriptionCancelledAt === 'string' && L.subscriptionPlan === 'monthly' && L.subscriptionRenewsAt === R2 && Date.parse(L.subscriptionActiveUntil) > Date.now(), L);
+  const markedAt = L.subscriptionCancelledAt;
+  r = await callFn('cancelSubscription', U.admA.token, { liga: 'la' });
+  check('cancelar de novo: ok, nada mais a cancelar e a data da marca não muda', r.status === 200 && r.result.canceled === 0 && (await league()).subscriptionCancelledAt === markedAt && mpGet().updates.length === 1, r.raw);
+
+  // Depois de cancelar, ainda dá para estender (a partir do vencimento) — e a marca de cancelada some.
+  mpState({ payments: [pay(7011)] });
+  w = await webhook(7011);
+  L = await league();
+  check('estender depois de cancelar: soma 12 meses ao vencimento e tira a marca de cancelada', w.status === 200 && L.subscriptionPlan === 'annual' && L.subscriptionRenewsAt === plus12(R2) && !('subscriptionCancelledAt' in L), L);
+
+  // O que o webhook não aceita.
+  const keep = (await league()).subscriptionRenewsAt;
+  mpState({ payments: [pay(7012)] });
+  w = await webhook(7012, { 'x-signature': 'ts=1,v1=errada', 'x-request-id': 'r1' });
+  check('webhook com assinatura incorreta → 401 e não soma nada', w.status === 401 && (await league()).subscriptionRenewsAt === keep && !(await db.get('owner', 'leagues/la/billing_payments/7012')).json.fields);
+  mpState({ payments: [pay(7013, { transaction_amount: 29.9 })] });
+  w = await webhook(7013);
+  check('webhook: cobrança mensal (R$ 29,90) não vira plano anual', w.status === 200 && (await league()).subscriptionRenewsAt === keep);
+  mpState({ payments: [pay(7014, { status: 'rejected' })] });
+  w = await webhook(7014);
+  check('webhook: pagamento recusado não soma nada', w.status === 200 && (await league()).subscriptionRenewsAt === keep);
+  mpState({ payments: [] });
+  w = await webhook(9999);
+  check('webhook: pagamento que o Mercado Pago não encontra → 500 (ele tenta de novo depois)', w.status === 500 && (await league()).subscriptionRenewsAt === keep);
 
   console.log(`\n${passes} verificações ok, ${fails} falha(s)`);
   process.exit(fails ? 1 : 0);

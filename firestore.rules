@@ -195,6 +195,12 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Pagamentos do plano anual já somados ao vencimento da liga (um registro por pagamento do
+    // Mercado Pago, que impede somar o mesmo pagamento duas vezes). Só o servidor lê e escreve.
+    match /leagues/{leagueId}/billing_payments/{paymentId} {
+      allow read, write: if false;
+    }
+
     // Contadores internos de limite de chamadas (rate limiting) das Cloud Functions.
     // Só o servidor (Admin SDK, que ignora estas regras) lê e escreve aqui.
     match /rate_limits/{docId} {

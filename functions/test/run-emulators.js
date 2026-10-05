@@ -18,14 +18,20 @@ const secretsFile = path.join(root, 'functions', '.secret.local');
 
 // As funções declaram segredos (Mercado Pago, Cloudinary, Resend). No emulador, valores de mentira
 // num .secret.local evitam consultar o Secret Manager de verdade. Só criamos se não houver um.
+// Os do Mercado Pago têm um valor próprio (e não "ainda não configurado"): sem ele o webhook responde
+// 503 e não dá para testá-lo. O token vai para o Mercado Pago simulado, que o ignora.
 const secretNames = ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'RESEND_API_KEY'];
+const secretValues = { MERCADOPAGO_ACCESS_TOKEN: 'TEST-token-so-do-emulador', MERCADOPAGO_WEBHOOK_SECRET: 'segredo-so-do-emulador' };
 const createdSecrets = !fs.existsSync(secretsFile);
-if (createdSecrets) fs.writeFileSync(secretsFile, secretNames.map(n => `${n}=PENDENTE_CONFIGURAR`).join('\n') + '\n');
+if (createdSecrets) fs.writeFileSync(secretsFile, secretNames.map(n => `${n}=${secretValues[n] || 'PENDENTE_CONFIGURAR'}`).join('\n') + '\n');
 fs.writeFileSync(stubFile, JSON.stringify({ preapprovals: [], updates: [] }));
 
 const stub = slash(path.join(__dirname, 'mp-stub.js'));
 const env = {
   ...process.env,
+  // O emulador espera só 10 s para carregar o código das funções; numa máquina lenta (ou na primeira
+  // execução, com o antivírus olhando cada arquivo) isso não basta e nenhuma função responde.
+  FUNCTIONS_DISCOVERY_TIMEOUT: process.env.FUNCTIONS_DISCOVERY_TIMEOUT || '120',
   MP_STUB_FILE: stubFile,
   NODE_OPTIONS: [`--require "${stub}"`, process.env.NODE_OPTIONS].filter(Boolean).join(' '),
 };

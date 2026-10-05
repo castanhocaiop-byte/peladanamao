@@ -6,12 +6,13 @@ const store = new Map();
 let updateCount = 0; // quantas gravações (update) o código fez — prova que repetir é idempotente
 const clone = o => (o === undefined ? undefined : JSON.parse(JSON.stringify(o)));
 class FieldPath { constructor(...segments) { this.segments = segments; } }
-const FieldValue = { delete: () => ({ __delete: true }) };
+const FieldValue = { delete: () => ({ __delete: true }), increment: n => ({ __inc: n }) };
 
 function applyUpdate(data, patch) {
   const out = clone(data) || {};
   for (const [k, v] of Object.entries(patch)) {
     if (v && v.__delete) delete out[k];
+    else if (v && v.__inc !== undefined) out[k] = (out[k] || 0) + v.__inc;
     else out[k] = clone(v);
   }
   return out;
@@ -31,20 +32,60 @@ function refOf(p) {
       updateCount++;
       store.set(p, applyUpdate(store.get(p), patch));
     },
+    collection: name => ({ doc: id => refOf(`${p}/${name}/${id}`) }),
   };
 }
-const fakeDb = { doc: p => refOf(p) };
+// Transação: as leituras veem o estado de antes e as gravações só valem juntas, no fim — se a
+// função falhar no meio, nada foi gravado (é o que a transação de verdade garante).
+let transactionShouldFail = false;
+let transactionRuns = 0;
+const fakeDb = {
+  doc: p => refOf(p),
+  runTransaction: async fn => {
+    transactionRuns++;
+    const writes = [];
+    const tx = {
+      get: async ref => snapOf(ref.path),
+      set: (ref, d) => { writes.push(() => store.set(ref.path, clone(d))); },
+      update: (ref, patch) => {
+        writes.push(() => {
+          if (!store.has(ref.path)) throw new Error('NOT_FOUND ' + ref.path);
+          updateCount++;
+          store.set(ref.path, applyUpdate(store.get(ref.path), patch));
+        });
+      },
+    };
+    const result = await fn(tx);
+    if (transactionShouldFail) throw new Error('transação falhou (simulado)');
+    writes.forEach(w => w());
+    return result;
+  },
+};
+
+// Relógio congelado: o código usa Date.now() e new Date(); os testes de datas precisam de um
+// "agora" fixo para o resultado não mudar com o passar do tempo.
+const RealDate = Date;
+function freezeClock(iso) {
+  const frozen = new RealDate(iso).getTime();
+  global.Date = class extends RealDate {
+    constructor(...a) { if (a.length === 0) super(frozen); else super(...a); }
+    static now() { return frozen; }
+  };
+}
+const unfreezeClock = () => { global.Date = RealDate; };
 
 // ── mock do SDK mercadopago: captura os parâmetros enviados e deixa o teste
 // controlar o que cada chamada devolve ──────────────────────────────────────
-const calls = { preApprovalCreate: [], preferenceCreate: [], preApprovalSearch: [], paymentSearch: [] };
+const calls = { preApprovalCreate: [], preferenceCreate: [], preApprovalSearch: [], paymentSearch: [], preApprovalUpdate: [] };
 let preApprovalGetResult = null;
 let paymentGetResult = null;
 let preApprovalSearchResults = []; // usado pelo fallback checkSubscriptionStatus
 let paymentSearchResults = [];     // idem
 let getShouldThrow = false;
 let searchShouldThrow = false;
+let updateShouldThrow = false;       // simula o Mercado Pago não conseguindo cancelar a assinatura
 let createShouldThrowMessage = null; // simula o SDK do Mercado Pago recusando a criação
+const logs = [];
 
 class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
 class PreApproval {
@@ -56,6 +97,10 @@ class PreApproval {
   async search({ options } = {}) {
     if (searchShouldThrow) throw new Error('falha de rede simulada');
     calls.preApprovalSearch.push(options); return { results: preApprovalSearchResults };
+  }
+  async update({ id, body }) {
+    if (updateShouldThrow) throw new Error('falha ao cancelar (simulada)');
+    calls.preApprovalUpdate.push({ id, body }); return { id, ...body };
   }
 }
 class Preference {
@@ -94,7 +139,7 @@ Module._load = function (request, ...rest) {
   if (request === 'firebase-functions/v2/scheduler') return { onSchedule: (opts, h) => h };
   if (request === 'firebase-admin') return admin;
   if (request === 'firebase-admin/firestore') return { FieldValue, FieldPath };
-  if (request === 'firebase-functions') return { logger: { info() {}, warn() {}, error() {} } };
+  if (request === 'firebase-functions') return { logger: { info: (m, d) => logs.push({ level: 'info', m, d }), warn: (m, d) => logs.push({ level: 'warn', m, d }), error: (m, d) => logs.push({ level: 'error', m, d }) } };
   if (request === 'firebase-functions/params') return { defineSecret: name => ({ value: () => (name === 'MERCADOPAGO_WEBHOOK_SECRET' ? webhookSecretValue : 'fake-' + name) }) };
   if (request === '@google-cloud/firestore') return { v1: { FirestoreAdminClient: class {} } };
   if (request === 'mercadopago') return { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator };
@@ -120,19 +165,28 @@ const fakeRes = () => {
 const DAY = 86400000;
 // Pagamento do plano anual como o Mercado Pago devolve (valor do plano, aprovado agora).
 const annualPay = extra => ({ id: 'pay1', status: 'approved', external_reference: 'L', transaction_amount: 238.8, date_approved: new Date().toISOString(), ...extra });
+// Todos os testes rodam neste "agora" (depois do corte da soma de períodos, ANNUAL_STACKING_FROM
+// no servidor); o teste que precisa de outro dia chama freezeClock de novo depois do reset().
+const NOW_ISO = '2026-12-20T12:00:00.000Z';
 const reset = () => {
+  freezeClock(NOW_ISO);
   store.clear();
   updateCount = 0;
+  transactionRuns = 0;
+  transactionShouldFail = false;
   calls.preApprovalCreate.length = 0;
   calls.preferenceCreate.length = 0;
   calls.preApprovalSearch.length = 0;
   calls.paymentSearch.length = 0;
+  calls.preApprovalUpdate.length = 0;
+  logs.length = 0;
   preApprovalGetResult = null;
   paymentGetResult = null;
   preApprovalSearchResults = [];
   paymentSearchResults = [];
   getShouldThrow = false;
   searchShouldThrow = false;
+  updateShouldThrow = false;
   createShouldThrowMessage = null;
   signatureShouldFail = false;
   signatureMissingHeader = false;
@@ -247,12 +301,17 @@ const reset = () => {
 
   // Regressão: a validade do anual conta da aprovação; consultar de novo um ano depois não pode
   // renovar de graça o mesmo pagamento.
-  paymentSearchResults = [annualPay({ date_approved: new Date(Date.now() - 400 * DAY).toISOString() })];
+  paymentSearchResults = [annualPay({ date_approved: '2025-11-16T12:00:00.000Z' })];
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
   check('check: pagamento anual de mais de um ano atrás não ativa nada', resCheck.status === 'pending' && !store.get('leagues/L').subscriptionPlan);
-  paymentSearchResults = [annualPay({ date_approved: new Date(Date.now() - 10 * DAY).toISOString() })];
+  freezeClock('2028-02-01T12:00:00.000Z');
+  paymentSearchResults = [annualPay({ date_approved: '2026-12-10T10:00:00.000Z' })];
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
-  check('check: anual vale 365 dias a partir da aprovação, não de agora', Math.abs(new Date(resCheck.renewsAt).getTime() - (Date.now() + 355 * DAY)) < 5000);
+  check('check: o mesmo vale para um pagamento feito já na soma de períodos (o período dele acabou)', resCheck.status === 'pending' && !store.get('leagues/L').subscriptionPlan && !store.has('leagues/L/billing_payments/pay1'));
+  freezeClock(NOW_ISO);
+  paymentSearchResults = [annualPay({ date_approved: '2026-12-10T10:00:00.000Z' })];
+  resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('check: anual vale 12 meses a partir da aprovação, não de agora', resCheck.renewsAt === '2027-12-10T10:00:00.000Z');
 
   // Duas assinaturas mensais da mesma liga: vale a de validade mais longa, não a mais recente.
   reset();
@@ -266,14 +325,17 @@ const reset = () => {
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
   check('check: com duas assinaturas mensais, escolhe a de validade mais longa', resCheck.renewsAt === farMonthly && store.get('leagues/L').subscriptionRenewsAt === farMonthly);
 
-  // Mensal e anual ao mesmo tempo: vale a de validade mais longa.
+  // Mensal e anual ao mesmo tempo: o anual soma 12 meses à data que o mensal já deu, e a assinatura
+  // mensal é cancelada (senão cobraria em dobro).
   reset();
   store.set('leagues/L', { name: 'Liga L' });
   store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
-  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: new Date(Date.now() + 20 * DAY).toISOString() }];
+  preApprovalSearchResults = [{ id: 'pre1', status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-09T12:00:00.000Z' }];
   paymentSearchResults = [annualPay()];
   resCheck = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
-  check('check: com mensal e anual, escolhe a de validade mais longa', resCheck.plan === 'annual' && store.get('leagues/L').subscriptionPlan === 'annual');
+  check('check: com mensal e anual, o plano fica anual', resCheck.plan === 'annual' && store.get('leagues/L').subscriptionPlan === 'annual');
+  check('check: …com 12 meses somados à data que o mensal já tinha dado', resCheck.renewsAt === '2028-01-09T12:00:00.000Z' && store.get('leagues/L').subscriptionRenewsAt === '2028-01-09T12:00:00.000Z');
+  check('check: …e a assinatura mensal é cancelada no Mercado Pago', JSON.stringify(calls.preApprovalUpdate) === JSON.stringify([{ id: 'pre1', body: { status: 'cancelled' } }]), calls.preApprovalUpdate);
 
   reset();
   store.set('leagues/L', { name: 'Liga L' });
@@ -358,9 +420,8 @@ const reset = () => {
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
   check('webhook: payment aprovado ativa a liga como anual', store.get('leagues/L').subscriptionPlan === 'annual');
-  check('webhook: subscriptionRenewsAt é ~365 dias (sem a margem técnica)', Math.abs(new Date(store.get('leagues/L').subscriptionRenewsAt).getTime() - (Date.now() + 365 * DAY)) < 5000);
-  const annualUntil = new Date(store.get('leagues/L').subscriptionActiveUntil);
-  check('webhook: ativo por ~365 dias + 1 dia de margem técnica', Math.abs(annualUntil.getTime() - (Date.now() + 366 * DAY)) < 5000);
+  check('webhook: subscriptionRenewsAt é 12 meses depois da aprovação (sem a margem técnica)', store.get('leagues/L').subscriptionRenewsAt === '2027-12-20T12:00:00.000Z');
+  check('webhook: ativo por 12 meses + 1 dia de margem técnica', store.get('leagues/L').subscriptionActiveUntil === '2027-12-21T12:00:00.000Z');
 
   // Regressão grave: a notificação "payment" de uma cobrança mensal da assinatura (R$ 29,90)
   // não pode conceder um ano de acesso.
@@ -379,11 +440,11 @@ const reset = () => {
   // A validade conta da aprovação: reentregas tardias da notificação não estendem o prazo.
   reset();
   store.set('leagues/L', { name: 'Liga L' });
-  paymentGetResult = annualPay({ date_approved: new Date(Date.now() - 10 * DAY).toISOString() });
+  paymentGetResult = annualPay({ date_approved: '2026-12-10T12:00:00.000Z' });
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
-  check('webhook: anual vale 365 dias a partir da aprovação, não de quando a notificação chegou', Math.abs(new Date(store.get('leagues/L').subscriptionRenewsAt).getTime() - (Date.now() + 355 * DAY)) < 5000);
-  paymentGetResult = annualPay({ date_approved: new Date(Date.now() - 400 * DAY).toISOString() });
+  check('webhook: anual vale 12 meses a partir da aprovação, não de quando a notificação chegou', store.get('leagues/L').subscriptionRenewsAt === '2027-12-10T12:00:00.000Z');
+  paymentGetResult = annualPay({ date_approved: '2025-11-16T12:00:00.000Z' });
   store.set('leagues/L', { name: 'Liga L' });
   res = fakeRes();
   await fns.mercadoPagoWebhook(paymentReq, res);
@@ -493,6 +554,325 @@ const reset = () => {
   reset();
   searchShouldThrow = true;
   check('reconcile: falha ao consultar o Mercado Pago propaga o erro (aparece como falha no agendador)', await codeOf(fns.reconcileSubscriptions()) !== 'ok');
+
+  // ═════════════ "Estender plano": cada pagamento anual soma 12 meses ao vencimento ═════════════
+  // Liga L, admin "adm", jogador "jog"; o relógio fica em NOW_ISO (2026-12-20 12:00 UTC).
+  const setup = (league = {}) => {
+    reset();
+    store.set('leagues/L', { name: 'Liga L', ...league });
+    store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+    store.set('users/jog', { email: 'jog@x.com', leagues: { L: { role: 'player' } } });
+  };
+  const leagueOf = () => store.get('leagues/L');
+  const recordOf = id => store.get(`leagues/L/billing_payments/${id}`);
+  const recordCount = () => [...store.keys()].filter(k => k.startsWith('leagues/L/billing_payments/')).length;
+  const paid = (renewsAt, plan = 'monthly', extra = {}) => ({ subscriptionPlan: plan, subscriptionRenewsAt: renewsAt, subscriptionActiveUntil: new Date(Date.parse(renewsAt) + DAY).toISOString(), ...extra });
+  const clearRate = () => { for (const k of [...store.keys()]) if (k.startsWith('rate_limits/')) store.delete(k); };
+  const deliver = async payment => { // o Mercado Pago avisando do pagamento (webhook)
+    paymentGetResult = payment;
+    const r = fakeRes();
+    await fns.mercadoPagoWebhook({ headers: { 'x-signature': 'ts=1,v1=abc', 'x-request-id': 'req1' }, query: { 'data.id': String(payment.id), type: 'payment' }, body: {} }, r);
+    return r;
+  };
+  const sameDates = (l, renewsAt) => l.subscriptionRenewsAt === renewsAt && l.subscriptionActiveUntil === new Date(Date.parse(renewsAt) + DAY).toISOString();
+  const cancelled = () => calls.preApprovalUpdate.map(u => u.id + ':' + u.body.status);
+
+  // ───────── a segunda assinatura mensal é barrada; o resto fica livre ─────────
+  for (const [label, league, blocked] of [
+    ['plano mensal em vigor', paid('2027-01-05T12:00:00.000Z'), true],
+    ['plano anual em vigor', paid('2027-06-05T12:00:00.000Z', 'annual'), true],
+    ['mensal já cancelado, mas ainda no período pago', paid('2027-01-05T12:00:00.000Z', 'monthly', { subscriptionCancelledAt: '2026-12-01T00:00:00.000Z' }), true],
+    ['vence hoje (dentro da tolerância de 1 dia)', paid('2026-12-20T00:00:00.000Z'), true],
+    ['plano vencido', paid('2026-12-01T12:00:00.000Z'), false],
+    ['só o teste grátis', { trialEndsAt: '2027-01-01T00:00:00.000Z' }, false],
+  ]) {
+    setup(league);
+    let err = null;
+    try { await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')); } catch (e) { err = e; }
+    check(`mensal: ${label} → ${blocked ? 'barra a segunda assinatura' : 'deixa assinar'}`, blocked ? (err?.code === 'failed-precondition' && calls.preApprovalCreate.length === 0) : (!err && calls.preApprovalCreate.length === 1), err?.message);
+    if (blocked) check('mensal: …e a mensagem manda usar "Estender plano"', /Estender plano/.test(err.message), err.message);
+  }
+
+  // ───────── o anual cobra o mesmo valor, com título de extensão quando já há plano ─────────
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm'));
+  check('anual: com plano em vigor, o título diz que estende o plano (+12 meses)', calls.preferenceCreate[0].items[0].title === 'Pelada na Mão — Estender plano (+12 meses)', calls.preferenceCreate[0].items[0].title);
+  check('anual: …e o valor é o mesmo do plano anual', calls.preferenceCreate[0].items[0].unit_price === 238.8);
+  setup(paid('2026-12-01T12:00:00.000Z', 'annual'));
+  await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm'));
+  check('anual: com plano vencido, o título é o da assinatura anual', calls.preferenceCreate[0].items[0].title === 'Pelada na Mão — Assinatura anual', calls.preferenceCreate[0].items[0].title);
+  setup();
+  await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm'));
+  check('anual: sem plano, o título é o da assinatura anual', calls.preferenceCreate[0].items[0].title === 'Pelada na Mão — Assinatura anual');
+
+  // ───────── somar: primeiro pagamento, repetição, extensão ─────────
+  setup();
+  let r = await deliver(annualPay({ id: '9001', date_approved: '2026-12-10T10:00:00.000Z' }));
+  check('soma: primeiro pagamento — 12 meses a partir da aprovação', r.statusCode === 200 && leagueOf().subscriptionPlan === 'annual' && sameDates(leagueOf(), '2027-12-10T10:00:00.000Z'), leagueOf());
+  check('soma: o pagamento fica registrado (valor, datas de antes e de depois)', recordOf('9001')?.paymentId === '9001' && recordOf('9001').amount === 238.8 && recordOf('9001').renewsAtBefore === null && recordOf('9001').renewsAtAfter === '2027-12-10T10:00:00.000Z', recordOf('9001'));
+
+  const writes = updateCount;
+  await deliver(annualPay({ id: '9001', date_approved: '2026-12-10T10:00:00.000Z' }));
+  paymentSearchResults = [annualPay({ id: '9001', date_approved: '2026-12-10T10:00:00.000Z' })];
+  await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  await fns.reconcileSubscriptions();
+  check('soma: o mesmo pagamento de novo (webhook, app e reconciliação) não soma outra vez', sameDates(leagueOf(), '2027-12-10T10:00:00.000Z'), leagueOf());
+  check('soma: …não regrava nada e não duplica o registro', updateCount === writes && recordCount() === 1, { updateCount, writes, recordCount: recordCount() });
+
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  await deliver(annualPay({ id: '9002', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('soma: plano anual em vigor — os 12 meses entram DEPOIS do vencimento atual', sameDates(leagueOf(), '2028-03-01T00:00:00.000Z'), leagueOf());
+  check('soma: …e o registro guarda o vencimento de antes', recordOf('9002')?.renewsAtBefore === '2027-03-01T00:00:00.000Z' && recordOf('9002').renewsAtAfter === '2028-03-01T00:00:00.000Z', recordOf('9002'));
+
+  setup(paid('2026-11-01T00:00:00.000Z', 'annual')); // venceu há um mês
+  await deliver(annualPay({ id: '9003', date_approved: '2026-12-10T10:00:00.000Z' }));
+  check('soma: plano já vencido — conta da aprovação do pagamento, não da data antiga', sameDates(leagueOf(), '2027-12-10T10:00:00.000Z'), leagueOf());
+  check('soma: …e o registro mostra que não havia plano em vigor', recordOf('9003')?.renewsAtBefore === null, recordOf('9003'));
+
+  setup();
+  await deliver(annualPay({ id: '9004', date_approved: '2026-12-10T10:00:00.000Z' }));
+  await deliver(annualPay({ id: '9005', date_approved: '2026-12-12T10:00:00.000Z' }));
+  check('soma: dois pagamentos seguidos somam 24 meses', sameDates(leagueOf(), '2028-12-10T10:00:00.000Z') && recordCount() === 2, leagueOf());
+
+  // Dois pagamentos que o servidor ainda não tinha visto, na consulta do app: soma os dois, na
+  // ordem em que foram aprovados, seja qual for a ordem em que o Mercado Pago os lista.
+  for (const reverse of [false, true]) {
+    setup();
+    const list = [annualPay({ id: '9006', date_approved: '2026-12-10T10:00:00.000Z' }), annualPay({ id: '9007', date_approved: '2026-12-12T10:00:00.000Z' })];
+    paymentSearchResults = reverse ? list.reverse() : list;
+    const c = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+    check(`soma: consulta do app com dois pagamentos novos (${reverse ? 'mais novo primeiro' : 'mais antigo primeiro'}) — soma os dois`, c.status === 'active' && c.renewsAt === '2028-12-10T10:00:00.000Z' && recordCount() === 2, { c, leagueRenews: leagueOf().subscriptionRenewsAt });
+  }
+
+  // Fim de mês: 29/02 + 12 meses é 28/02 (não 1º de março).
+  setup();
+  freezeClock('2028-03-05T12:00:00.000Z');
+  await deliver(annualPay({ id: '9008', date_approved: '2028-02-29T10:00:00.000Z' }));
+  check('soma: 29/02 + 12 meses = 28/02 do ano seguinte', leagueOf().subscriptionRenewsAt === '2029-02-28T10:00:00.000Z', leagueOf());
+
+  // Pagamento que já nasceu vencido, ou com identificador/ligação estranha, não grava nada.
+  setup();
+  freezeClock('2028-02-01T12:00:00.000Z');
+  await deliver(annualPay({ id: '9009', date_approved: '2026-12-10T10:00:00.000Z' }));
+  check('soma: pagamento cujo período já acabou não ativa nem deixa registro', !leagueOf().subscriptionPlan && recordCount() === 0, leagueOf());
+  setup();
+  r = await deliver(annualPay({ id: 'a/b' }));
+  check('soma: identificador com "/" é ignorado (sem caminho estranho no banco)', r.statusCode === 200 && !leagueOf().subscriptionPlan && recordCount() === 0 && ![...store.keys()].some(k => k.includes('a/b')), [...store.keys()]);
+  setup();
+  r = await deliver(annualPay({ id: '9010', external_reference: 'NAO-EXISTE' }));
+  check('soma: liga inexistente — 200, sem criar nada', r.statusCode === 200 && !store.has('leagues/NAO-EXISTE') && !store.has('leagues/NAO-EXISTE/billing_payments/9010'));
+
+  // Se a transação falhar nada é gravado pela metade (nem o registro sem a data, nem a data sem o
+  // registro); o Mercado Pago repete o aviso e aí funciona.
+  setup();
+  transactionShouldFail = true;
+  r = await deliver(annualPay({ id: '9011', date_approved: '2026-12-10T10:00:00.000Z' }));
+  check('soma: falha na transação responde 500 (o Mercado Pago repete o aviso)', r.statusCode === 500, r.statusCode);
+  check('soma: …e não grava nada pela metade', !leagueOf().subscriptionPlan && recordCount() === 0, leagueOf());
+  transactionShouldFail = false;
+  r = await deliver(annualPay({ id: '9011', date_approved: '2026-12-10T10:00:00.000Z' }));
+  check('soma: …e quando a repetição chega, soma normalmente', r.statusCode === 200 && sameDates(leagueOf(), '2027-12-10T10:00:00.000Z'), leagueOf());
+
+  // Pagamentos anteriores à soma de períodos (só os de teste) seguem a regra antiga e não são somados de novo.
+  setup();
+  freezeClock('2026-10-15T00:00:00.000Z');
+  await deliver(annualPay({ id: '8001', date_approved: '2026-10-01T10:00:00.000Z' }));
+  check('antigo: pagamento anterior ao corte vale 365 dias a partir da aprovação', sameDates(leagueOf(), '2027-10-01T10:00:00.000Z'), leagueOf());
+  check('antigo: …e não gera registro', recordCount() === 0);
+  const writesOld = updateCount;
+  await deliver(annualPay({ id: '8001', date_approved: '2026-10-01T10:00:00.000Z' }));
+  check('antigo: repetir não muda nada', updateCount === writesOld && sameDates(leagueOf(), '2027-10-01T10:00:00.000Z'));
+  await deliver(annualPay({ id: '8002', date_approved: '2026-10-14T10:00:00.000Z' }));
+  check('antigo: um pagamento novo soma 12 meses por cima da data que a regra antiga deu', sameDates(leagueOf(), '2028-10-01T10:00:00.000Z') && recordCount() === 1, leagueOf());
+
+  // ───────── mensal → estender: soma e cancela a assinatura mensal ─────────
+  const monthlyPre = (extra = {}) => ({ id: 'preM', status: 'authorized', external_reference: 'L', next_payment_date: '2026-12-30T00:00:00.000Z', ...extra });
+  setup(paid('2026-12-30T00:00:00.000Z'));
+  preApprovalSearchResults = [monthlyPre()];
+  await deliver(annualPay({ id: '9101', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('estender: quem pagava o mensal — os 12 meses entram depois da próxima cobrança', leagueOf().subscriptionPlan === 'annual' && sameDates(leagueOf(), '2027-12-30T00:00:00.000Z'), leagueOf());
+  check('estender: …e a assinatura mensal é cancelada no Mercado Pago (não cobra em dobro)', JSON.stringify(cancelled()) === JSON.stringify(['preM:cancelled']), cancelled());
+  check('estender: …procurando só as autorizadas da própria liga', calls.preApprovalSearch.some(o => o.external_reference === 'L' && o.status === 'authorized'), calls.preApprovalSearch);
+
+  // O Mercado Pago acabou de cobrar mais um mês e a liga ainda não soube: o anual soma 12 meses à data
+  // nova da cobrança, não à antiga (pela notificação do pagamento, que não passa pela reconciliação).
+  setup(paid('2026-12-20T00:00:00.000Z')); // venceria hoje
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-01-20T00:00:00.000Z' })];
+  await deliver(annualPay({ id: '9111', date_approved: '2026-12-20T11:00:00.000Z' }));
+  check('estender: soma sobre a próxima cobrança que o Mercado Pago informa agora, não sobre a data antiga da liga', leagueOf().subscriptionPlan === 'annual' && sameDates(leagueOf(), '2028-01-20T00:00:00.000Z') && JSON.stringify(cancelled()) === JSON.stringify(['preM:cancelled']), { league: leagueOf(), cancelled: cancelled() });
+  setup(paid('2026-12-30T00:00:00.000Z'));
+  preApprovalSearchResults = [
+    monthlyPre(),
+    { id: 'preOutra', status: 'authorized', external_reference: 'OUTRA', next_payment_date: '2030-01-01T00:00:00.000Z' }, // de outra liga: nunca conta nem se cancela
+  ];
+  await deliver(annualPay({ id: '9113', date_approved: '2026-12-20T11:00:00.000Z' }));
+  check('estender: assinatura de outra liga na resposta do Mercado Pago é ignorada (não vira data da liga nem é cancelada)', sameDates(leagueOf(), '2027-12-30T00:00:00.000Z') && JSON.stringify(cancelled()) === JSON.stringify(['preM:cancelled']), { league: leagueOf(), cancelled: cancelled() });
+  setup(paid('2026-12-20T00:00:00.000Z'));
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-01-20T00:00:00.000Z' })];
+  searchShouldThrow = true;
+  r = await deliver(annualPay({ id: '9112', date_approved: '2026-12-20T11:00:00.000Z' }));
+  check('estender: se não der para consultar o Mercado Pago, o aviso responde 500 (ele repete) e nada é somado antes da hora', r.statusCode === 500 && sameDates(leagueOf(), '2026-12-20T00:00:00.000Z') && recordCount() === 0, { code: r.statusCode, league: leagueOf() });
+  searchShouldThrow = false;
+
+  // Não conseguiu cancelar: o plano estendido fica (a pessoa pagou), o erro fica no log e a
+  // reconciliação tenta de novo.
+  setup(paid('2026-12-30T00:00:00.000Z'));
+  preApprovalSearchResults = [monthlyPre()];
+  updateShouldThrow = true;
+  r = await deliver(annualPay({ id: '9102', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('estender: cancelamento recusado — o plano estendido fica e o aviso responde 200', r.statusCode === 200 && sameDates(leagueOf(), '2027-12-30T00:00:00.000Z'), { code: r.statusCode, league: leagueOf() });
+  check('estender: …o erro fica no log', logs.some(l => l.level === 'error' && /cancelar a assinatura mensal/.test(l.m)), logs);
+  updateShouldThrow = false;
+  paymentSearchResults = [];
+  await fns.reconcileSubscriptions();
+  check('estender: …e a reconciliação cancela depois', JSON.stringify(cancelled()) === JSON.stringify(['preM:cancelled']) && sameDates(leagueOf(), '2027-12-30T00:00:00.000Z'), { cancelled: cancelled(), league: leagueOf() });
+  calls.preApprovalUpdate.length = 0;
+  preApprovalSearchResults = []; // cancelada: o Mercado Pago já não a lista como autorizada
+  await fns.reconcileSubscriptions();
+  check('estender: …e de novo não faz nada se já não há assinatura autorizada', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+
+  // Só se cancela o que o plano anual já cobre.
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-06-01T00:00:00.000Z' })]; // cobraria só depois de o anual acabar
+  await fns.reconcileSubscriptions();
+  check('estender: assinatura mensal que só cobraria depois do fim do anual não é cancelada', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+  setup(paid('2026-11-01T00:00:00.000Z', 'annual')); // anual já vencido
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-01-05T00:00:00.000Z' })];
+  await fns.reconcileSubscriptions();
+  check('estender: com o anual vencido a mensal é a assinatura da liga e não é cancelada', calls.preApprovalUpdate.length === 0 && leagueOf().subscriptionPlan === 'monthly', { updates: calls.preApprovalUpdate, league: leagueOf() });
+  setup(paid('2026-11-01T00:00:00.000Z', 'annual')); // anual vencido
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2026-10-20T00:00:00.000Z' })]; // cobrança da mensal atrasada (ainda tentando)
+  await fns.reconcileSubscriptions();
+  check('estender: anual vencido e mensal com a cobrança atrasada — não há plano anual cobrindo nada, não cancela', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+  // O mesmo aviso de pagamento chegando de novo (já somado) não cancela uma mensal que só cobraria depois do fim do anual.
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  store.set('leagues/L/billing_payments/9401', { paymentId: '9401', renewsAtAfter: '2027-03-01T00:00:00.000Z' });
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-06-01T00:00:00.000Z' })];
+  await deliver(annualPay({ id: '9401', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('estender: aviso repetido de pagamento já somado, com uma mensal que dura mais que o anual — nada é cancelado e a liga fica com a de validade mais longa', calls.preApprovalUpdate.length === 0 && leagueOf().subscriptionPlan === 'monthly' && sameDates(leagueOf(), '2027-06-01T00:00:00.000Z'), { updates: calls.preApprovalUpdate, league: leagueOf() });
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  preApprovalSearchResults = [
+    monthlyPre({ id: 'preDentro', next_payment_date: '2027-01-05T00:00:00.000Z' }),
+    { id: 'preSemLiga', status: 'authorized', external_reference: 'NAO-EXISTE', next_payment_date: '2027-01-05T00:00:00.000Z' }, // liga que não existe
+    { id: 'preSemRef', status: 'authorized', next_payment_date: '2027-01-05T00:00:00.000Z' },                                     // sem referência
+  ];
+  await fns.reconcileSubscriptions();
+  check('estender: cancela só a assinatura mensal coberta de uma liga que existe', JSON.stringify(cancelled()) === JSON.stringify(['preDentro:cancelled']) && leagueOf().subscriptionPlan === 'annual', { cancelled: cancelled(), league: leagueOf() });
+
+  // Ordem na consulta do app e na reconciliação: a assinatura mensal primeiro, depois os pagamentos
+  // anuais — o anual soma 12 meses ao vencimento que a mensal já tinha dado.
+  setup(paid('2026-12-27T00:00:00.000Z')); // a liga ainda guarda a data de antes da última cobrança mensal
+  freezeClock('2026-12-27T12:00:00.000Z');
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-01-27T00:00:00.000Z' })]; // o Mercado Pago já cobrou o mês e avançou a data
+  paymentSearchResults = [annualPay({ id: '9103', date_approved: '2026-12-27T10:00:00.000Z' })];
+  await fns.reconcileSubscriptions();
+  check('ordem: reconciliação — a assinatura mensal entra antes do pagamento anual', leagueOf().subscriptionPlan === 'annual' && sameDates(leagueOf(), '2028-01-27T00:00:00.000Z'), leagueOf());
+  setup(paid('2026-12-27T00:00:00.000Z'));
+  freezeClock('2026-12-27T12:00:00.000Z');
+  preApprovalSearchResults = [monthlyPre({ next_payment_date: '2027-01-27T00:00:00.000Z' })];
+  paymentSearchResults = [annualPay({ id: '9103', date_approved: '2026-12-27T10:00:00.000Z' })];
+  await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('ordem: consulta do app — a assinatura mensal entra antes do pagamento anual', leagueOf().subscriptionPlan === 'annual' && sameDates(leagueOf(), '2028-01-27T00:00:00.000Z'), leagueOf());
+
+  // ───────── a consulta do app devolve o plano da liga (o app compara a data de antes e a de depois) ─────────
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  let st = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('consulta: pagamento novo ainda não visível — devolve o plano de antes, com a mesma data', st.status === 'active' && st.plan === 'annual' && st.renewsAt === '2027-03-01T00:00:00.000Z', st);
+  paymentSearchResults = [annualPay({ id: '9201', date_approved: '2026-12-20T11:00:00.000Z' })];
+  st = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('consulta: pagamento novo visível — a data devolvida avança 12 meses', st.status === 'active' && st.renewsAt === '2028-03-01T00:00:00.000Z', st);
+  setup();
+  st = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('consulta: sem plano e sem pagamento — pending', st.status === 'pending');
+
+  // ───────── cancelSubscription (cancelar a assinatura mensal pelo app) ─────────
+  const cancelSub = async (uid = 'adm') => { clearRate(); return call(fns.cancelSubscription, { liga: 'L' }, authOf(uid)); };
+  const open = [
+    { id: 'a1', external_reference: 'L', status: 'authorized', next_payment_date: '2027-01-05T12:00:00.000Z' }, // a mesma data que a liga já tem
+    { id: 'a2', external_reference: 'L', status: 'paused' },
+    { id: 'a4', external_reference: 'L', status: 'cancelled' },          // já cancelada: não mexe
+    { id: 'x1', external_reference: 'OUTRA', status: 'authorized' },     // OUTRA liga: nunca pode ser cancelada
+  ];
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  preApprovalSearchResults = open;
+  check('cancelar: sem login', await codeOf(call(fns.cancelSubscription, { liga: 'L' })) === 'unauthenticated');
+  check('cancelar: jogador comum não pode', await codeOf(cancelSub('jog')) === 'permission-denied');
+  check('cancelar: liga inválida', await codeOf(call(fns.cancelSubscription, { liga: '../x' }, authOf('adm'))) === 'invalid-argument');
+  check('cancelar: liga inexistente', await codeOf((async () => { clearRate(); store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' }, FANTASMA: { role: 'admin' } } }); return call(fns.cancelSubscription, { liga: 'FANTASMA' }, authOf('adm')); })()) === 'not-found');
+  check('cancelar: nada foi cancelado nas recusas', calls.preApprovalUpdate.length === 0 && !leagueOf().subscriptionCancelledAt, calls.preApprovalUpdate);
+  r = await cancelSub();
+  check('cancelar: responde ok com a quantidade cancelada', r.ok === true && r.canceled === 2, r);
+  check('cancelar: cancela as assinaturas abertas da liga (autorizada e pausada) e só elas', JSON.stringify(cancelled()) === JSON.stringify(['a1:cancelled', 'a2:cancelled']), cancelled());
+  check('cancelar: marca a liga como cancelada', leagueOf().subscriptionCancelledAt === NOW_ISO, leagueOf());
+  check('cancelar: o plano segue valendo até o fim do período pago (datas e plano intactos)', leagueOf().subscriptionPlan === 'monthly' && sameDates(leagueOf(), '2027-01-05T12:00:00.000Z'), leagueOf());
+  freezeClock('2026-12-22T12:00:00.000Z');
+  r = await cancelSub();
+  check('cancelar: repetir não muda a data em que foi cancelada', r.ok === true && leagueOf().subscriptionCancelledAt === NOW_ISO, leagueOf());
+
+  // O Mercado Pago acabou de cobrar mais um mês e a liga ainda não soube (a reconciliação roda de 6 em 6
+  // horas): cancelar não pode fazer a pessoa perder esse mês já pago.
+  setup(paid('2026-12-20T00:00:00.000Z')); // a data que a liga ainda guarda (venceria hoje)
+  preApprovalSearchResults = [{ id: 'a1', external_reference: 'L', status: 'authorized', next_payment_date: '2027-01-20T00:00:00.000Z' }];
+  r = await cancelSub();
+  check('cancelar logo depois de uma cobrança: a liga guarda o mês já pago (data nova do Mercado Pago) antes de cancelar', r.ok === true && leagueOf().subscriptionPlan === 'monthly' && sameDates(leagueOf(), '2027-01-20T00:00:00.000Z') && leagueOf().subscriptionCancelledAt === NOW_ISO && cancelled().join() === 'a1:cancelled', leagueOf());
+  setup(paid('2026-12-20T00:00:00.000Z'));
+  preApprovalSearchResults = [{ id: 'a1', external_reference: 'L', status: 'authorized', next_payment_date: '2027-01-20T00:00:00.000Z' }];
+  updateShouldThrow = true;
+  const keepErr = await (async () => { try { await cancelSub(); return null; } catch (e) { return e; } })();
+  check('…e se o Mercado Pago recusar o cancelamento, o mês pago continua guardado (e a liga não é marcada como cancelada)', keepErr?.code === 'failed-precondition' && sameDates(leagueOf(), '2027-01-20T00:00:00.000Z') && !leagueOf().subscriptionCancelledAt, leagueOf());
+  updateShouldThrow = false;
+
+  // A mensal que a pessoa já cancelou direto no Mercado Pago: não há o que cancelar, mas a liga é marcada.
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  preApprovalSearchResults = [{ id: 'a4', external_reference: 'L', status: 'cancelled' }];
+  r = await cancelSub();
+  check('cancelar: sem assinatura aberta no Mercado Pago — ok, e a liga é marcada como cancelada', r.ok === true && r.canceled === 0 && leagueOf().subscriptionCancelledAt === NOW_ISO, { r, league: leagueOf() });
+
+  // Plano anual: não renova sozinho, não há "cancelada" para mostrar.
+  setup(paid('2027-06-05T12:00:00.000Z', 'annual'));
+  preApprovalSearchResults = [];
+  r = await cancelSub();
+  check('cancelar: no plano anual não marca a liga como cancelada', r.ok === true && !leagueOf().subscriptionCancelledAt, leagueOf());
+
+  // O Mercado Pago falhou: nada é marcado, a pessoa vê a mensagem e pode tentar de novo.
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  preApprovalSearchResults = open;
+  searchShouldThrow = true;
+  let cerr = await (async () => { try { await cancelSub(); return null; } catch (e) { return e; } })();
+  check('cancelar: Mercado Pago fora do ar ao conferir — failed-precondition, nada marcado', cerr?.code === 'failed-precondition' && /conferir/.test(cerr.message) && !leagueOf().subscriptionCancelledAt, cerr?.message);
+  searchShouldThrow = false;
+  updateShouldThrow = true;
+  cerr = await (async () => { try { await cancelSub(); return null; } catch (e) { return e; } })();
+  check('cancelar: Mercado Pago recusa o cancelamento — failed-precondition, nada marcado', cerr?.code === 'failed-precondition' && /cancelar/.test(cerr.message) && !leagueOf().subscriptionCancelledAt, cerr?.message);
+  updateShouldThrow = false;
+  r = await cancelSub();
+  check('cancelar: …e tentar de novo, com o Mercado Pago de volta, conclui', r.ok === true && leagueOf().subscriptionCancelledAt === NOW_ISO, leagueOf());
+
+  // Assinatura "pending" (checkout aberto e nunca concluído) não cobra nada: se não cancelar, não trava.
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  preApprovalSearchResults = [{ id: 'p1', external_reference: 'L', status: 'pending' }];
+  updateShouldThrow = true;
+  r = await cancelSub();
+  check('cancelar: assinatura pendente que não cancela não trava', r.ok === true && leagueOf().subscriptionCancelledAt === NOW_ISO, r);
+  updateShouldThrow = false;
+
+  // Limite de chamadas por minuto (a 6ª é barrada).
+  setup(paid('2027-01-05T12:00:00.000Z'));
+  preApprovalSearchResults = [];
+  const codes = [];
+  for (let i = 0; i < 6; i++) codes.push(await codeOf(call(fns.cancelSubscription, { liga: 'L' }, authOf('adm'))));
+  check('cancelar: a 6ª chamada em um minuto é barrada', codes.slice(0, 5).every(c => c === 'ok') && codes[5] === 'resource-exhausted', codes);
+
+  // ───────── assinar de novo desfaz o "cancelada" ─────────
+  setup(paid('2026-12-01T12:00:00.000Z', 'monthly', { subscriptionCancelledAt: '2026-11-20T00:00:00.000Z' })); // cancelou, o plano acabou
+  preApprovalGetResult = { status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-15T00:00:00.000Z' };
+  const subReq = { headers: { 'x-signature': 'ts=1,v1=abc', 'x-request-id': 'req1' }, query: { 'data.id': '123', type: 'preapproval' }, body: {} };
+  await fns.mercadoPagoWebhook(subReq, fakeRes());
+  check('assinar de novo: nova assinatura mensal autorizada tira a marca de cancelada', leagueOf().subscriptionPlan === 'monthly' && sameDates(leagueOf(), '2027-01-15T00:00:00.000Z') && leagueOf().subscriptionCancelledAt === undefined, leagueOf());
+  setup(paid('2027-01-05T12:00:00.000Z', 'monthly', { subscriptionCancelledAt: '2026-12-01T00:00:00.000Z' }));
+  await deliver(annualPay({ id: '9301', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('estender: pagar o anual também tira a marca de cancelada', leagueOf().subscriptionPlan === 'annual' && leagueOf().subscriptionCancelledAt === undefined && sameDates(leagueOf(), '2028-01-05T12:00:00.000Z'), leagueOf());
+  unfreezeClock();
 
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
   if (fails) process.exitCode = 1;
