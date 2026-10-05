@@ -85,12 +85,15 @@ let getShouldThrow = false;
 let searchShouldThrow = false;
 let updateShouldThrow = false;       // simula o Mercado Pago não conseguindo cancelar a assinatura
 let createShouldThrowMessage = null; // simula o SDK do Mercado Pago recusando a criação
+let createShouldThrowStatus = 400; // status HTTP da recusa simulada (0 = falha de rede, sem status)
+let createShouldThrowCode = null; // código de rede da falha simulada (ex.: ETIMEDOUT)
+const makeCreateError = () => { const e = new Error(createShouldThrowMessage); if (createShouldThrowStatus) e.status = createShouldThrowStatus; if (createShouldThrowCode) e.code = createShouldThrowCode; return e; };
 const logs = [];
 
 class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
 class PreApproval {
   async create({ body }) {
-    if (createShouldThrowMessage) { const e = new Error(createShouldThrowMessage); e.status = 400; throw e; }
+    if (createShouldThrowMessage !== null) throw makeCreateError();
     calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/preapproval/xyz' };
   }
   async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...preApprovalGetResult }; }
@@ -105,7 +108,7 @@ class PreApproval {
 }
 class Preference {
   async create({ body }) {
-    if (createShouldThrowMessage) { const e = new Error(createShouldThrowMessage); e.status = 400; throw e; }
+    if (createShouldThrowMessage !== null) throw makeCreateError();
     calls.preferenceCreate.push(body); return { init_point: 'https://mp.test/preference/xyz' };
   }
 }
@@ -355,10 +358,40 @@ const reset = () => {
 
   const monthlyErr = await (async () => { try { await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
   check('mensal: erro do Mercado Pago vira failed-precondition (não internal)', monthlyErr?.code === 'failed-precondition');
-  check('mensal: mensagem do erro inclui a causa real do Mercado Pago', monthlyErr?.message?.includes('Both payer and collector must be real or test users'));
+  check('mensal: a mensagem vem em português e explica a mistura de conta de teste com conta real', /misturar conta de teste com conta real/.test(monthlyErr?.message || ''), monthlyErr?.message);
+  check('mensal: o inglês do Mercado Pago não vai para a tela', !/Both payer/.test(monthlyErr?.message || ''), monthlyErr?.message);
+  check('mensal: o texto original do Mercado Pago fica no log, no campo "erro" (um "message" seria apagado pelo texto do log)', logs.some(l => l.level === 'warn' && /recusou a criação da assinatura mensal/.test(l.m) && l.d?.erro === 'Both payer and collector must be real or test users' && l.d?.status === 400 && l.d?.tipo === 'contaTeste'), logs);
 
   const annualErr = await (async () => { try { await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
   check('anual: erro do Mercado Pago também vira failed-precondition', annualErr?.code === 'failed-precondition');
+  check('anual: a mensagem também vem em português', /misturar conta de teste com conta real/.test(annualErr?.message || ''), annualErr?.message);
+
+  // Os outros tipos de recusa: cada um com a sua mensagem, o tipo de log certo e sem despejar inglês na tela.
+  const refusal = async (message, status, code) => {
+    createShouldThrowMessage = message; createShouldThrowStatus = status; createShouldThrowCode = code || null; logs.length = 0;
+    const err = await (async () => { try { await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')); return null; } catch (e) { return e; } })();
+    createShouldThrowMessage = null; createShouldThrowStatus = 400; createShouldThrowCode = null;
+    return { err, log: logs.find(l => /Mercado Pago recusou/.test(l.m)) };
+  };
+  let rf = await refusal('Payer is associated with a different site', 400);
+  check('recusa "outro país": mensagem em português, sem a dica de teste na produção', rf.err?.code === 'failed-precondition' && /outro país/.test(rf.err.message) && !/different site/i.test(rf.err.message) && !/testuser/.test(rf.err.message), rf.err?.message);
+  check('recusa "outro país": cita o e-mail de suporte', rf.err?.message?.includes('contato@peladanamao.com.br'), rf.err?.message);
+  rf = await refusal('payer and collector cannot be the same user', 400);
+  check('recusa "mesma conta": diz que a conta que recebe não pode pagar a si mesma', /não pode pagar para si mesma/.test(rf.err?.message || ''), rf.err?.message);
+  rf = await refusal('payer_email is required', 400);
+  check('recusa de e-mail: pede para conferir o e-mail', /não aceitou o e-mail da sua conta/.test(rf.err?.message || ''), rf.err?.message);
+  rf = await refusal('Unauthorized use of live credentials', 403);
+  check('credenciais de produção não liberadas: mensagem de "ainda não liberado", registrada como ERRO (problema nosso)', /ainda não está liberado/.test(rf.err?.message || '') && rf.log?.level === 'error' && rf.log.d.tipo === 'liberacao', rf);
+  rf = await refusal('invalid access token', 401);
+  check('token inválido: "problema do nosso lado", registrado como ERRO, sem expor o motivo ao usuário', /problema do nosso lado/.test(rf.err?.message || '') && rf.log?.level === 'error' && !/token/i.test(rf.err.message), rf);
+  rf = await refusal('Service Unavailable', 503);
+  check('Mercado Pago fora do ar (503): "tente de novo em alguns minutos"', /Tente de novo em alguns minutos/.test(rf.err?.message || '') && rf.log?.d.tipo === 'instavel', rf);
+  rf = await refusal('fetch failed', 0, 'ETIMEDOUT');
+  check('falha de rede, sem status: também "tente de novo em alguns minutos"', /Tente de novo em alguns minutos/.test(rf.err?.message || '') && rf.log?.d.tipo === 'instavel', rf);
+  rf = await refusal('Algo que nunca vimos: erro 12345', 400);
+  check('recusa desconhecida: mensagem genérica em português COM o texto original para a pessoa nos informar', /não aceitou a solicitação/.test(rf.err?.message || '') && rf.err.message.includes('Algo que nunca vimos: erro 12345') && rf.log?.d.tipo === 'desconhecido', rf);
+  rf = await refusal('', 400);
+  check('recusa sem nenhum texto: ainda assim uma mensagem em português (nunca vazia, nunca "undefined")', !!rf.err?.message && !/undefined|null/.test(rf.err.message) && /não aceitou a solicitação/.test(rf.err.message), rf.err?.message);
 
   // ───────── mercadoPagoWebhook ─────────
   reset();

@@ -79,6 +79,10 @@ jobs:
         working-directory: functions
         run: node test/staging-secret-test.js
 
+      - name: Testes da tradução dos erros do Mercado Pago
+        working-directory: functions
+        run: node test/mp-errors-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js

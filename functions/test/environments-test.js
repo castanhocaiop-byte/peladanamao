@@ -58,6 +58,7 @@ const emails = [];
 let fetchCalls = 0;
 let resendKey = 'fake-resend-key';
 const logs = [];
+let mpCreateError = null; // texto com que o Mercado Pago falso recusa a criação (null = aceita)
 
 global.fetch = async (url, opts) => {
   fetchCalls++;
@@ -83,7 +84,7 @@ function loadServer(projectId) {
     if (request === '@google-cloud/firestore') return { v1: { FirestoreAdminClient: class { databasePath(p, d) { return `projects/${p}/databases/${d}`; } async exportDocuments(args) { calls.exportDocuments.push(args); return [{ name: 'op-1' }]; } } } };
     if (request === 'mercadopago') return {
       MercadoPagoConfig: class { constructor(o) { this.opts = o; } },
-      PreApproval: class { async create({ body }) { calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/pre' }; } async get() { return {}; } async search() { return { results: [] }; } },
+      PreApproval: class { async create({ body }) { if (mpCreateError) { const e = new Error(mpCreateError); e.status = 400; throw e; } calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/pre' }; } async get() { return {}; } async search() { return { results: [] }; } },
       Preference: class { async create({ body }) { calls.preferenceCreate.push(body); return { init_point: 'https://mp.test/pref' }; } },
       Payment: class { async get() { return {}; } async search() { return { results: [] }; } },
       WebhookSignatureValidator: class { static validate() {} },
@@ -109,8 +110,8 @@ const reset = () => {
   store.set('leagues/L', { name: 'Liga L', trialEndsAt: iso(Date.now() - 90 * DAY), subscriptionPlan: 'annual', subscriptionRenewsAt: iso(Date.now() + 20 * DAY), subscriptionActiveUntil: iso(Date.now() + 21 * DAY) });
 };
 
-const PRODUCTION = { appUrl: 'https://peladanamao.com.br/', webhook: 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook', prefix: '', backups: true };
-const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'https://us-east1-seriebaceoma-staging.cloudfunctions.net/mercadoPagoWebhook', prefix: '[TESTE] ', backups: false };
+const PRODUCTION = { appUrl: 'https://peladanamao.com.br/', webhook: 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook', prefix: '', backups: true, hint: false };
+const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'https://us-east1-seriebaceoma-staging.cloudfunctions.net/mercadoPagoWebhook', prefix: '[TESTE] ', backups: false, hint: true };
 
 (async () => {
   const projects = [
@@ -138,6 +139,14 @@ const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'htt
     check(`${label}: cobrança anual avisa o webhook do próprio ambiente`, pref?.notification_url === want.webhook, pref?.notification_url);
     check(`${label}: …e as três voltas do checkout (ok, pendente, falha) vão para o próprio site`, ['success', 'pending', 'failure'].every(k => pref?.back_urls?.[k] === `${want.appUrl}?mpReturn=M`), pref?.back_urls);
 
+    // Recusa do Mercado Pago: a mensagem chega em português; só o ambiente de teste acrescenta a dica do comprador de teste.
+    reset();
+    mpCreateError = 'Payer is associated with a different site';
+    let refusal; try { await fns.createMonthlySubscription({ data: { liga: 'M' }, auth }); } catch (e) { refusal = e; }
+    mpCreateError = null;
+    check(`${label}: recusa do Mercado Pago chega em português (e não em inglês)`, refusal?.code === 'failed-precondition' && /outro país/.test(refusal.message) && !/different site/i.test(refusal.message), refusal?.message);
+    check(`${label}: …${want.hint ? 'com' : 'sem'} a dica do comprador de teste`, /test_user_NÚMEROS@testuser\.com/.test(refusal?.message || '') === want.hint, refusal?.message);
+    check(`${label}: …e o texto original do Mercado Pago fica no log, no campo "erro"`, logs.some(l => l.level === 'warn' && l.d?.erro === 'Payer is associated with a different site' && l.d?.status === 400), logs);
     // E-mails: assunto marcado no teste, link do próprio site; sem chave do Resend nada é enviado nem anotado.
     reset();
     await fns.notifyBillingEmails();

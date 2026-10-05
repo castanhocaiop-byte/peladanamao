@@ -100,7 +100,8 @@ usuário, tudo em minúsculas: a conta `TESTUSER2702948457827838830` tem o e-mai
 `TESTUSER2702948457827838830@testuser.com`, que não existe no Mercado Pago) leva "Payer is associated with a
 different site" (confirmado em 05/10/2026: o mesmo comprador, com o e-mail certo, pagou normalmente); com um
 e-mail real, o Mercado Pago recusa com "Both payer and collector must be real or test users". Se o painel
-mostrar outro e-mail para a conta, vale o do painel. Para o teste completo, crie a conta do app já com esse
+mostrar outro e-mail para a conta, vale o do painel (no teste, o app já mostra essa dica na mensagem de
+recusa, em português; o texto original do Mercado Pago fica no log, no campo `erro`). Para o teste completo, crie a conta do app já com esse
 e-mail (o e-mail de uma conta existente não troca) e, de preferência, numa janela anônima, sem a conta real do
 Mercado Pago logada. Esse e-mail não recebe mensagens: anote a senha, porque o "Esqueci minha senha" não
 chegaria.

@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const admin = require("firebase-admin");
 const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
 const { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator } = require("mercadopago");
+const { describeMpError } = require("./mp-errors");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -426,7 +427,7 @@ async function deleteCloudinaryAsset(url) {
       logger.warn("Cloudinary destroy não confirmou a exclusão do arquivo", { result: json.result });
     }
   } catch (e) {
-    logger.warn("Falha ao pedir ao Cloudinary para apagar o arquivo", { message: e?.message });
+    logger.warn("Falha ao pedir ao Cloudinary para apagar o arquivo", { erro: e?.message });
   }
 }
 
@@ -1160,7 +1161,7 @@ async function sendAbandonWarningEmail(to, leagueId) {
     });
     if (!res.ok) logger.warn("Resend não confirmou o envio do aviso de abandono", { status: res.status, leagueId });
   } catch (e) {
-    logger.warn("Falha ao chamar a API do Resend para aviso de abandono", { message: e?.message, leagueId });
+    logger.warn("Falha ao chamar a API do Resend para aviso de abandono", { erro: e?.message, leagueId });
   }
 }
 
@@ -1239,13 +1240,17 @@ async function requireLeagueAdminWithEmail(auth, liga) {
 // O SDK do Mercado Pago lança exceções próprias (MPBadRequestError etc.) que, sem
 // tratamento, o Firebase Functions converte num "internal" genérico sem detalhe nenhum
 // para quem chamou — o app ficava parecendo travado, sem nenhuma mensagem visível.
-// Envolver a chamada aqui devolve sempre um erro com a causa real.
+// Envolver a chamada aqui devolve sempre um erro que o app consegue mostrar. A mensagem vai em
+// português (mp-errors.js traduz o que o Mercado Pago responde em inglês e diz o que a pessoa pode
+// fazer); o texto original fica no log, no campo "erro" — um campo chamado "message" seria apagado
+// pelo texto do próprio log, e foi assim que a causa de uma recusa já se perdeu.
 async function callMp(action, factory) {
   try {
     return await factory();
   } catch (e) {
-    logger.warn(`Mercado Pago recusou ${action}`, { message: e?.message, status: e?.status });
-    throw fail("failed-precondition", `O Mercado Pago recusou a solicitação: ${e?.message || "erro desconhecido"}.`);
+    const info = describeMpError(e, { contact: CONTACT_EMAIL, testHint: ENV !== PRODUCTION_ENV });
+    logger[info.severity](`Mercado Pago recusou ${action}`, { tipo: info.kind, status: info.status, erro: info.raw });
+    throw fail("failed-precondition", info.text);
   }
 }
 
@@ -1472,7 +1477,7 @@ async function cancelOpenPreapprovals(liga, { keepPaidPeriod = false } = {}) {
   try {
     open = await searchOpenPreapprovals(client, liga);
   } catch (e) {
-    logger.warn("Falha ao consultar as assinaturas da liga no Mercado Pago", { liga, message: e?.message });
+    logger.warn("Falha ao consultar as assinaturas da liga no Mercado Pago", { liga, erro: e?.message });
     throw mpStepError("search", "Não foi possível consultar as assinaturas no Mercado Pago.");
   }
   if (keepPaidPeriod) {
@@ -1483,7 +1488,7 @@ async function cancelOpenPreapprovals(liga, { keepPaidPeriod = false } = {}) {
     try {
       await new PreApproval(client).update({ id: pre.id, body: { status: "cancelled" } });
     } catch (e) {
-      logger.warn("O Mercado Pago não cancelou uma assinatura da liga", { liga, status: pre.status, message: e?.message });
+      logger.warn("O Mercado Pago não cancelou uma assinatura da liga", { liga, status: pre.status, erro: e?.message });
       // Assinatura ainda "pending" (checkout aberto e nunca concluído) não cobra nada; qualquer outra, sim.
       if (pre.status !== "pending") throw mpStepError("cancel", "Não foi possível cancelar a assinatura no Mercado Pago.");
     }
@@ -1517,12 +1522,12 @@ async function cancelCoveredMonthlies(liga, pres) {
         canceled++;
         logger.info("Assinatura mensal cancelada: o plano anual da liga já cobre o período", { liga, assinatura: pre.id });
       } catch (e) {
-        logger.error("Não foi possível cancelar a assinatura mensal que o plano anual substituiu; a reconciliação tenta de novo", { liga, assinatura: pre.id, message: e?.message });
+        logger.error("Não foi possível cancelar a assinatura mensal que o plano anual substituiu; a reconciliação tenta de novo", { liga, assinatura: pre.id, erro: e?.message });
       }
     }
     return canceled;
   } catch (e) {
-    logger.error("Não foi possível conferir se há assinatura mensal a cancelar; a reconciliação tenta de novo", { liga, message: e?.message });
+    logger.error("Não foi possível conferir se há assinatura mensal a cancelar; a reconciliação tenta de novo", { liga, erro: e?.message });
     return 0;
   }
 }
@@ -1675,11 +1680,11 @@ exports.mercadoPagoWebhook = onRequest(
       // assinatura presente e incorreta (possível adulteração ou segredo errado) continua
       // sendo recusada.
       if (e?.reason !== "MissingSignatureHeader") {
-        logger.warn("Webhook do Mercado Pago com assinatura inválida", { message: e?.message, reason: e?.reason });
+        logger.warn("Webhook do Mercado Pago com assinatura inválida", { erro: e?.message, reason: e?.reason });
         res.status(401).send("invalid signature");
         return;
       }
-      logger.warn("Webhook do Mercado Pago sem cabeçalho de assinatura: prosseguindo, status será reconfirmado na API", { message: e?.message });
+      logger.warn("Webhook do Mercado Pago sem cabeçalho de assinatura: prosseguindo, status será reconfirmado na API", { erro: e?.message });
     }
 
     const topic = req.query.type || req.query.topic;
@@ -1708,7 +1713,7 @@ exports.mercadoPagoWebhook = onRequest(
       }
       res.status(200).send("ok");
     } catch (e) {
-      logger.error("Falha ao processar webhook do Mercado Pago", { message: e?.message, topic, id });
+      logger.error("Falha ao processar webhook do Mercado Pago", { erro: e?.message, topic, id });
       res.status(500).send("error");
     }
   }
@@ -1929,7 +1934,7 @@ async function sendResendEmail({ to, subject, html, text }) {
     if (!res.ok) { logger.warn("Resend não confirmou o envio", { status: res.status }); return false; }
     return true;
   } catch (e) {
-    logger.warn("Falha ao chamar a API do Resend", { message: e?.message });
+    logger.warn("Falha ao chamar a API do Resend", { erro: e?.message });
     return false;
   }
 }
@@ -1956,7 +1961,7 @@ async function sendBillingNotices() {
         sent++;
       }
     } catch (e) {
-      logger.error("Falha ao avisar sobre a cobrança de uma liga", { liga: leagueDoc.id, message: e?.message });
+      logger.error("Falha ao avisar sobre a cobrança de uma liga", { liga: leagueDoc.id, erro: e?.message });
     }
   };
 

@@ -2394,6 +2394,25 @@ p strong {
       </ul>
       <p>Em todos os casos o servidor confere o pagamento diretamente com a API do Mercado Pago — nunca confia no que o navegador ou a notificação dizem — e só então grava a liga como paga.</p>
 
+      <h3 id="pagamento-recusado">Se o pagamento for recusado</h3>
+      <p>Quando o Mercado Pago recusa criar a assinatura ou a cobrança, o app mostra o motivo <strong>em português, em vermelho, na própria tela 💳 Assinatura</strong>, com o que a pessoa pode fazer. Nada é cobrado nesse caso: o pedido nem chega a abrir o checkout.</p>
+      <table class="data-table">
+        <thead><tr><th>O que aparece na tela</th><th>O que significa e o que fazer</th></tr></thead>
+        <tbody>
+          <tr><td>"O e-mail da sua conta está ligado a uma conta do Mercado Pago de outro país…"</td><td>O pagamento usa o e-mail com que a pessoa entrou no app, e esse e-mail pertence a uma conta do Mercado Pago de outro país; só contas do Brasil podem assinar. Entrar no app com um e-mail de conta do Mercado Pago do Brasil, ou escrever para o suporte.</td></tr>
+          <tr><td>"O Mercado Pago não aceita misturar conta de teste com conta real…"</td><td>Só aparece enquanto o Mercado Pago está em modo de teste: o e-mail precisa ser o de um comprador de teste (<code>test_user_NÚMEROS@testuser.com</code>, e <strong>não</strong> o nome de usuário + <code>@testuser.com</code>). Em produção não acontece.</td></tr>
+          <tr><td>"A conta que recebe os pagamentos não pode pagar para si mesma…"</td><td>A pessoa tentou assinar com a mesma conta do Mercado Pago que recebe os pagamentos da Pelada na Mão. Usar outro e-mail.</td></tr>
+          <tr><td>"O Mercado Pago não aceitou o e-mail da sua conta…"</td><td>O e-mail está ausente ou num formato que o Mercado Pago não aceita. Conferir o e-mail ou entrar com outro.</td></tr>
+          <tr><td>"O Mercado Pago não respondeu agora. Tente de novo em alguns minutos."</td><td>Instabilidade ou lentidão do Mercado Pago (ou da conexão). Tentar de novo resolve; nada foi criado.</td></tr>
+          <tr><td>"O pagamento está indisponível por um problema do nosso lado…" ou "…ainda não está liberado pelo Mercado Pago…"</td><td>Problema de configuração do sistema (chave do Mercado Pago inválida, ou conta de produção ainda não liberada). Não há o que a pessoa corrigir: tentar mais tarde ou escrever para o suporte. O sistema registra isso como <strong>erro</strong> no log.</td></tr>
+          <tr><td>"O Mercado Pago não aceitou a solicitação agora. Tente de novo; se continuar, escreva para o suporte informando: …"</td><td>Qualquer outra recusa. O texto original do Mercado Pago aparece entre aspas no fim da mensagem, para a pessoa enviar ao suporte.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <div class="callout-label warn">Para diagnosticar <span class="tag">Técnico</span></div>
+        O texto original do Mercado Pago (em inglês) nunca se perde: o servidor o grava no log da função (<code>createMonthlySubscription</code> / <code>createAnnualPayment</code> / <code>checkSubscriptionStatus</code>), no campo <code>erro</code>, junto com <code>tipo</code> (qual das mensagens acima) e <code>status</code> (código HTTP). Erros de configuração entram como <strong>ERROR</strong>; os demais, como <strong>WARNING</strong>. No ambiente de teste, a mensagem de "outro país" acrescenta a dica do comprador de teste.
+      </div>
+
       <h3>Datas na tela de assinatura</h3>
       <p>No plano mensal aparece <strong>"Próxima cobrança em [data]"</strong>, a data real da próxima cobrança no Mercado Pago. No anual, <strong>"Válida até [data]"</strong>, 12 meses a partir da aprovação do pagamento (ou do vencimento anterior, se o plano foi estendido). Depois de cancelar a mensal, a tela diz <strong>"Assinatura mensal cancelada — sua liga continua com o plano até [data]"</strong>. Por dentro o acesso tem 1 dia de tolerância para atrasos de processamento (<code>subscriptionActiveUntil</code>), mas esse dia nunca aparece na tela: um mês é um mês (a data mostrada vem de <code>subscriptionRenewsAt</code>).</p>
 
