@@ -83,6 +83,10 @@ jobs:
         working-directory: functions
         run: node test/mp-errors-test.js
 
+      - name: Testes do app instalável e da prévia do link (ícones, manifesto, etiquetas)
+        working-directory: functions
+        run: node test/pwa-assets-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js

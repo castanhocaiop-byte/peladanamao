@@ -461,6 +461,7 @@ p strong {
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
+      <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
     </ul>
   </nav>
 
@@ -494,6 +495,7 @@ p strong {
       <li><a href="#primeirospassos"><span class="num">24</span> Primeiros Passos</a></li>
       <li><a href="#planogratuito"><span class="num">25</span> Trial e Plano Free</a></li>
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
+      <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
     </ul>
   </nav>
 
@@ -2458,6 +2460,39 @@ p strong {
 
       <h3>Fora do app empacotado nas lojas</h3>
       <p>O Pelada na Mão ainda não está publicado nas lojas de aplicativo. Quando estiver, a tela de assinatura não deve aparecer dentro do app nativo — só no site, com o lembrete de renovação sempre por e-mail. Isso evita a comissão de 15% a 30% que a Apple e o Google cobram sobre pagamentos feitos dentro de apps publicados neles, e a regra de origem (<em>steering</em>) que proíbe linkar para um pagamento externo de dentro do app, fora do Brasil.</p>
+    </section>
+
+    <!-- 27. Instalar o App e Compartilhar o Link -->
+    <section class="section" id="instalar-app">
+      <h2 class="section-title"><span class="sn">27</span> Instalar o App e Compartilhar o Link</h2>
+      <p>O Pelada na Mão é um site que se comporta como aplicativo: dá para <strong>instalá-lo na tela inicial do celular</strong> (ou do computador), com ícone próprio, abrindo em tela cheia, sem a barra do navegador e sem passar por loja de aplicativos. A instalação é opcional e não muda nada nos dados nem na conta: é o mesmo sistema, só mais à mão.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Aparelho</th><th>Como instalar</th></tr></thead>
+        <tbody>
+          <tr><td>Android (Chrome)</td><td>Menu <strong>⋮</strong> do navegador → <strong>Instalar app</strong> (ou <strong>Adicionar à tela inicial</strong>). O Chrome também pode oferecer sozinho uma faixa "Instalar" depois de algumas visitas.</td></tr>
+          <tr><td>iPhone / iPad (Safari)</td><td>Botão <strong>Compartilhar</strong> (quadrado com seta para cima) → <strong>Adicionar à Tela de Início</strong> → <strong>Adicionar</strong>. De preferência pelo <strong>Safari</strong>, que é o navegador que sempre oferece essa opção.</td></tr>
+          <tr><td>Computador (Chrome ou Edge)</td><td>Ícone de instalar na ponta direita da barra de endereço, ou menu → <strong>Instalar Pelada na Mão</strong>.</td></tr>
+        </tbody>
+      </table>
+      <p>O ícone é o logo do Pelada na Mão e o nome embaixo dele é "Pelada na Mão". No Android o sistema pode recortar o ícone em círculo ou gota: o logo foi desenhado com margem para caber em qualquer recorte.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Notificações no iPhone</div>
+        No iPhone (iOS 16.4 ou mais novo) as notificações só funcionam <strong>com o app instalado na Tela de Início</strong> — é uma regra da Apple, não do Pelada na Mão. Quem usa só pelo navegador do iPhone não recebe avisos de convocação. Depois de instalar, abra o app pelo ícone e ative as notificações por lá.
+      </div>
+
+      <h3>Compartilhar o link da liga</h3>
+      <p>Quando alguém cola o link do Pelada na Mão (por exemplo, o <strong>convite da liga</strong>) no WhatsApp, Telegram ou numa rede social, aparece uma <strong>prévia</strong> com o logo, o título "Pelada na Mão — organize sua pelada no celular" e uma descrição curta, em vez de um endereço solto. A prévia é a mesma para todos os links do site: ela apresenta o Pelada na Mão, não a liga.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Prévia antiga no WhatsApp <span class="tag">Dica</span></div>
+        O WhatsApp (e outros apps) guardam a prévia de um endereço por um tempo. Quem já tinha colado o link do site <em>antes</em> de a prévia existir pode continuar vendo o formato antigo naquela conversa; links colados depois já aparecem com a prévia nova. Para forçar a atualização de um endereço, é só acrescentar um parâmetro qualquer no fim do endereço, como <code>?v=2</code> (ou <code>&amp;v=2</code>, se o endereço já tiver um <code>?</code>).
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        O site publica um manifesto (<code>manifest.webmanifest</code>: nome, cores, ícones de 192 e 512 pixels e uma versão "maskable" do 512, abrindo em <code>standalone</code> na raiz) e as etiquetas de compartilhamento <code>og:*</code> no <code>index.html</code>, com a imagem <code>og-image.png</code> (1200×630) em endereço absoluto do domínio. O iPhone usa o <code>apple-touch-icon.png</code> (180×180, fundo opaco). Há também <code>robots.txt</code> e <code>sitemap.xml</code> para os buscadores, e os arquivos de imagem são gerados a partir do <code>logo.webp</code> por <code>scripts/make-icons.js</code>. O deploy só publica o que está na lista de permitidos do <code>.vercelignore</code>, e um teste automático (<code>pwa-assets-test.js</code>, no CI) confere que tudo que o site cita existe, tem o tamanho certo e está nessa lista — o ícone das notificações push (<code>icon-192.png</code>) dava erro 404 antes disso. O app não registra um service worker de cache de propósito: o único service worker é o das notificações, e um de cache serviria versões antigas do site depois de cada atualização.
+      </div>
     </section>
 
   </main>
