@@ -126,7 +126,7 @@ check('o botão da faixa abre a tela de assinatura', t.env.st.modal?.type === 's
 Date.now = realNow;
 
 // ── a faixa está ligada na tela, e os avisos no plano gratuito existem ───────────────────────────
-check('a faixa entra no topo de toda aba (antes do aviso de notificações)', html.includes('main.innerHTML=planBanner()+notifBanner()+content'));
+check('a faixa entra no topo de toda aba (antes do aviso de notificações)', /main\.innerHTML=planBanner\(\)\+notifBanner\(\)\+/.test(html));
 check('o ícone 💳 do topo usa o mesmo abridor da tela de assinatura', html.includes('<button onclick="openSubscription()"\n        style="background:none;border:none;color:var(--text3);font-size:18px') || /<button onclick="openSubscription\(\)"\s+style="background:none;border:none;color:var\(--text3\);font-size:18px/.test(html));
 check('criar campeonato no plano gratuito avisa que ele não conta para títulos, ranking e conquistas', /Plano gratuito: campeonatos criados agora não contam para títulos, ranking e conquistas \(nem depois, se a liga assinar\)/.test(html) && /isLeagueFree\(\) \? `<div class="warn-box">/.test(html));
 check('o aviso ao criar tem o atalho "Ver planos" só para o admin; jogador vê "Peça ao admin"', /isAdmin\(\) \? `<a href="#" onclick="openSubscription\(\);return false"[^`]*Ver planos<\/a>` : 'Peça ao admin da liga para assinar\.'/.test(html));

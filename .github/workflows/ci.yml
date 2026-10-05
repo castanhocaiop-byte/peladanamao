@@ -95,6 +95,10 @@ jobs:
         working-directory: functions
         run: node test/client-plan-banner-test.js
 
+      - name: Testes do app (botão Instalar o app)
+        working-directory: functions
+        run: node test/client-install-test.js
+
       - name: Testes do app (encerrar liga)
         working-directory: functions
         run: node test/client-close-league-test.js

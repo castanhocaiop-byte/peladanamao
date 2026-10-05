@@ -1256,6 +1256,111 @@ function notifBanner() {
   </div>`;
 }
 
+/* ── Instalar o app ──────────────────────────────────────────────────────────────────────
+   Botão na própria tela (faixa no topo da liga e na escolha de liga), para ninguém precisar caçar o menu ⋮
+   do navegador. No Chrome/Edge do Android o navegador entrega o pedido de instalação (evento
+   beforeinstallprompt) e o botão abre a janela nativa de instalar; onde isso não existe (iPhone, ou antes
+   de o Chrome liberar a instalação) o botão mostra o passo a passo. Só em celular/tablet, só logado, some
+   sozinho com o app instalado, e o × esconde por 7 dias. Não aparece na tela de login: instalar no meio de
+   um convite faria o app instalado abrir sem o convite. */
+const INSTALL_SNOOZE_MS = 7 * 24 * 3600000;
+const INSTALL_SNOOZE_KEY = 'aceoma_install_snooze';
+const INSTALLED_KEY = 'aceoma_installed';
+let _installPrompt = null; // o pedido de instalação que o navegador entregou (só Chrome/Edge)
+
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
+window.addEventListener('appinstalled', () => {
+  _installPrompt = null;
+  try { localStorage.setItem(INSTALLED_KEY, '1'); } catch(_) {}
+  document.getElementById('install-help')?.remove();
+  toast('App instalado! Abra pelo ícone na tela inicial. 🎉', 'ok');
+  render();
+});
+
+function installOsOf(ua, platform, touchPoints) {
+  if (/iPhone|iPad|iPod/i.test(ua || '') || (platform === 'MacIntel' && touchPoints > 1)) return 'ios'; // iPadOS se apresenta como Mac
+  if (/Android/i.test(ua || '')) return 'android';
+  return null; // computador: o navegador já oferece instalar na barra de endereço
+}
+
+// Decide se mostra o convite e para qual aparelho. Pura: recebe tudo o que precisa.
+function installBannerInfo({ ua = '', platform = '', touchPoints = 0, standalone = false, installed = false, snoozeUntil = 0, now = Date.now() } = {}) {
+  if (standalone || installed || snoozeUntil > now) return null;
+  const os = installOsOf(ua, platform, touchPoints);
+  if (!os) return null;
+  // Navegadores embutidos (Instagram, Facebook, WebView) não instalam nada.
+  if (/FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(ua)) return null;
+  return { os };
+}
+
+function readInstallEnv() {
+  let standalone = false, installed = false, snoozeUntil = 0;
+  try { standalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches; } catch(_) {}
+  if (navigator.standalone === true) standalone = true;
+  try { installed = localStorage.getItem(INSTALLED_KEY) === '1'; snoozeUntil = Number(localStorage.getItem(INSTALL_SNOOZE_KEY)) || 0; } catch(_) {}
+  return { ua: navigator.userAgent, platform: navigator.platform, touchPoints: navigator.maxTouchPoints || 0, standalone, installed, snoozeUntil };
+}
+
+function installBanner() {
+  if (!st.authUser) return '';
+  const info = installBannerInfo(readInstallEnv());
+  if (!info) return '';
+  const text = info.os === 'ios'
+    ? '📲 Instale o app na Tela de Início: é assim que o iPhone recebe os avisos da liga.'
+    : '📲 Instale o app no celular: abre em tela cheia, direto da tela inicial.';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:#00C97A15;border:1px solid #00C97A40;border-radius:10px;font-size:13px">
+    <span style="flex:1;color:var(--text2);line-height:1.45">${text}</span>
+    <button onclick="installApp()" style="background:#00C97A;color:#000;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Instalar</button>
+    <button onclick="dismissInstallBanner()" title="Esconder por 7 dias" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:0 2px">×</button>
+  </div>`;
+}
+
+function dismissInstallBanner() {
+  try { localStorage.setItem(INSTALL_SNOOZE_KEY, String(Date.now() + INSTALL_SNOOZE_MS)); } catch(_) {}
+  render();
+}
+
+async function installApp() {
+  const ev = _installPrompt;
+  if (!ev) { openInstallHelp(); return; }
+  _installPrompt = null; // o navegador só deixa usar o pedido uma vez
+  try {
+    await ev.prompt();
+    const choice = await ev.userChoice;
+    if (choice?.outcome === 'accepted') toast('Instalando… procure o ícone na tela inicial.', 'ok');
+    else dismissInstallBanner(); // disse não: não insiste por 7 dias
+  } catch(_) { openInstallHelp(); }
+}
+
+// Passo a passo, numa camada solta no <body> (abre em qualquer tela e o render() não a apaga).
+function openInstallHelp() {
+  document.getElementById('install-help')?.remove();
+  const env = readInstallEnv();
+  const os = installOsOf(env.ua, env.platform, env.touchPoints) || 'android';
+  const steps = os === 'ios'
+    ? ['Toque em <b>Compartilhar</b> (o quadrado com uma seta para cima, na barra do Safari).',
+       'Role a lista e toque em <b>Adicionar à Tela de Início</b>.',
+       'Toque em <b>Adicionar</b>. O ícone do Pelada na Mão aparece na tela inicial.']
+    : ['Toque no menu <b>⋮</b> do navegador (canto superior direito).',
+       'Toque em <b>Instalar app</b> (em alguns celulares aparece como <b>Adicionar à tela inicial</b>).',
+       'Confirme em <b>Instalar</b>. O ícone do Pelada na Mão aparece na tela inicial.'];
+  const note = os === 'ios'
+    ? 'No iPhone isso precisa ser feito no <b>Safari</b>. Depois, abra sempre pelo ícone para receber as notificações.'
+    : 'Depois, abra pelo ícone para o app ocupar a tela toda.';
+  const root = document.createElement('div');
+  root.id = 'install-help';
+  root.className = 'overlay';
+  root.onclick = () => root.remove();
+  root.innerHTML = `<div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:12px">📲 Instalar o app</div>
+    <ol style="margin:0 0 12px;padding-left:20px;font-size:14px;color:var(--text2);line-height:1.7">${steps.map(s => `<li style="margin-bottom:6px">${s}</li>`).join('')}</ol>
+    <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:16px">${note}</div>
+    <button onclick="document.getElementById('install-help')?.remove()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Entendi</button>
+  </div>`;
+  document.body.appendChild(root);
+}
+
 /* ── Faixa do plano ───────────────────────────────────────────────────────────────────────
    Para o admin saber onde está sem precisar abrir o 💳: quantos dias faltam do teste grátis, o que
    o plano gratuito pausa (gols, ranking e conquistas) e quando o plano está perto de acabar. Só o
@@ -4602,6 +4707,7 @@ function vSelectLeague() {
           ＋ Criar nova liga
         </button>
       </div>
+      <div style="margin-top:22px;text-align:left">${installBanner()}</div>
       ${deleteAccountLink()}
     </div>
   </div>`;
@@ -6077,7 +6183,7 @@ function render() {
     case 'stats':   content=vStats(); break;
     case 'financeiro': content=vFinanceiro(); break;
   }
-  if(main) main.innerHTML=planBanner()+notifBanner()+content;
+  if(main) main.innerHTML=planBanner()+notifBanner()+installBanner()+content;
   if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
