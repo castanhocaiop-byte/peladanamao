@@ -75,6 +75,10 @@ jobs:
         working-directory: functions
         run: node test/environments-test.js
 
+      - name: Testes do atalho de segredos do ambiente de teste
+        working-directory: functions
+        run: node test/staging-secret-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js

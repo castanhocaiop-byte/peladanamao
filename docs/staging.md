@@ -49,23 +49,61 @@ depois `firebase deploy --only firestore:rules --project seriebaceoma` (antes co
 - Banco Firestore em `us-east1` (o padrão do Google nasce em `nam5`; foi recriado na região da produção).
 - Login por e-mail/senha ativado pelo `firebase.staging.json` (`auth.providers.emailPassword`).
 - Site no Firebase Hosting (`firebase.staging.json` → `hosting`, pasta `.staging-site`, ignorada pelo git).
-- **Depende do dono (plano pago e segredos)** — as funções exigem o plano **Blaze** (pagar conforme o uso):
-  1. Console do Firebase → projeto *Pelada na Mao - teste* → engrenagem → *Uso e faturamento* → *Detalhes e
-     configurações* → **Modificar plano → Blaze**, escolhendo a mesma conta de faturamento da produção.
-     Sugestão: criar também um alerta de orçamento baixo (ex.: R$ 10/mês) para o projeto de teste.
-  2. Segredos do projeto de teste (os valores nunca passam pelo chat nem pelo código):
-     ```bash
-     firebase functions:secrets:set MERCADOPAGO_ACCESS_TOKEN  --project seriebaceoma-staging   # token de TESTE do Mercado Pago
-     firebase functions:secrets:set MERCADOPAGO_WEBHOOK_SECRET --project seriebaceoma-staging  # "assinatura secreta" da aplicação no painel do Mercado Pago
-     ```
-     `RESEND_API_KEY`, `CLOUDINARY_API_KEY` e `CLOUDINARY_API_SECRET` ficam com o marcador
-     `PENDENTE_CONFIGURAR` (nenhum e-mail sai; fotos apagadas ficam no Cloudinary).
-  3. Depois: `node scripts/staging.js deploy functions`.
+- Plano **Blaze** ativado pelo dono (as funções exigem o plano pago, cobrado pelo uso). Sugestão: alerta de
+  orçamento baixo (ex.: R$ 10/mês) no projeto de teste.
+- Segredos criados com o marcador `PENDENTE_CONFIGURAR` (nenhum e-mail sai; fotos apagadas ficam no
+  Cloudinary; o webhook responde 503 enquanto o segredo dele for provisório).
+- 26 funções publicadas com `node scripts/staging.js deploy functions` e política de limpeza de imagens de
+  1 dia (`firebase functions:artifacts:setpolicy --location us-east1 --force --project seriebaceoma-staging`;
+  sem ela o CLI termina com erro mesmo com tudo publicado).
+- **Primeira publicação de funções num projeto novo:** o Google costuma recusar parte delas ("Eventarc
+  Service Agent", "Could not create bucket", "Build failed… unexpected error"): são permissões e pastas
+  internas ainda sendo criadas. **Não basta rodar de novo:** a segunda rodada só *atualiza* as funções que
+  ficaram pela metade, e elas ficam sem o acesso público (respondem 403 em vez de 401 a quem não está
+  logado, e o app e o Mercado Pago não conseguem chamá-las). O caminho certo é apagar as que falharam
+  (`firebase functions:delete <nomes> --region us-east1 --force --project seriebaceoma-staging`) e publicar
+  de novo, para que sejam *criadas* do zero. Conferência (esperado: 401 nas funções chamáveis; 503 no
+  webhook enquanto o segredo for provisório):
+  `curl -s -o /dev/null -w "%{http_code}" -X POST https://us-east1-seriebaceoma-staging.cloudfunctions.net/<função>
+  -H "Content-Type: application/json" -d '{"data":{}}'`
+- Segredos do Mercado Pago de TESTE (gravados pelo dono em 05/10/2026; para trocar, é o mesmo
+  procedimento; os valores nunca passam pelo chat nem
+  pelo código). Copie o valor no painel do Mercado Pago (ícone de copiar) e rode o comando do segredo: ele lê
+  a área de transferência, confere (Public Key no lugar do token, texto cortado ou com espaços são barrados com
+  uma mensagem), grava só no projeto de teste e limpa a área de transferência. Não aparece nada sensível na
+  tela. (Colar no campo escondido do `firebase functions:secrets:set` falhou no terminal do app: "Secret
+  Payload cannot be empty".) **Depois de gravar, publique as funções** (`node scripts/staging.js deploy
+  functions`): com o valor vindo pela entrada padrão o firebase trata o comando como não interativo e
+  não republica sozinho, nem com `--force`; as funções seguem com a versão antiga do segredo até o deploy.
+  ```bash
+  node scripts/staging.js secret MERCADOPAGO_ACCESS_TOKEN
+  node scripts/staging.js secret MERCADOPAGO_WEBHOOK_SECRET
+  node scripts/staging.js deploy functions
+  ```
+  O primeiro é o *Access Token* da tela "Credenciais de teste" (menu TESTES) do painel do Mercado Pago. Atenção:
+  hoje essas credenciais também começam com `APP_USR-`, então o prefixo não distingue teste de produção; o que
+  vale é copiar da tela de teste. O segundo é a "assinatura secreta" em Webhooks, no mesmo painel.
 
 ## Testar pagamentos no teste
 O teste usa sempre o Mercado Pago em modo de teste (compradores e cartões de teste), mesmo depois de a
 produção passar a cobrar de verdade. Cada pagamento criado no teste já avisa o webhook do projeto de teste
 (`https://us-east1-seriebaceoma-staging.cloudfunctions.net/mercadoPagoWebhook`).
+
+**O e-mail da conta importa só para pagar.** Para criar conta e liga qualquer e-mail serve, até inventado (o
+app não pede confirmação nem manda e-mail no cadastro). Mas o e-mail da conta que é admin da liga vai ao
+Mercado Pago como pagador, e em modo de teste ele só aceita o e-mail de uma conta compradora de teste
+(painel → Contas de teste → Comprador).
+
+**O e-mail do comprador de teste NÃO é o nome de usuário + `@testuser.com`.** É `test_user_` + os números do
+usuário, tudo em minúsculas: a conta `TESTUSER2702948457827838830` tem o e-mail
+`test_user_2702948457827838830@testuser.com`. Quem digita o nome de usuário como e-mail (ex.:
+`TESTUSER2702948457827838830@testuser.com`, que não existe no Mercado Pago) leva "Payer is associated with a
+different site" (confirmado em 05/10/2026: o mesmo comprador, com o e-mail certo, pagou normalmente); com um
+e-mail real, o Mercado Pago recusa com "Both payer and collector must be real or test users". Se o painel
+mostrar outro e-mail para a conta, vale o do painel. Para o teste completo, crie a conta do app já com esse
+e-mail (o e-mail de uma conta existente não troca) e, de preferência, numa janela anônima, sem a conta real do
+Mercado Pago logada. Esse e-mail não recebe mensagens: anote a senha, porque o "Esqueci minha senha" não
+chegaria.
 
 ## Apagar os dados de teste
 Contas: Console → Authentication → Usuários. Banco inteiro (só no teste!):
