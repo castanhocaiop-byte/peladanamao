@@ -66,7 +66,7 @@ const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || proc
 const PRODUCTION_ENV = {
   name: "production",
   appUrl: "https://peladanamao.com.br/", // links dos e-mails e a volta do checkout do Mercado Pago
-  pushUrl: "https://aceoma.vercel.app/", // ícone e link das notificações push
+  pushUrl: "https://peladanamao.com.br/", // ícone e link das notificações push (o mesmo endereço do site, onde a pessoa está logada)
   webhookUrl: "https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook",
   emailSubjectPrefix: "",
   backups: true,

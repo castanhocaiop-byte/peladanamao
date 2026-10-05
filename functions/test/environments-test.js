@@ -187,10 +187,18 @@ const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'htt
   const tablesEnd = src.indexOf('const ENV = ENVIRONMENTS[PROJECT_ID]');
   check('servidor: a tabela de ambientes foi encontrada', tablesStart > 0 && tablesEnd > tablesStart);
   const outside = src.slice(0, tablesStart) + src.slice(tablesEnd);
-  for (const literal of ['aceoma.vercel.app', 'https://peladanamao.com.br/', 'cloudfunctions.net/mercadoPagoWebhook', 'seriebaceoma-staging']) {
+  for (const literal of ['https://peladanamao.com.br/', 'cloudfunctions.net/mercadoPagoWebhook', 'seriebaceoma-staging']) {
     check(`servidor: "${literal}" só aparece dentro da tabela de ambientes (nenhum endereço fixo espalhado)`, !outside.includes(literal), literal);
   }
 
+  // ── um endereço só: o antigo (aceoma.vercel.app) não aparece mais; as notificações abrem o site onde a pessoa está logada ──
+  const htmlSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const swSrc = fs.readFileSync(path.join(root, 'firebase-messaging-sw.js'), 'utf8');
+  for (const [nome, texto] of [['servidor (functions/index.js)', src], ['app (index.html)', htmlSrc], ['service worker (firebase-messaging-sw.js)', swSrc]]) {
+    check(`${nome}: o endereço antigo aceoma.vercel.app não aparece mais (só o vercel.json o cita, para redirecionar)`, !/aceoma\.vercel\.app/i.test(texto));
+  }
+  const prodPush = new Function(htmlSrc.slice(htmlSrc.indexOf('const APP_ENVS = {'), htmlSrc.indexOf('const STAGING_HOSTS')) + '\nreturn APP_ENVS;')().production.pushUrl;
+  check('notificações da produção abrem o mesmo endereço do site (peladanamao.com.br), onde o login e a permissão de notificação estão', prodPush === 'https://peladanamao.com.br/' && PRODUCTION.appUrl === 'https://peladanamao.com.br/', { prodPush });
   // ── as três tabelas (servidor, app e service worker) batem ──────────────────────────────────
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const sw = fs.readFileSync(path.join(root, 'firebase-messaging-sw.js'), 'utf8');

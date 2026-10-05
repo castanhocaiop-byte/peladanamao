@@ -74,5 +74,17 @@ check(`todo arquivo local citado existe (${refs.size} conferidos: ${[...refs].jo
 check('…e está na lista de permitidos do deploy (senão dá 404 no site publicado)', notAllowed.length === 0, notAllowed);
 check('as notificações push usam o ícone que agora existe (antes dava 404)', refs.has('icon-192.png') && exists('icon-192.png'));
 
+// ── um endereço só: o antigo (aceoma.vercel.app) redireciona para o domínio do produto ─────────────────
+let vercel = null;
+try { vercel = JSON.parse(read('vercel.json')); } catch (e) { /* abaixo */ }
+check('vercel.json existe e é um JSON válido', !!vercel);
+const rules = (vercel && vercel.redirects) || [];
+const rule = rules[0] || {};
+check('há UM redirecionamento, só para o host aceoma.vercel.app (o domínio do produto nunca redireciona)', rules.length === 1 && Array.isArray(rule.has) && rule.has.length === 1 && rule.has[0].type === 'host' && rule.has[0].value === 'aceoma.vercel.app', rules);
+check('…leva para o domínio do produto mantendo o caminho (convites e páginas antigas continuam abrindo)', rule.source === '/:path*' && rule.destination === 'https://peladanamao.com.br/:path*', rule);
+check('…e o tipo (temporário/permanente) está declarado de forma explícita', typeof rule.permanent === 'boolean', rule);
+check('vercel.json está liberado no .vercelignore (sem isso a Vercel nem o recebe e o redirecionamento não vale)', allowed.includes('vercel.json'), allowed);
+const { siteFiles } = require(path.join(root, 'scripts', 'staging.js'));
+check('o site de teste NÃO leva o vercel.json (é configuração da Vercel), mas leva todos os outros arquivos liberados', !siteFiles().includes('vercel.json') && allowed.filter(f => f !== 'vercel.json').every(f => siteFiles().includes(f)), siteFiles());
 console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
 if (fails) process.exitCode = 1;

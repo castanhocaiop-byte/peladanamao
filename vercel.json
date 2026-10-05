@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "aceoma.vercel.app" }],
+      "destination": "https://peladanamao.com.br/:path*",
+      "permanent": false
+    }
+  ]
+}

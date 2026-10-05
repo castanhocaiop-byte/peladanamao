@@ -5,7 +5,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-com
 // a produção é o padrão; o site de TESTE tem projeto Firebase próprio.
 const STAGING_HOSTS = ['seriebaceoma-staging.web.app', 'seriebaceoma-staging.firebaseapp.com'];
 const IS_STAGING = STAGING_HOSTS.includes(self.location.hostname);
-const PUSH_URL = IS_STAGING ? 'https://seriebaceoma-staging.web.app/' : 'https://aceoma.vercel.app/';
+const PUSH_URL = IS_STAGING ? 'https://seriebaceoma-staging.web.app/' : 'https://peladanamao.com.br/';
 
 firebase.initializeApp(IS_STAGING ? {
   apiKey: "AIzaSyCGFnKi786IpFoklZK_Bn80MpXrgCFiAEg",

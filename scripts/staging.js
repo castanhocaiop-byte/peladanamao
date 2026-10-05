@@ -19,6 +19,7 @@ const PROJECT = 'seriebaceoma-staging';
 const ROOT = path.join(__dirname, '..');
 const SITE_DIR = path.join(ROOT, '.staging-site');
 const TARGETS = { site: 'hosting', rules: 'firestore:rules', auth: 'auth', functions: 'functions' };
+const VERCEL_ONLY = 'vercel.json'; // arquivo que só a Vercel usa: libera no .vercelignore, mas não vai para o site de teste
 
 // Segredos do projeto de teste que podem ser gravados por aqui.
 const SECRETS = ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET', 'RESEND_API_KEY', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'];
@@ -49,7 +50,8 @@ function checkSecretValue(name, raw) {
 // (.vercelignore) é a fonte, então um arquivo novo só entra nos dois ao mesmo tempo.
 function siteFiles() {
   return fs.readFileSync(path.join(ROOT, '.vercelignore'), 'utf8')
-    .split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith('!')).map(l => l.slice(1));
+    .split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith('!')).map(l => l.slice(1))
+    .filter(f => f !== VERCEL_ONLY); // configuração da Vercel (redirecionamento), não faz parte do site servido no teste
 }
 
 function buildSite() {
@@ -130,4 +132,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
-module.exports = { checkSecretValue, SECRETS };
+module.exports = { checkSecretValue, SECRETS, siteFiles };
