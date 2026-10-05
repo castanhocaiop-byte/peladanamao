@@ -1525,7 +1525,7 @@ async function openOwnerMetrics() {
       <div style="font-size:17px;font-weight:800">📊 Métricas do sistema</div>
       <button onclick="document.getElementById('owner-metrics')?.remove()" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
     </div>
-    <div style="overflow-y:auto;flex:1">${body}</div></div>`;
+    <div style="overflow-y:auto;flex:1;padding-right:10px">${body}</div></div>`;
   root.innerHTML = sheet('<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">Calculando…</div>');
   document.body.appendChild(root);
   try {
