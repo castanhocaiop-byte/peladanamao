@@ -445,15 +445,56 @@ async function cloudinaryUpload(file) {
 <script>
 'use strict';
 
-/* ── Firebase config ────────────────────────────────────────── */
-const firebaseConfig = {
-  apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
-  authDomain: "seriebaceoma.firebaseapp.com",
-  projectId: "seriebaceoma",
-  storageBucket: "seriebaceoma.firebasestorage.app",
-  messagingSenderId: "354275671624",
-  appId: "1:354275671624:web:e2318f3726e6c9487b627d"
+/* ── Ambientes ────────────────────────────────────────────────
+   A produção é o padrão: qualquer endereço que não seja o do site de TESTE (inclusive localhost e as
+   prévias da Vercel) usa a produção, como sempre foi. O ambiente de teste tem projeto Firebase próprio,
+   só com dados fictícios, e é reconhecido pelo endereço. firebase-messaging-sw.js e as Cloud Functions
+   repetem esta tabela; functions/test/environments-test.js confere que as três batem. */
+const APP_ENVS = {
+  production: {
+    name: 'production',
+    firebaseConfig: {
+      apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
+      authDomain: "seriebaceoma.firebaseapp.com",
+      projectId: "seriebaceoma",
+      storageBucket: "seriebaceoma.firebasestorage.app",
+      messagingSenderId: "354275671624",
+      appId: "1:354275671624:web:e2318f3726e6c9487b627d"
+    },
+    vapidKey: 'BGkFh9EELaChcVFkXp4STemzBTux77cjJZRqfyS_hDTs_JyMpViukBw1aGTjnYcyTe9gHwAEZO5Hwfof7bxVZ3U',
+    appCheckKey: '6Lc7gNktAAAAAJ4kzymDboAHtvNxhzF65HEx9YjG',
+    pushUrl: 'https://aceoma.vercel.app/',
+  },
+  staging: {
+    name: 'staging',
+    firebaseConfig: {
+      apiKey: "AIzaSyCGFnKi786IpFoklZK_Bn80MpXrgCFiAEg",
+      authDomain: "seriebaceoma-staging.firebaseapp.com",
+      projectId: "seriebaceoma-staging",
+      storageBucket: "seriebaceoma-staging.firebasestorage.app",
+      messagingSenderId: "378210094171",
+      appId: "1:378210094171:web:b2173e3a1d1a751884037e"
+    },
+    vapidKey: null,    // notificações push ainda não configuradas no teste
+    appCheckKey: null, // App Check só existe na produção
+    pushUrl: 'https://seriebaceoma-staging.web.app/',
+  },
 };
+const STAGING_HOSTS = ['seriebaceoma-staging.web.app', 'seriebaceoma-staging.firebaseapp.com'];
+const APP_ENV = APP_ENVS[STAGING_HOSTS.includes(location.hostname) ? 'staging' : 'production'];
+const firebaseConfig = APP_ENV.firebaseConfig;
+
+// No ambiente de teste fica sempre visível que ali nada é real (a faixa não recebe cliques).
+if (APP_ENV.name === 'staging') {
+  document.title = '[TESTE] ' + document.title;
+  const showTestBanner = () => {
+    const b = document.createElement('div');
+    b.textContent = '🧪 TESTE — dados fictícios';
+    b.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:#b45309;color:#fff;font:700 10px/1.7 system-ui,sans-serif;letter-spacing:.4px;padding:0 8px;border-radius:0 0 8px 0;pointer-events:none';
+    document.body.appendChild(b);
+  };
+  if (document.body) showTestBanner(); else document.addEventListener('DOMContentLoaded', showTestBanner);
+}
 
 /* ── teams ──────────────────────────────────────────────────── */
 const T = {
@@ -965,12 +1006,14 @@ function initFirebase() {
     firebase.initializeApp(firebaseConfig);
     // App Check: por enquanto só em modo de observação (sem enforcement no
     // servidor ainda) — ver seção do manual sobre segurança de acessos.
-    try {
-      firebase.appCheck().activate(
-        new firebase.appCheck.ReCaptchaEnterpriseProvider('6Lc7gNktAAAAAJ4kzymDboAHtvNxhzF65HEx9YjG'),
-        true
-      );
-    } catch(_) {}
+    if (APP_ENV.appCheckKey) {
+      try {
+        firebase.appCheck().activate(
+          new firebase.appCheck.ReCaptchaEnterpriseProvider(APP_ENV.appCheckKey),
+          true
+        );
+      } catch(_) {}
+    }
     DB = firebase.firestore();
     AUTH = firebase.auth();
     try { MESSAGING = firebase.messaging(); } catch(_) {}
@@ -1109,10 +1152,11 @@ function initFirebase() {
 }
 
 // ── Push notifications ────────────────────────────────────────
-const VAPID_KEY = 'BGkFh9EELaChcVFkXp4STemzBTux77cjJZRqfyS_hDTs_JyMpViukBw1aGTjnYcyTe9gHwAEZO5Hwfof7bxVZ3U';
+const VAPID_KEY = APP_ENV.vapidKey;
 let _fgMsgHandlerSet = false;
 
 async function initPush() {
+  if (!VAPID_KEY) return; // ambiente sem notificações push configuradas (o de teste, por enquanto)
   if (!MESSAGING || !DB || !st.authUser?.uid) return;
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
@@ -1143,7 +1187,7 @@ async function initPush() {
             icon: '/icon-192.png',
             badge: '/icon-192.png',
             tag: payload.data?.tag || undefined,
-            data: { link: 'https://aceoma.vercel.app/' }
+            data: { link: APP_ENV.pushUrl }
           });
         });
       });

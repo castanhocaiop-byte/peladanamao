@@ -1,0 +1,28 @@
+{
+  "_comment": "Configuração SÓ do ambiente de teste (projeto seriebaceoma-staging). Fica separada do firebase.json de propósito: assim nenhum comando da produção enxerga o Hosting e o login daqui. Use sempre pelo script: node scripts/staging.js deploy",
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
+  "hosting": {
+    "public": ".staging-site",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+          { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      }
+    ]
+  }
+}

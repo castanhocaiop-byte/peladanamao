@@ -17,3 +17,8 @@ serviceAccountKey.json
 # Segredos de mentira que o teste nos emuladores cria só durante a execução.
 .secret.local
 *-debug.log
+
+# Cópia do site montada por scripts/staging.js para publicar o ambiente de teste.
+.staging-site/
+# Cache do Firebase Hosting (criado ao publicar o site de teste).
+.firebase/

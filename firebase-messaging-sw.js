@@ -1,7 +1,20 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-firebase.initializeApp({
+// Mesma tabela de ambientes do index.html (functions/test/environments-test.js confere que batem):
+// a produção é o padrão; o site de TESTE tem projeto Firebase próprio.
+const STAGING_HOSTS = ['seriebaceoma-staging.web.app', 'seriebaceoma-staging.firebaseapp.com'];
+const IS_STAGING = STAGING_HOSTS.includes(self.location.hostname);
+const PUSH_URL = IS_STAGING ? 'https://seriebaceoma-staging.web.app/' : 'https://aceoma.vercel.app/';
+
+firebase.initializeApp(IS_STAGING ? {
+  apiKey: "AIzaSyCGFnKi786IpFoklZK_Bn80MpXrgCFiAEg",
+  authDomain: "seriebaceoma-staging.firebaseapp.com",
+  projectId: "seriebaceoma-staging",
+  storageBucket: "seriebaceoma-staging.firebasestorage.app",
+  messagingSenderId: "378210094171",
+  appId: "1:378210094171:web:b2173e3a1d1a751884037e"
+} : {
   apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
   authDomain: "seriebaceoma.firebaseapp.com",
   projectId: "seriebaceoma",
@@ -27,7 +40,7 @@ messaging.onBackgroundMessage(payload => {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: d.tag || undefined,
-    data: { ...d, link: 'https://aceoma.vercel.app/' }
+    data: { ...d, link: PUSH_URL }
   });
 });
 
@@ -36,6 +49,6 @@ messaging.onBackgroundMessage(payload => {
 self.addEventListener('notificationclick', event => {
   if (event.notification.data && event.notification.data.FCM_MSG) return;
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.link) || 'https://aceoma.vercel.app/';
+  const url = (event.notification.data && event.notification.data.link) || PUSH_URL;
   event.waitUntil(clients.openWindow(url));
 });

@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "seriebaceoma"
+    "default": "seriebaceoma",
+    "staging": "seriebaceoma-staging"
   }
 }

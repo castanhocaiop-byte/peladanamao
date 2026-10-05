@@ -71,6 +71,10 @@ jobs:
         working-directory: functions
         run: node test/billing-emails-test.js
 
+      - name: Testes dos ambientes (produção x teste)
+        working-directory: functions
+        run: node test/environments-test.js
+
       - name: Testes do app (confirmação automática do pagamento)
         working-directory: functions
         run: node test/client-payment-test.js

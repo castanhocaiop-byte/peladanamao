@@ -55,6 +55,33 @@ async function getPlayerTokens(leagueId, playerNames) {
   return [...new Set(tokens)];
 }
 
+// ── Ambientes ──────────────────────────────────────────────────────────────────────────
+// A produção é o padrão: qualquer projeto fora desta lista (os emuladores, os testes) usa os
+// endereços de produção, exatamente como sempre foi. O ambiente de TESTE (staging) é um projeto
+// Firebase à parte, só com dados fictícios: aponta para o próprio site, marca os e-mails com
+// "[TESTE]" e não faz backup. O app (index.html) e o firebase-messaging-sw.js têm a mesma tabela
+// do lado do navegador; functions/test/environments-test.js confere que as três batem.
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || "";
+const PRODUCTION_ENV = {
+  name: "production",
+  appUrl: "https://peladanamao.com.br/", // links dos e-mails e a volta do checkout do Mercado Pago
+  pushUrl: "https://aceoma.vercel.app/", // ícone e link das notificações push
+  webhookUrl: "https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook",
+  emailSubjectPrefix: "",
+  backups: true,
+};
+const ENVIRONMENTS = {
+  "seriebaceoma-staging": {
+    name: "staging",
+    appUrl: "https://seriebaceoma-staging.web.app/",
+    pushUrl: "https://seriebaceoma-staging.web.app/",
+    webhookUrl: "https://us-east1-seriebaceoma-staging.cloudfunctions.net/mercadoPagoWebhook",
+    emailSubjectPrefix: "[TESTE] ",
+    backups: false,
+  },
+};
+const ENV = ENVIRONMENTS[PROJECT_ID] || PRODUCTION_ENV;
+
 // Remove dos usuários os tokens que o FCM informou estar mortos
 async function pruneTokens(tokens) {
   for (const token of tokens) {
@@ -81,11 +108,11 @@ async function sendToTokens(tokens, notification, data = {}, tag = "") {
       data: tag ? { ...data, tag } : data,
       webpush: {
         notification: {
-          icon: "https://aceoma.vercel.app/icon-192.png",
-          badge: "https://aceoma.vercel.app/icon-192.png",
+          icon: `${ENV.pushUrl}icon-192.png`,
+          badge: `${ENV.pushUrl}icon-192.png`,
           ...(tag ? { tag } : {})
         },
-        fcmOptions: { link: "https://aceoma.vercel.app/" }
+        fcmOptions: { link: ENV.pushUrl }
       }
     });
     res.responses.forEach((r, idx) => {
@@ -336,6 +363,13 @@ const CLOUDINARY_API_SECRET = defineSecret("CLOUDINARY_API_SECRET");
 //   firebase functions:secrets:set RESEND_API_KEY
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const RESEND_FROM = "Pelada na Mão <avisos@notificacoes.peladanamao.com.br>";
+// Marcador de "chave ainda não configurada" (o ambiente de teste nasce assim, para nunca mandar
+// e-mail de verdade): nesse caso o envio é pulado, sem chamar o Resend.
+const RESEND_NOT_CONFIGURED = "PENDENTE_CONFIGURAR";
+const resendConfigured = () => {
+  const key = RESEND_API_KEY.value();
+  return !!key && key !== RESEND_NOT_CONFIGURED;
+};
 
 // Pagamento via Mercado Pago (pessoa física). MERCADOPAGO_ACCESS_TOKEN autentica as
 // chamadas à API; MERCADOPAGO_WEBHOOK_SECRET confere a assinatura das notificações (só
@@ -349,7 +383,7 @@ const MERCADOPAGO_WEBHOOK_SECRET = defineSecret("MERCADOPAGO_WEBHOOK_SECRET");
 // A URL configurada em Suas integrações → Notificações não cobre pagamentos criados via
 // Preference (confirmado em teste: o pagamento veio com notification_url null e o Mercado
 // Pago nunca tentou entregar nada) — por isso cada criação informa a URL explicitamente.
-const MERCADOPAGO_WEBHOOK_URL = "https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook";
+const MERCADOPAGO_WEBHOOK_URL = ENV.webhookUrl;
 const MERCADOPAGO_WEBHOOK_NOT_CONFIGURED = "PENDENTE_CONFIGURAR";
 const MP_PLANS = {
   monthly: { amount: 29.9, label: "Assinatura mensal" },
@@ -1060,8 +1094,9 @@ exports.anonymizeMyName = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
 exports.scheduledFirestoreBackup = onSchedule(
   { schedule: "0 5 * * *", timeZone: "America/Sao_Paulo", region: "us-east1" },
   async () => {
+    if (!ENV.backups) { logger.info("Backup agendado desligado neste ambiente", { ambiente: ENV.name }); return; }
     const client = new firestoreAdminV1.FirestoreAdminClient();
-    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID;
+    const projectId = PROJECT_ID;
     const databaseName = client.databasePath(projectId, "(default)");
     const bucketName = admin.storage().bucket().name;
     const dateFolder = new Date().toISOString().slice(0, 10);
@@ -1109,13 +1144,14 @@ const ABANDON_ACT_AFTER_DAYS = 30;   // prazo de reação depois do aviso
 
 async function sendAbandonWarningEmail(to, leagueId) {
   try {
+    if (!resendConfigured()) { logger.info("Resend não configurado neste ambiente: aviso de abandono não enviado", { leagueId }); return; }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: RESEND_FROM,
         to,
-        subject: `Sua liga "${leagueId}" está inativa há quase um ano`,
+        subject: `${ENV.emailSubjectPrefix}Sua liga "${leagueId}" está inativa há quase um ano`,
         html: `<p>Ninguém da liga <strong>${leagueId}</strong> no Pelada na Mão abre o aplicativo há quase um ano.</p>`
           + `<p>Para manter o histórico, os títulos e os dados dos jogadores como estão hoje, basta entrar no aplicativo normalmente — não precisa fazer mais nada.</p>`
           + `<p>Se ninguém entrar nos próximos 30 dias, o nome, a foto e o WhatsApp de cada jogador dessa liga serão trocados por um identificador anônimo, por padrão de proteção de dados pessoais. O histórico esportivo (resultados, títulos, estatísticas) continua existindo normalmente, só sem os nomes.</p>`
@@ -1237,7 +1273,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
       reason: `Pelada na Mão — ${MP_PLANS.monthly.label}`,
       external_reference: liga,
       payer_email: payerEmail,
-      back_url: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
+      back_url: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
       notification_url: MERCADOPAGO_WEBHOOK_URL,
       auto_recurring: {
         frequency: 1,
@@ -1271,9 +1307,9 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
       external_reference: liga,
       payer: { email: payerEmail },
       back_urls: {
-        success: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
-        pending: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
-        failure: `https://peladanamao.com.br/?mpReturn=${encodeURIComponent(liga)}`,
+        success: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
+        pending: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
+        failure: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
       },
       auto_return: "approved",
       notification_url: MERCADOPAGO_WEBHOOK_URL,
@@ -1765,7 +1801,7 @@ exports.deleteLeague = onCall({ ...CALLABLE, timeoutSeconds: 300, secrets: [MERC
 // O que já foi avisado fica em leagues/{liga}.billingNotices, amarrado ao ciclo
 // (subscriptionActiveUntil): um novo pagamento muda o ciclo e libera avisos novos. Só o
 // servidor grava esse campo (as regras só deixam o admin alterar o nome da liga).
-const APP_URL = "https://peladanamao.com.br/";
+const APP_URL = ENV.appUrl;
 const CONTACT_EMAIL = "contato@peladanamao.com.br";
 const BILLING_REMINDER_DAYS = [7, 30]; // do menor para o maior
 const BILLING_ENDED_WINDOW_DAYS = 7;
@@ -1844,10 +1880,11 @@ function billingEmailContent(notice, leagueName) {
 
 async function sendResendEmail({ to, subject, html, text }) {
   try {
+    if (!resendConfigured()) { logger.info("Resend não configurado neste ambiente: e-mail não enviado"); return false; }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: RESEND_FROM, to, subject, html, text, reply_to: CONTACT_EMAIL }),
+      body: JSON.stringify({ from: RESEND_FROM, to, subject: `${ENV.emailSubjectPrefix}${subject}`, html, text, reply_to: CONTACT_EMAIL }),
     });
     if (!res.ok) { logger.warn("Resend não confirmou o envio", { status: res.status }); return false; }
     return true;
