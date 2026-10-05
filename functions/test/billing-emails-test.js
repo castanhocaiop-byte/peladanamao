@@ -59,7 +59,7 @@ const fakeDb = {
       get: async () => {
         const docs = [...store.entries()]
           .filter(([p, d]) => inCol(p) && filters.every(([f, op, v]) =>
-            op === '==' ? valueAt(d, f) === v : op === 'in' ? Array.isArray(v) && v.includes(valueAt(d, f)) : false))
+            op === '==' ? valueAt(d, f) === v : op === 'in' ? Array.isArray(v) && v.includes(valueAt(d, f)) : op === '>=' ? valueAt(d, f) !== undefined && valueAt(d, f) >= v : op === '<=' ? valueAt(d, f) !== undefined && valueAt(d, f) <= v : false))
           .map(([p]) => snapOf(p));
         return { size: docs.length, docs, forEach: fn => docs.forEach(fn) };
       },
@@ -135,6 +135,8 @@ const annual = (daysLeft, extra = {}) => ({
   subscriptionRenewsAt: iso(NOW + daysLeft * DAY), subscriptionActiveUntil: iso(NOW + (daysLeft + 1) * DAY), ...extra,
 });
 const monthly = (daysLeft, extra = {}) => ({ ...annual(daysLeft), name: 'Liga Mensal', subscriptionPlan: 'monthly', ...extra });
+// Liga em teste grátis, sem plano: o teste acaba em `daysLeft` dias (negativo = acabou há tantos dias).
+const trial = (daysLeft, extra = {}) => ({ name: 'Liga Teste', plan: 'trial', trialEndsAt: iso(NOW + daysLeft * DAY), ...extra });
 
 const reset = () => {
   store.clear(); sent.length = 0; logs.length = 0; fetchMode = 'ok'; fetchCount = 0; updateShouldThrowFor = null;
@@ -224,7 +226,8 @@ const reset = () => {
 
   reset();
   store.set('leagues/L', annual(-2, { subscriptionActiveUntil: iso(NOW - 1 * DAY), trialEndsAt: iso(NOW + 3 * DAY) }));
-  check('ainda no teste grátis: a liga segue completa, então não diz que voltou ao gratuito', (await run()).length === 0);
+  mails = await run();
+  check('ainda no teste grátis: a liga segue completa, então não diz que voltou ao gratuito (só lembra de que o teste acaba)', mails.length === 2 && mails.every(m => /^O teste grátis da liga/.test(m.subject)) && !mails.some(m => /voltou ao plano gratuito/.test(m.text)), mails.map(m => m.subject));
 
   reset();
   store.set('leagues/L', annual(-2, { subscriptionActiveUntil: iso(NOW - 1 * DAY), trialEndsAt: undefined }));
@@ -260,6 +263,85 @@ const reset = () => {
   reset();
   store.set('leagues/L', monthly(-1, { subscriptionRenewsAt: iso(NOW - 2 * DAY), subscriptionActiveUntil: iso(NOW - 1 * DAY), subscriptionCancelledAt: iso(NOW - 20 * DAY) }));
   check('mensal cancelada de propósito: ao acabar não manda "não conseguimos renovar"', (await run()).length === 0 && !league('L').billingNotices, league('L'));
+
+  // ───────── teste grátis: lembrete e aviso de que acabou ─────────
+  const dia = ms => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  reset();
+  store.set('leagues/L', trial(2));
+  mails = await run();
+  check('teste acabando em 2 dias: lembrete para cada admin da liga (e só para eles)', mails.length === 2 && mails.map(m => m.to).sort().join() === 'a1@x.com,a2@x.com', mails.map(m => m.to));
+  check('assunto traz o nome da liga e a data em que o teste acaba', mails[0].subject === `O teste grátis da liga "Liga Teste" acaba em ${dia(NOW + 2 * DAY)}`, mails[0].subject);
+  check('texto: quantos dias faltam', /faltam 2 dias/.test(mails[0].text), mails[0].text);
+  check('texto: preço dos dois planos e a economia do anual', /R\$ 29,90 por mês/.test(mails[0].text) && /R\$ 238,80 por ano/.test(mails[0].text) && /equivale a R\$ 19,90 por mês/.test(mails[0].text) && /economia de R\$ 120,00 por ano/.test(mails[0].text), mails[0].text);
+  check('texto: como assinar e que o mensal se cancela pelo próprio app, sem fidelidade', /💳 Assinatura/.test(mails[0].text) && /sem fidelidade/.test(mails[0].text) && /cancelar pelo próprio aplicativo/.test(mails[0].text));
+  check('texto: o que continua e o que fica pausado no plano gratuito', /criar campeonatos, convocar, sortear os times e registrar o placar/.test(mails[0].text) && /Ficam pausados o registro de quem fez os gols, o ranking e as conquistas novas/.test(mails[0].text), mails[0].text);
+  check('texto: avisa que o que se faz no plano gratuito não conta nem depois de assinar', /não contam para títulos, ranking e conquistas, nem depois, se a liga assinar/.test(mails[0].text), mails[0].text);
+  check('HTML: negrito nos preços e botão para abrir o app', /<strong>R\$ 29,90 por mês<\/strong>/.test(mails[0].html) && /<a href="https:\/\/peladanamao\.com\.br\/"/.test(mails[0].html));
+  check('anota o aviso amarrado à data do teste e não repete', league('L').billingNotices?.trialSoon === league('L').trialEndsAt && (await run()).length === 0);
+  clock(NOW + 1.5 * DAY);
+  check('mais tarde, ainda antes do fim (falta menos de 1 dia): não manda de novo', (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(1));
+  mails = await run();
+  check('faltando 1 dia: usa o singular ("falta 1 dia")', mails.length === 2 && /falta 1 dia\)/.test(mails[0].text), mails.map(m => m.text));
+
+  reset();
+  store.set('leagues/L', trial(3));
+  check('teste acabando em exatamente 3 dias: já avisa', (await run()).length === 2);
+
+  reset();
+  store.set('leagues/L', trial(4));
+  check('teste acabando em 4 dias: ainda é cedo, nada', (await run()).length === 0 && !league('L').billingNotices);
+
+  reset();
+  store.set('leagues/L', trial(-2));
+  mails = await run();
+  check('teste que acabou há 2 dias, sem plano: avisa que a liga está no plano gratuito', mails.length === 2 && mails[0].subject === 'O teste grátis da liga "Liga Teste" acabou' && /acabou em/.test(mails[0].text) && /agora está no plano gratuito/.test(mails[0].text), mails.map(m => m.subject));
+  check('…explica o que continua, o que pausa e os preços', /No plano gratuito a liga continua funcionando/.test(mails[0].text) && /Ficam pausados/.test(mails[0].text) && /R\$ 29,90 por mês/.test(mails[0].text) && /R\$ 238,80 por ano/.test(mails[0].text), mails[0].text);
+  check('…anota e não repete', league('L').billingNotices?.trialEnded === league('L').trialEndsAt && (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(-8));
+  check('teste que acabou há 8 dias (velho demais): não avisa', (await run()).length === 0 && !league('L').billingNotices);
+
+  reset();
+  store.set('leagues/L', trial(-30));
+  check('liga antiga, teste acabou há 30 dias: nada (não avisa de coisa velha)', (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(2, { trialEndsAt: undefined }));
+  check('liga antiga sem data de teste: nunca recebe aviso de teste', (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(2, { subscriptionPlan: 'monthly', subscriptionRenewsAt: iso(NOW + 25 * DAY), subscriptionActiveUntil: iso(NOW + 26 * DAY) }));
+  check('já assinou durante o teste (plano em vigor): não manda aviso de teste', (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(-2, { subscriptionPlan: 'annual', subscriptionRenewsAt: iso(NOW + 300 * DAY), subscriptionActiveUntil: iso(NOW + 301 * DAY) }));
+  check('teste acabou, mas a liga tem plano pago em vigor: nada', (await run()).length === 0);
+
+  reset();
+  store.set('leagues/L', trial(2, { name: '<b>Liga & "Teste"</b>' }));
+  mails = await run();
+  check('nome da liga com HTML é escapado também nos avisos do teste', mails.length === 2 && !/<b>Liga/.test(mails[0].html) && /&lt;b&gt;Liga &amp; &quot;Teste&quot;&lt;\/b&gt;/.test(mails[0].html), mails[0].html.slice(0, 400));
+
+  reset();
+  store.set('leagues/L', trial(2));
+  fetchMode = 'fail';
+  mails = await run();
+  check('Resend recusa tudo: o aviso do teste não é anotado (tenta de novo amanhã)', mails.length === 0 && !league('L').billingNotices, league('L'));
+  fetchMode = 'ok';
+  mails = await run();
+  check('…e no dia seguinte, com o Resend de volta, o aviso sai', mails.length === 2 && league('L').billingNotices?.trialSoon === league('L').trialEndsAt);
+
+  reset();
+  store.set('leagues/L', trial(2));
+  store.set('leagues/L2', trial(-3, { name: 'Outra Liga' }));
+  store.set('users/a3', { email: 'a3@x.com', role: 'pending', leagues: { L2: { role: 'admin' } } });
+  mails = await run();
+  check('duas ligas em situações diferentes: cada uma avisa só os próprios admins', mails.length === 3 && mails.filter(m => m.subject.includes('Liga Teste')).length === 2 && mails.filter(m => m.subject.includes('Outra Liga')).map(m => m.to).join() === 'a3@x.com', mails.map(m => m.to + ' ' + m.subject));
+  check('o log de conclusão traz as contagens das ligas em teste, sem e-mails', logs.some(l => l.m === 'notifyBillingEmails concluída' && l.d.ligasEmTeste === 2 && l.d.avisosEnviados === 2) && !JSON.stringify(logs).includes('@x.com'), logs.filter(l => /concluída/.test(l.m)));
 
   // ───────── quem recebe ─────────
   reset();

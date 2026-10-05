@@ -1239,6 +1239,62 @@ function notifBanner() {
   </div>`;
 }
 
+/* ── Faixa do plano ───────────────────────────────────────────────────────────────────────
+   Para o admin saber onde está sem precisar abrir o 💳: quantos dias faltam do teste grátis, o que
+   o plano gratuito pausa (gols, ranking e conquistas) e quando o plano está perto de acabar. Só o
+   admin vê; fechar no × esconde por 24 horas. O botão abre a tela de assinatura. */
+const PLAN_BANNER_SNOOZE_MS = 24 * 3600000;
+function planBannerInfo(league, now = Date.now()) {
+  if (!league) return null;
+  const DAY = 86400000;
+  const ms = v => (v ? Date.parse(v) : NaN);
+  const days = t => Math.ceil((t - now) / DAY);
+  const plural = n => (n === 1 ? '1 dia' : n + ' dias');
+  const activeUntil = ms(league.subscriptionActiveUntil);
+  if (activeUntil > now) { // plano pago em vigor
+    const left = days(ms(league.subscriptionRenewsAt) || activeUntil);
+    if (league.subscriptionPlan === 'annual' && left >= 1 && left <= 30) {
+      return { kind: 'renew', tone: left <= 7 ? 'warn' : 'info', cta: 'Estender plano',
+        text: `Seu plano anual vence em ${plural(left)}. Estenda para não perder nada.` };
+    }
+    if (league.subscriptionPlan === 'monthly' && league.subscriptionCancelledAt && left >= 1 && left <= 7) {
+      return { kind: 'ending', tone: 'warn', cta: 'Estender plano',
+        text: `Sua assinatura mensal foi cancelada e o plano acaba em ${plural(left)}. Estenda para continuar.` };
+    }
+    return null;
+  }
+  const trialEnds = ms(league.trialEndsAt);
+  if (Number.isNaN(trialEnds)) return null; // liga antiga, sem data de teste: nunca cai no plano gratuito
+  if (trialEnds > now) { // teste grátis em andamento
+    const left = days(trialEnds);
+    if (left > 5) return null;
+    return { kind: 'trial', tone: left <= 2 ? 'warn' : 'info', cta: 'Ver planos',
+      text: `🎁 Teste grátis: ${left === 1 ? 'último dia' : 'faltam ' + left + ' dias'}. Depois dele, o registro de gols, o ranking e as conquistas novas ficam pausados.` };
+  }
+  return { kind: 'free', tone: 'warn', cta: 'Assinar',
+    text: '⚠️ Plano gratuito: gols, ranking e conquistas novas estão pausados.' };
+}
+
+function planBanner() {
+  if (!st.authUser || !st.leagueId || !isAdmin()) return '';
+  const info = planBannerInfo(st.availableLeagues.find(l => l.id === st.leagueId));
+  if (!info) return '';
+  try { if (Number(localStorage.getItem(`aceoma_planbar_${st.leagueId}_${info.kind}`)) > Date.now()) return ''; } catch(_) {}
+  const warn = info.tone === 'warn';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:${warn ? '#F0A50018' : '#00C97A15'};border:1px solid ${warn ? '#F0A50050' : '#00C97A40'};border-radius:10px;font-size:13px">
+    <span style="flex:1;color:var(--text2);line-height:1.45">${info.text}</span>
+    <button onclick="openSubscription()" style="background:${warn ? '#F0A500' : '#00C97A'};color:#000;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">${info.cta}</button>
+    <button onclick="dismissPlanBanner('${info.kind}')" title="Esconder por 24 horas" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:0 2px">×</button>
+  </div>`;
+}
+
+function dismissPlanBanner(kind) {
+  try { localStorage.setItem(`aceoma_planbar_${st.leagueId}_${kind}`, String(Date.now() + PLAN_BANNER_SNOOZE_MS)); } catch(_) {}
+  render();
+}
+
+function openSubscription() { st.modal = { type: 'subscription' }; render(); }
+
 async function signOutUser() {
   _unsubListeners.forEach(u=>u()); _unsubListeners=[];
   st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
@@ -3581,6 +3637,7 @@ function vCreate() {
 
   return `<div class="card">
     <div class="card-hdr"><span class="card-lbl">Novo Campeonato</span></div>
+    ${isLeagueFree() ? `<div class="warn-box">⚠️ Plano gratuito: campeonatos criados agora não contam para títulos, ranking e conquistas (nem depois, se a liga assinar). ${isAdmin() ? `<a href="#" onclick="openSubscription();return false" style="color:var(--accent)">Ver planos</a>` : 'Peça ao admin da liga para assinar.'}</div>` : ''}
     ${playerBlocked ? `<div class="warn-box">⚠️ Campeonato em andamento. Solicite autorização ao administrador para criar um novo.</div>` : ''}
     ${!playerBlocked && hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
     ${isAdmin() && !playerBlocked && !hasPreset ? `<div style="padding:10px 14px 0">
@@ -4126,7 +4183,7 @@ function mScore() {
       </div>
       ${!m.editing ? timerRow(m.id) : ''}
       ${isLeagueFree()
-        ? `<div style="padding:12px 14px;margin-bottom:10px;background:var(--s2);border-radius:10px;font-size:12px;color:var(--text3);line-height:1.5">⚽ Registro de quem fez os gols é um recurso do plano pago. Neste plano, só o placar do jogo é salvo.</div>`
+        ? `<div style="padding:12px 14px;margin-bottom:10px;background:var(--s2);border-radius:10px;font-size:12px;color:var(--text3);line-height:1.5">⚽ Registro de quem fez os gols é um recurso do plano pago. Neste plano, só o placar do jogo é salvo. ${isAdmin() ? 'Para liberar, toque em 💳 no topo da tela.' : 'Para liberar, peça ao admin da liga para assinar.'}</div>`
         : `<div id="goals-section" style="max-height:55vh;overflow-y:auto">${renderGoalPickers()}</div>`}
       <button class="btn btn-primary" onclick="confirmScore()">${m.editing?'Salvar Edição':'Confirmar Resultado'}</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -6003,7 +6060,7 @@ function render() {
     case 'stats':   content=vStats(); break;
     case 'financeiro': content=vFinanceiro(); break;
   }
-  if(main) main.innerHTML=notifBanner()+content;
+  if(main) main.innerHTML=planBanner()+notifBanner()+content;
   if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
@@ -6143,7 +6200,7 @@ function buildShell() {
       ${isAdmin()?`<button onclick="st.modal={type:'adminPanel',users:[],linkRequests:[],loading:true};loadAdminUsers();render()"
         style="background:none;border:none;color:var(--text3);font-size:19px;cursor:pointer;padding:4px 6px;line-height:1;position:relative"
         title="Painel Admin">⚙️<span id="admin-badge" style="position:absolute;top:2px;right:2px;min-width:16px;height:16px;background:var(--danger);border-radius:8px;font-size:10px;font-weight:800;color:#fff;display:none;align-items:center;justify-content:center;padding:0 4px;line-height:1;font-family:inherit"></span></button>`:''}
-      ${isAdmin()?`<button onclick="st.modal={type:'subscription'};render()"
+      ${isAdmin()?`<button onclick="openSubscription()"
         style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1"
         title="Assinatura">💳</button>`:''}
       <a href="/manual.html" target="_blank" rel="noopener"

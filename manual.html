@@ -2256,7 +2256,7 @@ p strong {
       </div>
 
       <h3>Termos de Uso</h3>
-      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.2, vigente desde 05/10/2026.</p>
+      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.3, vigente desde 05/10/2026.</p>
       <div class="callout gold">
         <div class="callout-label gold">Responsável e foro</div>
         O documento identifica <strong>Caio da Mata Pires Castanho (CPF 391.795.148-71)</strong> como responsável pela plataforma, operando como pessoa física — decisão deliberada para não abrir CNPJ antes de haver monetização. O foro eleito é a comarca de São Paulo/SP, e o contato é <code>contato@peladanamao.com.br</code>.
@@ -2308,8 +2308,22 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">O plano free é uma lista pré-selecionada, sujeita a mudança</div>
-        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.2). O histórico já registrado não é apagado nem fica refém de cobrança.
+        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.3). O histórico já registrado não é apagado nem fica refém de cobrança.
       </div>
+
+      <h3 id="avisos-do-teste">Avisos do teste grátis (para o admin não ser pego de surpresa)</h3>
+      <p>O fim do teste não acontece em silêncio. Só o <strong>admin</strong> recebe estes avisos; jogadores comuns nunca veem a faixa nem recebem os e-mails.</p>
+      <table class="data-table">
+        <thead><tr><th>Quando</th><th>O que o admin vê</th></tr></thead>
+        <tbody>
+          <tr><td>Faltando 5 a 3 dias para o teste acabar</td><td>Faixa verde no topo de todas as abas: <strong>"🎁 Teste grátis: faltam N dias. Depois dele, o registro de gols, o ranking e as conquistas novas ficam pausados."</strong>, com o botão <strong>Ver planos</strong>.</td></tr>
+          <tr><td>Faltando 2 dias ou menos (até o "último dia")</td><td>A mesma faixa, agora laranja. Além disso, <strong>3 dias antes do fim</strong> sai um e-mail com o que continua, o que pausa e os preços (veja "Avisos por e-mail" na seção 26).</td></tr>
+          <tr><td>Teste acabou, sem plano pago</td><td>Faixa laranja: <strong>"⚠️ Plano gratuito: gols, ranking e conquistas novas estão pausados."</strong>, com o botão <strong>Assinar</strong>; e um e-mail avisando que o teste acabou (só até 7 dias depois do fim).</td></tr>
+          <tr><td>Ao criar um campeonato no plano gratuito</td><td>Um aviso na aba <strong>Novo</strong>: campeonatos criados agora <strong>não contam para títulos, ranking e conquistas, nem depois, se a liga assinar</strong>. É o último momento para assinar sem perder jogos do histórico.</td></tr>
+          <tr><td>Ao registrar um placar no plano gratuito</td><td>A frase de que registrar quem fez os gols é do plano pago agora diz como liberar: <strong>"toque em 💳 no topo da tela"</strong> (admin) ou <strong>"peça ao admin da liga para assinar"</strong> (jogadores).</td></tr>
+        </tbody>
+      </table>
+      <p>A faixa some por <strong>24 horas</strong> quando o admin toca no <strong>×</strong> e depois volta enquanto a situação continuar. Ligas antigas, que não têm data de teste, nunca veem a faixa. O mesmo espaço serve, no plano anual, para o lembrete <strong>"Seu plano anual vence em N dias — Estender plano"</strong> (nos últimos 30 dias; laranja nos últimos 7) e, numa assinatura mensal cancelada, para <strong>"o plano acaba em N dias"</strong> (nos últimos 7).</p>
 
       <h3>O que continua funcionando no plano free</h3>
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
@@ -2389,10 +2403,12 @@ p strong {
       </div>
 
       <h3>Avisos por e-mail</h3>
-      <p>Todo dia, às 9h (horário de São Paulo), o servidor confere as ligas com plano pago e avisa por e-mail <strong>todos os admins da liga</strong> (um e-mail para cada um; jogadores nunca recebem). Cada aviso sai <strong>uma vez só</strong> por ciclo de pagamento: um novo pagamento começa um ciclo novo e libera avisos novos.</p>
+      <p>Todo dia, às 9h (horário de São Paulo), o servidor confere as ligas com plano pago — e as que estão no fim do teste grátis — e avisa por e-mail <strong>todos os admins da liga</strong> (um e-mail para cada um; jogadores nunca recebem). Cada aviso sai <strong>uma vez só</strong> por ciclo de pagamento (ou por teste grátis): um novo pagamento começa um ciclo novo e libera avisos novos.</p>
       <table class="data-table">
         <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
         <tbody>
+          <tr><td>Teste grátis faltando 3 dias ou menos (liga sem plano pago)</td><td>Lembrete: a data em que o teste acaba, o que continua e o que pausa no plano gratuito (inclusive que o que for criado no plano gratuito <strong>não conta para títulos, ranking e conquistas, nem depois de assinar</strong>) e os preços: <strong>R$ 29,90 por mês</strong> (sem fidelidade; cancela pelo próprio app) ou <strong>R$ 238,80 por ano</strong> (R$ 19,90 por mês, economia de R$ 120 por ano).</td></tr>
+          <tr><td>Teste grátis acabou (liga sem plano pago)</td><td>Aviso de que o teste acabou e a liga está no plano gratuito, com o mesmo resumo e os preços. Só até 7 dias depois do fim; ligas antigas e quem já assinou não recebem.</td></tr>
           <tr><td>Plano anual faltando 30 dias para vencer</td><td>Lembrete: a data de vencimento, que a assinatura anual <strong>não renova sozinha</strong> e como continuar (💳 Assinatura → <strong>Estender plano</strong>, que soma 12 meses à data atual, sem perder nenhum dia já pago). Se a liga só for vista pela primeira vez já faltando menos de 30 dias, o 1º aviso é o dos 7 dias. Estender o plano começa um ciclo novo: os lembretes recomeçam para o novo vencimento.</td></tr>
           <tr><td>Plano anual faltando 7 dias</td><td>Segundo e último lembrete antes do vencimento.</td></tr>
           <tr><td>Plano anual venceu</td><td>Aviso de que venceu e de que a liga voltou ao plano gratuito, com o histórico guardado.</td></tr>
@@ -2401,7 +2417,7 @@ p strong {
       </table>
       <div class="callout">
         <div class="callout-label">Quando NÃO avisa</div>
-        O plano mensal em dia não gera aviso (renova sozinho). Uma assinatura mensal que a pessoa <strong>cancelou de propósito</strong> pelo app também não gera o aviso de "não renovou" quando o período pago acaba (foi o combinado, não é falha). O fim de um plano só é avisado até 7 dias depois de acontecer: o que acabou há mais tempo não gera e-mail (evita avisar de coisa velha). Liga ainda no teste grátis também não recebe o aviso de "voltou ao gratuito", porque segue completa. Se o Resend (o serviço de e-mail) falhar para todos os admins, o aviso não é anotado e a tentativa se repete no dia seguinte.
+        Quem já assinou não recebe os avisos do teste grátis, e cada um deles sai <strong>uma vez só</strong> por liga (amarrado à data em que o teste acaba). O plano mensal em dia não gera aviso (renova sozinho). Uma assinatura mensal que a pessoa <strong>cancelou de propósito</strong> pelo app também não gera o aviso de "não renovou" quando o período pago acaba (foi o combinado, não é falha). O fim de um plano só é avisado até 7 dias depois de acontecer: o que acabou há mais tempo não gera e-mail (evita avisar de coisa velha). Liga ainda no teste grátis também não recebe o aviso de "voltou ao gratuito", porque segue completa. Se o Resend (o serviço de e-mail) falhar para todos os admins, o aviso não é anotado e a tentativa se repete no dia seguinte.
       </div>
       <div class="callout warn">
         <div class="callout-label warn">Técnico</div>

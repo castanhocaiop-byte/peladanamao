@@ -1837,6 +1837,28 @@ function billingNoticeFor(league, nowMs) {
   return { kind: "reminder", plan, stage, field, cycle, renewsAt, daysLeft };
 }
 
+// Avisos do TESTE GRÁTIS (só para liga sem plano pago em vigor): um lembrete faltando até 3 dias e,
+// se o teste acabar sem assinatura, um aviso de que a liga está no plano gratuito (até 7 dias
+// depois do fim; o que acabou há mais tempo não gera aviso). Amarrados à data do teste
+// (trialEndsAt), do mesmo jeito que os avisos do plano pago são amarrados ao ciclo.
+const TRIAL_REMINDER_DAYS = 3;
+const TRIAL_ENDED_WINDOW_DAYS = 7;
+
+function trialNoticeFor(league, nowMs) {
+  const trialEndsMs = Date.parse(league?.trialEndsAt);
+  if (Number.isNaN(trialEndsMs)) return null; // liga antiga, sem data de teste: nunca "acaba"
+  if (Date.parse(league.subscriptionActiveUntil) > nowMs) return null; // já tem plano pago em vigor
+  const cycle = league.trialEndsAt;
+  const sent = league.billingNotices || {};
+  if (trialEndsMs > nowMs) { // teste em andamento
+    const daysLeft = Math.ceil((trialEndsMs - nowMs) / DAY_MS);
+    if (daysLeft > TRIAL_REMINDER_DAYS || sent.trialSoon === cycle) return null;
+    return { kind: "trialSoon", plan: null, field: "trialSoon", cycle, renewsAt: cycle, daysLeft };
+  }
+  if (nowMs - trialEndsMs > TRIAL_ENDED_WINDOW_DAYS * DAY_MS || sent.trialEnded === cycle) return null;
+  return { kind: "trialEnded", plan: null, field: "trialEnded", cycle, renewsAt: cycle };
+}
+
 // Monta assunto, HTML e texto simples. Os valores variáveis ({nome}, {data}) entram DEPOIS de o
 // texto fixo ser escapado e de o **negrito** virar marcação, então nada que venha de uma liga
 // (como o nome) consegue criar marcação no e-mail.
@@ -1844,8 +1866,26 @@ function billingEmailContent(notice, leagueName) {
   const vars = { nome: leagueName, data: fmtBR(notice.renewsAt) };
   const how = "Para continuar com todos os recursos, abra o aplicativo, toque em 💳 Assinatura e escolha o plano.";
   const history = "O histórico de campeonatos, títulos e estatísticas continua guardado.";
+  const money = n => `R$ ${n.toFixed(2).replace(".", ",")}`;
+  const plans = `Para manter tudo liberado, abra o aplicativo, toque em 💳 Assinatura e escolha o plano: **${money(MP_PLANS.monthly.amount)} por mês** (sem fidelidade: dá para cancelar pelo próprio aplicativo) ou **${money(MP_PLANS.annual.amount)} por ano** (equivale a ${money(MP_PLANS.annual.amount / 12)} por mês, uma economia de ${money(MP_PLANS.monthly.amount * 12 - MP_PLANS.annual.amount)} por ano).`;
+  const freePlan = "dá para criar campeonatos, convocar, sortear os times e registrar o placar, e o histórico, o ranking e as conquistas de antes continuam lá. Ficam pausados o registro de quem fez os gols, o ranking e as conquistas novas — e **os campeonatos criados no plano gratuito não contam para títulos, ranking e conquistas, nem depois, se a liga assinar**.";
   let subject, paragraphs;
-  if (notice.kind === "reminder") {
+  if (notice.kind === "trialSoon") {
+    const falta = notice.daysLeft === 1 ? "falta 1 dia" : `faltam ${notice.daysLeft} dias`;
+    subject = `O teste grátis da liga "${leagueName}" acaba em ${vars.data}`;
+    paragraphs = [
+      `O teste grátis da liga **{nome}** no Pelada na Mão acaba em **{data}** (${falta}).`,
+      plans,
+      `Se o teste acabar sem assinatura, a liga continua funcionando no plano gratuito: ${freePlan}`,
+    ];
+  } else if (notice.kind === "trialEnded") {
+    subject = `O teste grátis da liga "${leagueName}" acabou`;
+    paragraphs = [
+      `O teste grátis da liga **{nome}** no Pelada na Mão acabou em **{data}**, e a liga agora está no plano gratuito.`,
+      `No plano gratuito a liga continua funcionando: ${freePlan}`,
+      plans,
+    ];
+  } else if (notice.kind === "reminder") {
     const falta = notice.daysLeft === 1 ? "falta 1 dia" : `faltam ${notice.daysLeft} dias`;
     subject = `A assinatura anual da liga "${leagueName}" vence em ${vars.data}`;
     paragraphs = [
@@ -1896,20 +1936,21 @@ async function sendResendEmail({ to, subject, html, text }) {
 
 async function sendBillingNotices() {
   const nowMs = Date.now();
-  const leagues = await db.collection("leagues").where("subscriptionPlan", "in", ["monthly", "annual"]).get();
   let sent = 0;
-  for (const leagueDoc of leagues.docs) {
+
+  // Manda o aviso a todos os admins da liga. Só marca como avisado se ao menos um e-mail saiu; se
+  // todos falharam, tenta de novo amanhã. Um defeito numa liga nunca impede as outras.
+  const deliver = async (leagueDoc, noticeOf) => {
     try {
       const league = leagueDoc.data();
-      const notice = billingNoticeFor(league, nowMs);
-      if (!notice) continue;
+      const notice = noticeOf(league, nowMs);
+      if (!notice) return;
       const admins = await db.collection("users").where(new FieldPath("leagues", leagueDoc.id, "role"), "==", "admin").get();
       const emails = [...new Set(admins.docs.map(d => d.data().email).filter(Boolean))];
-      if (!emails.length) { logger.warn("Aviso de cobrança sem nenhum admin com e-mail", { liga: leagueDoc.id }); continue; }
+      if (!emails.length) { logger.warn("Aviso de cobrança sem nenhum admin com e-mail", { liga: leagueDoc.id }); return; }
       const { subject, html, text } = billingEmailContent(notice, league.name || leagueDoc.id);
       let delivered = 0;
       for (const to of emails) if (await sendResendEmail({ to: [to], subject, html, text })) delivered++;
-      // Só marca como avisado se ao menos um e-mail saiu; se todos falharam, tenta de novo amanhã.
       if (delivered) {
         await leagueDoc.ref.update(new FieldPath("billingNotices", notice.field), notice.cycle);
         sent++;
@@ -1917,8 +1958,18 @@ async function sendBillingNotices() {
     } catch (e) {
       logger.error("Falha ao avisar sobre a cobrança de uma liga", { liga: leagueDoc.id, message: e?.message });
     }
-  }
-  logger.info("notifyBillingEmails concluída", { ligasComPlano: leagues.size, avisosEnviados: sent });
+  };
+
+  const paid = await db.collection("leagues").where("subscriptionPlan", "in", ["monthly", "annual"]).get();
+  for (const leagueDoc of paid.docs) await deliver(leagueDoc, billingNoticeFor);
+
+  // Teste grátis: só olha as ligas cujo teste acaba nos próximos dias ou acabou há pouco.
+  const from = new Date(nowMs - TRIAL_ENDED_WINDOW_DAYS * DAY_MS).toISOString();
+  const to = new Date(nowMs + TRIAL_REMINDER_DAYS * DAY_MS).toISOString();
+  const trials = await db.collection("leagues").where("trialEndsAt", ">=", from).where("trialEndsAt", "<=", to).get();
+  for (const leagueDoc of trials.docs) await deliver(leagueDoc, trialNoticeFor);
+
+  logger.info("notifyBillingEmails concluída", { ligasComPlano: paid.size, ligasEmTeste: trials.size, avisosEnviados: sent });
 }
 
 exports.notifyBillingEmails = onSchedule(
