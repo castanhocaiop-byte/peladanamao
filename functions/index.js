@@ -9,6 +9,7 @@ const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
 const { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator } = require("mercadopago");
 const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
+const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -1127,6 +1128,22 @@ exports.touchLeagueActivity = onCall(CALLABLE, async request => {
   return { ok: true };
 });
 
+// Recuperar os campeonatos feitos no plano gratuito (ver recover-free.js). Acontece sozinho quando o plano é
+// ativado; esta função existe para o que sobrou (ligas que já tinham plano antes dela, ou uma recuperação
+// interrompida). Só admin da liga, só com plano em vigor, e pode ser repetida sem somar nada em dobro.
+exports.recoverFreeChampionships = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "recoverFree", 6);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+  const leagueSnap = await db.doc(`leagues/${liga}`).get();
+  if (!leagueSnap.exists) throw fail("not-found", "Liga não encontrada.");
+  if (isLeagueFreeNow(leagueSnap.data())) throw fail("failed-precondition", "Assine um plano para recuperar os campeonatos feitos no plano gratuito.");
+  const r = await recoverFree({ db, liga, budgetMs: 90000 });
+  logger.info("Campeonatos do plano gratuito recuperados pelo admin", { liga, ...r });
+  return { ok: true, recovered: r.recovered, remaining: r.remaining };
+});
+
 // ── Ligas abandonadas: aviso e anonimização automática ──────────────────────────────────
 // `lastActivityAt` (gravado por touchLeagueActivity) diz quando alguém abriu a liga pela
 // última vez. Esta varredura roda uma vez por mês:
@@ -1369,6 +1386,19 @@ function annualRenewsAt(p) {
   return new Date(approvedAtOf(p).getTime() + 365 * DAY_MS).toISOString();
 }
 
+// Plano ativado: os campeonatos feitos no plano gratuito voltam a contar (títulos, ranking e conquistas): ver
+// recover-free.js. Roda DEPOIS da ativação e nunca a derruba: se falhar ou o tempo acabar, o que sobrou fica para o
+// botão "Recuperar" da aba Histórico (o app mostra quantos faltam) ou para a próxima ativação.
+const RECOVER_ON_ACTIVATION_MS = 8000;
+async function recoverAfterActivation(liga) {
+  try {
+    const r = await recoverFree({ db, liga, budgetMs: RECOVER_ON_ACTIVATION_MS });
+    if (r.found) logger.info("Campeonatos do plano gratuito recuperados ao ativar o plano", { liga, ...r });
+  } catch (e) {
+    logger.warn("Não foi possível recuperar agora os campeonatos do plano gratuito (o plano foi ativado)", { liga, erro: String(e?.message || e) });
+  }
+}
+
 // Marca a liga como paga a partir da data real da próxima cobrança (renewsAt — é o que a
 // UI mostra ao usuário). subscriptionActiveUntil soma a margem técnica de tolerância e é
 // só o que controla acesso (isLeagueFree), nunca exibido. Chamado pelo webhook, pelo
@@ -1390,6 +1420,7 @@ async function activateSubscription(liga, plan, renewsAt) {
   // Uma assinatura autorizada, ou um pagamento aprovado, desfaz o "cancelada" de uma assinatura mensal anterior.
   await ref.update({ subscriptionActiveUntil: activeUntil, subscriptionRenewsAt: renewsAt, subscriptionPlan: plan, subscriptionCancelledAt: FieldValue.delete() });
   logger.info("Assinatura ativada", { liga, plan, renewsAt, activeUntil });
+  await recoverAfterActivation(liga);
   return true;
 }
 
@@ -1424,6 +1455,7 @@ async function applyAnnualPayment(liga, payment) {
   });
   if (!applied) return false;
   logger.info("Pagamento anual somado ao plano", { liga, paymentId, renewsAt: applied.renewsAt, estendeu: applied.extended });
+  await recoverAfterActivation(liga);
   return true;
 }
 
@@ -1876,7 +1908,7 @@ function billingEmailContent(notice, leagueName) {
   const history = "O histórico de campeonatos, títulos e estatísticas continua guardado.";
   const money = n => `R$ ${n.toFixed(2).replace(".", ",")}`;
   const plans = `Para manter tudo liberado, abra o aplicativo, toque em 💳 Assinatura e escolha o plano: **${money(MP_PLANS.monthly.amount)} por mês** (sem fidelidade: dá para cancelar pelo próprio aplicativo) ou **${money(MP_PLANS.annual.amount)} por ano** (equivale a ${money(MP_PLANS.annual.amount / 12)} por mês, uma economia de ${money(MP_PLANS.monthly.amount * 12 - MP_PLANS.annual.amount)} por ano).`;
-  const freePlan = "dá para criar campeonatos, convocar, sortear os times e registrar o placar, e o histórico, o ranking e as conquistas de antes continuam lá. Ficam pausados o registro de quem fez os gols, o ranking e as conquistas novas — e **os campeonatos criados no plano gratuito não contam para títulos, ranking e conquistas, nem depois, se a liga assinar**.";
+  const freePlan = "dá para criar campeonatos, convocar, sortear os times e registrar o placar, e o histórico, o ranking e as conquistas de antes continuam lá. Ficam pausados o registro de quem fez os gols, o ranking e as conquistas novas — e **os campeonatos criados no plano gratuito só passam a contar para títulos, ranking e conquistas quando a liga assinar: aí eles são recuperados** (os gols deles não foram registrados e não voltam).";
   let subject, paragraphs;
   if (notice.kind === "trialSoon") {
     const falta = notice.daysLeft === 1 ? "falta 1 dia" : `faltam ${notice.daysLeft} dias`;

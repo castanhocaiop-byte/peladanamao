@@ -787,6 +787,74 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   check('criar o checkout mensal: devolve o link, soma no contador do dia e marca a liga (subcoleção fechada)', r.status === 200 && !!(r.result && r.result.initPoint) && evDoc2.checkoutMonthly === 1 && checkoutMark.starts === 2, { r: r.raw, evDoc2, checkoutMark });
   check('…e o documento da liga que os membros leem não ganhou nenhum campo novo', !('checkoutStarts' in docData(await db.get('owner', 'leagues/la'))) && !('lastCheckoutAt' in docData(await db.get('owner', 'leagues/la'))));
 
+
+  // ═════════════ RECUPERAR OS CAMPEONATOS FEITOS NO PLANO GRATUITO ═════════════
+  console.log('── recuperar os campeonatos feitos no plano gratuito (Firestore e funções de verdade)');
+  await seed();
+  {
+    const past = d => new Date(Date.now() - d * 86400000).toISOString(), future = d => new Date(Date.now() + d * 86400000).toISOString();
+    const freeChamp = (date, extra) => ({ date, status: 'completed', champion: 'azul', freeMode: true, teams: ['azul', 'verde'], format: 2, matches: [], champion_players: [{ name: 'Ana', weight: 1 }, { name: 'Beto Silva', weight: 0.5 }], ...extra });
+    const S = (p, d) => db.set('owner', p, d);
+    // os campeonatos entram ANTES de os usuários terem a liga (como em seed): assim os gatilhos de aviso não tentam notificar ninguém
+    await S('leagues/lr', { name: 'Liga R', ownerId: U.admA.uid, trialEndsAt: past(20) }); // teste acabou, sem plano
+    await S('leagues/lr/championships/c1', freeChamp('2026-09-03'));
+    await S('leagues/lr/championships/c2', freeChamp('2026-09-10', { champion: 'verde', champion_players: [{ name: ' Ana ', weight: 1 }, { name: 'Caio', weight: 1 }] }));
+    await S('leagues/lr/championships/c3', { date: '2026-09-17', status: 'active', freeMode: true, teams: ['azul', 'verde'], format: 2, matches: [] });
+    await S('leagues/lr/championships/n1', freeChamp('2026-08-01', { freeMode: false, champion: 'amarelo' }));
+    await S('leagues/lr/player_titles/ana', { name: 'Ana', titles: 2, last_date: '2026-08-01', entries: [{ date: '2026-07-01', weight: 1, team: 'azul', champId: 'x1' }, { date: '2026-08-01', weight: 1, team: 'azul', champId: 'x2' }] });
+    await S('leagues/ls', { name: 'Liga S', ownerId: U.admB.uid, trialEndsAt: past(20), subscriptionActiveUntil: future(30) });
+    await S('leagues/ls/championships/o1', freeChamp('2026-09-03'));
+    for (const lg of ['lp', 'lq']) {
+      await S('leagues/' + lg, { name: 'Liga ' + lg, ownerId: U.admA.uid, trialEndsAt: past(20) });
+      for (let i = 1; i <= 6; i++) await S(`leagues/${lg}/championships/c${i}`, freeChamp(`2026-09-0${i}`));
+    }
+    await sleep(2000);
+    for (const lg of ['lr', 'lp', 'lq']) await db.update('owner', 'users/' + U.admA.uid, { ['leagues.' + lg]: { role: 'admin', joinedAt: NOW } });
+    await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.lr': { role: 'player', joinedAt: NOW } });
+
+    const ch = async (lg, id) => docData(await db.get('owner', `leagues/${lg}/championships/${id}`));
+    const ti = async (lg, k) => docData(await db.get('owner', `leagues/${lg}/player_titles/${k}`));
+
+    let r = await callFn('recoverFreeChampionships', null, { liga: 'lr' });
+    check('recuperar: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('recoverFreeChampionships', tok, { liga: 'lr' });
+      check(`recuperar: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    r = await callFn('recoverFreeChampionships', U.admA.token, { liga: 'lr' });
+    check('recuperar: admin, mas a liga está no plano gratuito (teste acabou, sem assinatura) → pré-condição falhou e nada muda', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /Assine um plano/.test(r.error.message) && (await ch('lr', 'c1')).freeMode === true && !(await ti('lr', 'beto_silva')), r.raw);
+
+    await db.update('owner', 'leagues/lr', { subscriptionPlan: 'annual', subscriptionRenewsAt: future(300), subscriptionActiveUntil: future(301) });
+    r = await callFn('recoverFreeChampionships', U.admA.token, { liga: 'lr' });
+    check('recuperar: com plano em vigor, o admin recupera os 3 campeonatos do plano gratuito (2 concluídos e 1 em andamento)', r.status === 200 && r.result && r.result.ok === true && r.result.recovered === 3 && r.result.remaining === 0, r.raw);
+    const [c1, c2, c3, n1] = [await ch('lr', 'c1'), await ch('lr', 'c2'), await ch('lr', 'c3'), await ch('lr', 'n1')];
+    check('…cada um perde o freeMode e ganha recoveredFromFree e recoveredAt; o campeonato normal não é tocado', [c1, c2, c3].every(c => c.freeMode === false && c.recoveredFromFree === true && /^\d{4}-\d\d-\d\dT/.test(c.recoveredAt)) && n1.recoveredFromFree === undefined && n1.champion === 'amarelo', { c1, n1 });
+    const [ana, beto, caio] = [await ti('lr', 'ana'), await ti('lr', 'beto_silva'), await ti('lr', 'caio')];
+    check('…ranking: Ana de 2 para 4 títulos (c1 e c2), Beto Silva 0,5 (meio título), Caio 1; cada entrada leva o id do campeonato; last_date é o do mais novo', ana.titles === 4 && ana.entries.length === 4 && ana.last_date === '2026-09-10' && beto.titles === 0.5 && beto.entries[0].weight === 0.5 && caio.titles === 1 && ana.entries.slice(2).map(e => e.champId).join() === 'c1,c2' && beto.name === 'Beto Silva', { ana, beto, caio });
+    check('…a liga vizinha (de outro admin) continua intacta', (await ch('ls', 'o1')).freeMode === true && !(await ti('ls', 'ana')));
+    r = await callFn('recoverFreeChampionships', U.admA.token, { liga: 'lr' });
+    check('…chamar de novo não muda nada (recuperados: 0; Ana continua com 4)', r.status === 200 && r.result.recovered === 0 && (await ti('lr', 'ana')).titles === 4);
+    check('depois de recuperado, o campeonato aceita dados de gol (o gatilho do plano gratuito deixa de apagá-los)', okW(await db.update('owner', 'leagues/lr/championships/c1', { matches: [{ id: 'm1', played: true, home: 'azul', away: 'verde', hs: 2, as: 1, goals: [{ player: 'Ana' }] }] })) && await (async () => { await sleep(1500); const m = (await ch('lr', 'c1')).matches; return m && m[0] && Array.isArray(m[0].goals) && m[0].goals.length === 1; })());
+
+    // três pedidos ao mesmo tempo, com transações de verdade: ninguém soma em dobro
+    await db.update('owner', 'leagues/lp', { subscriptionPlan: 'annual', subscriptionRenewsAt: future(300), subscriptionActiveUntil: future(301) });
+    const par = await Promise.all([1, 2, 3].map(() => callFn('recoverFreeChampionships', U.admA.token, { liga: 'lp' })));
+    const rec = par.reduce((s, x) => s + ((x.result && x.result.recovered) || 0), 0);
+    const anaP = await ti('lp', 'ana'), betoP = await ti('lp', 'beto_silva');
+    check('3 pedidos de recuperação ao mesmo tempo: cada campeonato é recuperado uma vez só e o título não dobra (Ana 6 títulos com 6 entradas; Beto Silva 3)', par.every(x => x.status === 200) && rec === 6 && anaP.titles === 6 && anaP.entries.length === 6 && betoP.titles === 3 && betoP.entries.length === 6, { statuses: par.map(x => x.status), rec, anaP, betoP });
+
+    // ao pagar: a recuperação acontece sozinha, junto com a ativação do plano
+    mpState({ payments: [{ id: 9001, external_reference: 'lq', status: 'approved', operation_type: 'regular_payment', transaction_amount: 238.8, date_approved: new Date(Date.now() - 120000).toISOString() }] });
+    r = await callFn('checkSubscriptionStatus', U.admA.token, { liga: 'lq' });
+    const lq = docData(await db.get('owner', 'leagues/lq'));
+    const todos = [];
+    for (let i = 1; i <= 6; i++) todos.push((await ch('lq', 'c' + i)).freeMode);
+    const anaQ = await ti('lq', 'ana');
+    check('pagamento anual aprovado numa liga com campeonatos do plano gratuito: o plano é ativado E os 6 campeonatos voltam a contar, sem ninguém tocar em nada (Ana com 6 títulos)', r.status === 200 && r.result.status === 'active' && lq.subscriptionPlan === 'annual' && todos.every(f => f === false) && anaQ && anaQ.titles === 6 && anaQ.entries.length === 6, { r: r.raw, todos, anaQ });
+    r = await callFn('checkSubscriptionStatus', U.admA.token, { liga: 'lq' });
+    check('…consultar de novo o mesmo pagamento não soma título em dobro', r.status === 200 && (await ti('lq', 'ana')).titles === 6);
+  }
+
   console.log(`\n${passes} verificações ok, ${fails} falha(s)`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERRO NO TESTE', e); process.exit(1); });

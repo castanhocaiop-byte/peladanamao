@@ -119,6 +119,14 @@ jobs:
         working-directory: functions
         run: node test/client-landing-test.js
 
+      - name: Testes das Cloud Functions (recuperar os campeonatos do plano gratuito)
+        working-directory: functions
+        run: node test/recover-free-test.js
+
+      - name: Testes do app (recuperar os campeonatos do plano gratuito - aviso, botão e textos)
+        working-directory: functions
+        run: node test/client-recover-test.js
+
       - name: Testes do PIX copia e cola (código e leitura da chave)
         working-directory: functions
         run: node test/pix-test.js

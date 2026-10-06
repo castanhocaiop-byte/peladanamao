@@ -2367,7 +2367,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">O plano free é uma lista pré-selecionada, sujeita a mudança</div>
-        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.3). O histórico já registrado não é apagado nem fica refém de cobrança.
+        Fazem parte do plano free <strong>somente os itens pré-selecionados pelo Pelada na Mão</strong>, os da lista abaixo. Eles estão <strong>sujeitos a mudança</strong>: o Pelada na Mão pode incluir, alterar ou retirar itens a qualquer momento, com comunicação dentro do aplicativo. O que não está na lista é exclusivo do período de teste e dos planos pagos. É o que diz a cláusula 10 dos Termos de Uso (versão 1.4). O histórico já registrado não é apagado nem fica refém de cobrança.
       </div>
 
       <h3 id="avisos-do-teste">Avisos do teste grátis (para o admin não ser pego de surpresa)</h3>
@@ -2378,7 +2378,7 @@ p strong {
           <tr><td>Faltando 5 a 3 dias para o teste acabar</td><td>Faixa verde no topo de todas as abas: <strong>"🎁 Teste grátis: faltam N dias. Depois dele, o registro de gols, o ranking e as conquistas novas ficam pausados."</strong>, com o botão <strong>Ver planos</strong>.</td></tr>
           <tr><td>Faltando 2 dias ou menos (até o "último dia")</td><td>A mesma faixa, agora laranja. Além disso, <strong>3 dias antes do fim</strong> sai um e-mail com o que continua, o que pausa e os preços (veja "Avisos por e-mail" na seção 26).</td></tr>
           <tr><td>Teste acabou, sem plano pago</td><td>Faixa laranja: <strong>"⚠️ Plano gratuito: gols, ranking e conquistas novas estão pausados."</strong>, com o botão <strong>Assinar</strong>; e um e-mail avisando que o teste acabou (só até 7 dias depois do fim).</td></tr>
-          <tr><td>Ao criar um campeonato no plano gratuito</td><td>Um aviso na aba <strong>Novo</strong>: campeonatos criados agora <strong>não contam para títulos, ranking e conquistas, nem depois, se a liga assinar</strong>. É o último momento para assinar sem perder jogos do histórico.</td></tr>
+          <tr><td>Ao criar um campeonato no plano gratuito</td><td>Um aviso na aba <strong>Novo</strong>: campeonatos criados agora <strong>ficam guardados, mas só contam para títulos, ranking e conquistas quando a liga assinar: aí eles são recuperados</strong> (veja "Recuperar os campeonatos do plano gratuito", abaixo).</td></tr>
           <tr><td>Ao registrar um placar no plano gratuito</td><td>A frase de que registrar quem fez os gols é do plano pago agora diz como liberar: <strong>"toque em 💳 no topo da tela"</strong> (admin) ou <strong>"peça ao admin da liga para assinar"</strong> (jogadores).</td></tr>
         </tbody>
       </table>
@@ -2395,8 +2395,8 @@ p strong {
       <h3>O que fica pausado</h3>
       <p>Ao registrar o placar de uma partida de um campeonato criado no plano free, o app não pergunta mais <strong>quem fez os gols</strong> — só o placar geral é salvo. Como consequência, esse campeonato específico:</p>
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
-        <li style="margin-bottom:4px">Não conta para nenhum título, mesmo tendo um time campeão de verdade — ele não entra no ranking geral nem nos gráficos de evolução</li>
-        <li style="margin-bottom:4px">Não desbloqueia nenhuma badge (artilheiro, sequências, campeão, votação, etc.)</li>
+        <li style="margin-bottom:4px">Enquanto a liga está no plano gratuito, não conta para nenhum título, mesmo tendo um time campeão de verdade — ele não entra no ranking geral nem nos gráficos de evolução. Quando a liga assina, ele é <a href="#recuperar-gratuitos">recuperado</a></li>
+        <li style="margin-bottom:4px">Enquanto isso, não desbloqueia nenhuma badge (artilheiro, sequências, campeão, votação, etc.)</li>
         <li style="margin-bottom:4px">Continua aparecendo normalmente no histórico, com o placar de cada jogo</li>
       </ul>
       <div class="callout">
@@ -2405,11 +2405,41 @@ p strong {
       </div>
 
       <h3>Como o sistema identifica um campeonato do plano free</h3>
-      <p>Cada campeonato nasce com uma marcação (<code>freeMode</code>) definida no momento em que é criado, conforme o trial da liga já estava vencido ou não naquele instante — essa marcação não muda depois, mesmo que a liga volte a ser paga futuramente. Um campeonato criado durante o trial mantém seus títulos e badges normalmente, ainda que só seja concluído depois do trial acabar.</p>
+      <p>Cada campeonato nasce com uma marcação (<code>freeMode</code>) definida no momento em que é criado, conforme o trial da liga já estava vencido ou não naquele instante — essa marcação só muda quando o campeonato é <a href="#recuperar-gratuitos">recuperado</a>, depois que a liga passa a ter plano pago. Um campeonato criado durante o trial mantém seus títulos e badges normalmente, ainda que só seja concluído depois do trial acabar.</p>
 
       <div class="callout">
         <div class="callout-label">Trava também no servidor, não só na tela</div>
         A tela esconde o campo de gols no plano free, mas isso sozinho não impediria alguém de tentar escrever esse dado direto no banco por fora do app. Existe uma função no servidor (<code>enforceFreeModeNoGoals</code>) que roda a cada gravação num campeonato do plano free e apaga qualquer dado de gol que apareça ali, então a régua vale mesmo que a tela seja contornada.
+      </div>
+
+      <h3 id="recuperar-gratuitos">Recuperar os campeonatos do plano gratuito</h3>
+      <p>Os campeonatos feitos no plano gratuito <strong>não se perdem</strong>: ficam guardados e, quando a liga passa a ter plano pago, são <strong>recuperados</strong> e passam a contar para títulos, ranking, gráficos de evolução e conquistas. Quem assina não precisa decidir entre perder jogos do histórico e pagar antes da hora.</p>
+
+      <table class="data-table">
+        <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>A liga assina (pagamento anual aprovado ou assinatura mensal autorizada)</td><td><strong>Sozinho.</strong> No mesmo momento em que o plano é ativado, o servidor recupera todos os campeonatos do plano gratuito da liga. Se a recuperação falhar ou não terminar a tempo (o limite é de cerca de 8 segundos), <strong>o plano é ativado do mesmo jeito</strong> e o que sobrou fica para o botão abaixo.</td></tr>
+          <tr><td>Liga que já tinha plano antes desta função, ou recuperação interrompida</td><td>Na aba <strong>Histórico</strong>, o admin vê <strong>"🔓 N campeonatos feitos no plano gratuito ainda não contam… Como a liga tem plano, dá para recuperar agora"</strong> e o botão <strong>Recuperar</strong>. Só o admin, só com plano em vigor, e pode tocar de novo sem somar nada em dobro.</td></tr>
+          <tr><td>Liga ainda sem plano</td><td>O Histórico mostra ao admin <strong>"🔒 N campeonatos feitos no plano gratuito. Quando a liga assinar, eles voltam a contar…"</strong>, com o botão <strong>Ver planos</strong>; e a tela <strong>💳 Assinatura</strong> diz quantos campeonatos voltam a contar ao assinar. Jogador comum não vê o aviso, mas cada campeonato do plano gratuito mostra a marca <em>"plano gratuito · ainda não conta para títulos"</em>.</td></tr>
+        </tbody>
+      </table>
+
+      <h4>O que a recuperação faz</h4>
+      <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
+        <li style="margin-bottom:4px">Soma os títulos de cada jogador campeão no <strong>ranking</strong> (<code>player_titles</code>), com o mesmo peso de quando o campeonato foi encerrado (título inteiro ou ½) e a entrada identificada pelo campeonato.</li>
+        <li style="margin-bottom:4px">Tira a marca de plano gratuito (<code>freeMode</code>) do campeonato e anota de onde ele veio (<code>recoveredFromFree</code>) e quando (<code>recoveredAt</code>).</li>
+        <li style="margin-bottom:4px">Faz isso <strong>campeonato por campeonato, do mais antigo para o mais novo</strong>, cada um numa transação: ou entram os títulos e a marca juntos, ou nada muda. Repetir é seguro: o que já foi recuperado é pulado, e dois pedidos ao mesmo tempo (ativação do plano e botão do admin) não somam em dobro.</li>
+        <li style="margin-bottom:4px">Campeonato ainda em andamento só perde a marca (os títulos entram quando ele for encerrado, já como campeonato normal).</li>
+      </ul>
+
+      <div class="callout warn">
+        <div class="callout-label warn">O que NÃO volta: os gols</div>
+        No plano gratuito o app não pergunta quem fez os gols, então esses jogos <strong>não têm gols registrados</strong> e a recuperação não inventa nada. Os campeonatos recuperados contam para títulos, campeonatos disputados, sequências e as conquistas que não dependem de gol; as estatísticas de gols e a artilharia continuam sem eles. O aviso do Histórico diz isso ao admin antes de recuperar.
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Depois de recuperar</div>
+        As telas se atualizam sozinhas (ranking, histórico, Meu Craque). As conquistas que os campeonatos recuperados desbloqueiam são notificadas em cada aparelho na próxima vez que o app abrir, como qualquer conquista nova, então os jogadores podem receber várias notificações de uma vez. Excluir um campeonato recuperado funciona como em qualquer outro: o título dele sai do ranking. A cláusula 10 dos Termos de Uso (versão 1.4) descreve essa regra.
       </div>
     </section>
 
@@ -2490,7 +2520,7 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Situação</th><th>O que acontece</th></tr></thead>
         <tbody>
-          <tr><td>Teste grátis faltando 3 dias ou menos (liga sem plano pago)</td><td>Lembrete: a data em que o teste acaba, o que continua e o que pausa no plano gratuito (inclusive que o que for criado no plano gratuito <strong>não conta para títulos, ranking e conquistas, nem depois de assinar</strong>) e os preços: <strong>R$ 29,90 por mês</strong> (sem fidelidade; cancela pelo próprio app) ou <strong>R$ 238,80 por ano</strong> (R$ 19,90 por mês, economia de R$ 120 por ano).</td></tr>
+          <tr><td>Teste grátis faltando 3 dias ou menos (liga sem plano pago)</td><td>Lembrete: a data em que o teste acaba, o que continua e o que pausa no plano gratuito (inclusive que o que for criado no plano gratuito <strong>só passa a contar para títulos, ranking e conquistas quando a liga assina: aí é recuperado</strong>) e os preços: <strong>R$ 29,90 por mês</strong> (sem fidelidade; cancela pelo próprio app) ou <strong>R$ 238,80 por ano</strong> (R$ 19,90 por mês, economia de R$ 120 por ano).</td></tr>
           <tr><td>Teste grátis acabou (liga sem plano pago)</td><td>Aviso de que o teste acabou e a liga está no plano gratuito, com o mesmo resumo e os preços. Só até 7 dias depois do fim; ligas antigas e quem já assinou não recebem.</td></tr>
           <tr><td>Plano anual faltando 30 dias para vencer</td><td>Lembrete: a data de vencimento, que a assinatura anual <strong>não renova sozinha</strong> e como continuar (💳 Assinatura → <strong>Estender plano</strong>, que soma 12 meses à data atual, sem perder nenhum dia já pago). Se a liga só for vista pela primeira vez já faltando menos de 30 dias, o 1º aviso é o dos 7 dias. Estender o plano começa um ciclo novo: os lembretes recomeçam para o novo vencimento.</td></tr>
           <tr><td>Plano anual faltando 7 dias</td><td>Segundo e último lembrete antes do vencimento.</td></tr>

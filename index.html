@@ -1083,6 +1083,9 @@ function isLeagueFree() {
   const activeUntil = league.subscriptionActiveUntil;
   return !activeUntil || new Date(activeUntil).getTime() < Date.now();
 }
+// Campeonatos feitos no plano gratuito (freeMode) que ainda não foram recuperados. Quando a liga assina, o servidor
+// os recupera sozinho (functions/recover-free.js) e títulos, ranking e conquistas voltam a contar.
+function freeChamps() { return (st.champs || []).filter(c => c.freeMode); }
 function isBadgeImpossible(b) {
   if (!b.minGoalsMatch) return false;
   const lim = st.appCfg?.matchGolsLimite || 0;
@@ -1671,6 +1674,21 @@ function dismissPlanBanner(kind) {
 }
 
 function openSubscription() { trackEvent('subscriptionOpened'); st.modal = { type: 'subscription' }; render(); }
+
+// Recupera agora os campeonatos do plano gratuito (só admin, só com plano em vigor; o servidor confere). A tela se
+// atualiza sozinha: os campeonatos e o ranking chegam pelos ouvintes do Firestore.
+async function recoverFreeChamps() {
+  if (st._recovering || !isAdmin()) return;
+  st._recovering = true; render();
+  try {
+    const r = await callFn('recoverFreeChampionships', { liga: st.leagueId });
+    const n = Number(r?.recovered) || 0, rest = Number(r?.remaining) || 0;
+    toast(rest ? `${n} recuperado${n === 1 ? '' : 's'}; faltam ${rest}. Toque de novo para continuar.`
+      : n ? `✅ ${n === 1 ? '1 campeonato recuperado' : n + ' campeonatos recuperados'}: agora contam para títulos, ranking e conquistas.`
+      : 'Nada a recuperar: já está tudo contando.', 'ok');
+  } catch (e) { toast(e?.message || 'Não foi possível recuperar agora. Tente de novo.'); }
+  st._recovering = false; render();
+}
 
 async function signOutUser() {
   _unsubListeners.forEach(u=>u()); _unsubListeners=[];
@@ -4617,7 +4635,7 @@ function vCreate() {
 
   return `<div class="card">
     <div class="card-hdr"><span class="card-lbl">Novo Campeonato</span></div>
-    ${isLeagueFree() ? `<div class="warn-box">⚠️ Plano gratuito: campeonatos criados agora não contam para títulos, ranking e conquistas (nem depois, se a liga assinar). ${isAdmin() ? `<a href="#" onclick="openSubscription();return false" style="color:var(--accent)">Ver planos</a>` : 'Peça ao admin da liga para assinar.'}</div>` : ''}
+    ${isLeagueFree() ? `<div class="warn-box">⚠️ Plano gratuito: campeonatos criados agora ficam guardados, mas só contam para títulos, ranking e conquistas quando a liga assinar: aí eles são recuperados. ${isAdmin() ? `<a href="#" onclick="openSubscription();return false" style="color:var(--accent)">Ver planos</a>` : 'Peça ao admin da liga para assinar.'}</div>` : ''}
     ${playerBlocked ? `<div class="warn-box">⚠️ Campeonato em andamento. Solicite autorização ao administrador para criar um novo.</div>` : ''}
     ${!playerBlocked && hasActive ? `<div class="warn-box">⚠️ Existe um campeonato ativo. Criar novo irá substituí-lo.</div>` : ''}
     ${isAdmin() && !playerBlocked && !hasPreset ? `<div style="padding:10px 14px 0">
@@ -5118,7 +5136,18 @@ function vHistory() {
     <p>Campeonatos concluídos aparecerão aqui.</p>
   </div>`;
 
-  return `<div class="card">
+  // Campeonatos do plano gratuito: sem plano avisam que voltam a contar quando a liga assinar; com plano o admin os recupera.
+  const nFree = freeChamps().length;
+  const plural = (n, um, varios) => (n === 1 ? um : varios);
+  const freeBox = (tom, texto, botao) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:${tom ? '#F0A50018' : '#00C97A15'};border:1px solid ${tom ? '#F0A50050' : '#00C97A40'};border-radius:10px;font-size:13px">
+    <span style="flex:1;color:var(--text2);line-height:1.45">${texto}</span>${botao}</div>`;
+  const freeCard = !nFree || !isAdmin() ? '' : isLeagueFree()
+    ? freeBox(true, `🔒 ${nFree} ${plural(nFree, 'campeonato feito', 'campeonatos feitos')} no plano gratuito. Quando a liga assinar, ${plural(nFree, 'ele volta', 'eles voltam')} a contar para títulos, ranking e conquistas.`,
+        `<button onclick="openSubscription()" style="background:#F0A500;color:#000;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Ver planos</button>`)
+    : freeBox(false, `🔓 ${nFree} ${plural(nFree, 'campeonato feito', 'campeonatos feitos')} no plano gratuito ainda ${plural(nFree, 'não conta', 'não contam')} para títulos, ranking e conquistas. Como a liga tem plano, dá para recuperar agora (os gols desses jogos não foram registrados e não voltam).`,
+        `<button ${st._recovering ? 'disabled' : ''} onclick="recoverFreeChamps()" style="background:#00C97A;color:#000;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;opacity:${st._recovering ? '.6' : '1'}">${st._recovering ? 'Recuperando…' : 'Recuperar'}</button>`);
+
+  return freeCard + `<div class="card">
     <div class="card-hdr"><span class="card-lbl">Histórico</span></div>
     ${done.map(c=>{
       const ct=T[c.champion]||{l:c.champion,c:'#F0A500'};
@@ -5127,6 +5156,7 @@ function vHistory() {
         <div class="hist-info">
           <div class="hist-teams">${c.teams.map(tl).join(' · ')} · ${c.format} times</div>
           <div class="hist-champ" style="color:${ct.c}">🏆 ${ct.l}</div>
+          ${c.freeMode ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">plano gratuito · ainda não conta para títulos</div>` : ''}
         </div>
         <span class="hist-arrow">›</span>
       </div>`;
@@ -6518,6 +6548,7 @@ function mSubscription() {
 
   const fmt = d => d.toLocaleDateString('pt-BR');
   const checking = !!st._payChecking;
+  const nFree = (st.champs || []).filter(c => c.freeMode).length; // campeonatos do plano gratuito, que voltam a contar ao assinar
   let statusHtml;
   if (checking) {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -6542,6 +6573,7 @@ function mSubscription() {
   } else {
     statusHtml = `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:13px;color:var(--text2)">⚠️ Plano gratuito — sem registro de gols, ranking e conquistas novas</div>
+      ${nFree ? `<div style="font-size:12px;color:var(--accent);margin-top:6px;line-height:1.5;font-weight:600">🔓 Ao assinar, ${nFree === 1 ? 'o campeonato feito' : 'os ' + nFree + ' campeonatos feitos'} no plano gratuito ${nFree === 1 ? 'volta' : 'voltam'} a contar para títulos, ranking e conquistas.</div>` : ''}
     </div>`;
   }
 
