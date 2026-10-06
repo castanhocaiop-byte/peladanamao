@@ -431,9 +431,228 @@ details[open] .det-arrow { transform: rotate(180deg); }
   border-radius: var(--r-sm); border-left: 3px solid var(--danger);
   background: #f8514910; font-size: 13px; color: #ff8080; line-height: 1.4;
 }
+
+/* ── apresentação (visitante novo, sem convite) ─────────────────────────────────────────────
+   O texto fica fixo no HTML (#landing) para o Google e os links compartilhados lerem; só aparece depois que o
+   app confirma que não há ninguém logado (lpSync), e some quando a pessoa toca em Entrar ou Criar minha liga.
+   Não usa as tags header, main e nav: o app tem regras próprias para elas. */
+#landing { display: none; }
+html.lp-show #landing { display: block; }
+html.lp-show #app { display: none; }
+.lp { background: var(--bg); color: var(--text); min-height: 100dvh; line-height: 1.5; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.lp-wrap { width: 100%; max-width: 980px; margin: 0 auto; padding: 0 20px; }
+.lp-narrow { max-width: 720px; }
+.lp-top { display: flex; justify-content: flex-end; padding: 14px 0 0; }
+.lp-link { background: none; border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 8px 18px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.lp-linkbtn { background: none; border: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.lp-hero { text-align: center; padding: 4px 0 44px; background: radial-gradient(ellipse 80% 55% at 50% 0%, #00d67f22, transparent 72%); }
+.lp-logo { display: block; width: 150px; height: auto; margin: 0 auto 6px; }
+.lp-eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); }
+.lp h1, .lp h2 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: .5px; line-height: 1; }
+.lp h1 { font-size: clamp(46px, 13vw, 84px); margin: 10px 0 14px; }
+.lp h1 em { font-style: normal; color: var(--accent); }
+.lp h2 { font-size: clamp(34px, 9vw, 50px); text-align: center; margin-bottom: 10px; }
+.lp h3 { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+.lp-lead { font-size: clamp(16px, 4.3vw, 20px); color: var(--text2); max-width: 640px; margin: 0 auto; }
+.lp-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 26px 0 14px; }
+.lp-btn { border: none; border-radius: 12px; padding: 15px 24px; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
+.lp-btn-main { background: var(--accent); color: #000; box-shadow: 0 6px 24px #00d67f33; }
+.lp-btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); font-weight: 600; }
+.lp-checks { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 20px; font-size: 13px; color: var(--text2); }
+.lp-checks li::before { content: '✓ '; color: var(--accent); font-weight: 800; }
+.lp-sec { padding: 44px 0; border-top: 1px solid var(--border2); }
+.lp-sub { text-align: center; color: var(--text2); font-size: 15px; max-width: 640px; margin: 0 auto 26px; }
+.lp-left { text-align: left; margin-left: 0; }
+.lp-grid { display: grid; gap: 12px; grid-template-columns: 1fr; list-style: none; }
+.lp-card { background: var(--s1); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+.lp-card p { font-size: 14px; color: var(--text2); }
+.lp-ico { font-size: 28px; margin-bottom: 8px; }
+.lp-n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #000; font-weight: 800; margin-bottom: 10px; }
+.lp-more { text-align: center; color: var(--text3); font-size: 13px; margin-top: 18px; }
+.lp-cardsec { display: grid; gap: 24px; align-items: center; }
+.lp-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lp-cards figure { margin: 0; }
+.lp-cards img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--border); display: block; }
+.lp-cards figcaption { text-align: center; font-size: 12px; color: var(--text3); margin-top: 6px; }
+.lp-plan { position: relative; }
+.lp-plan-hl { border: 2px solid var(--accent); background: #00d67f12; box-shadow: 0 8px 30px #00d67f1f; }
+.lp-badge { position: absolute; top: -12px; left: 16px; background: var(--accent); color: #000; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; }
+.lp-price { font-size: 15px; color: var(--text2); margin: 2px 0 6px; }
+.lp-card .lp-price { font-size: 15px; }
+.lp-price b { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 40px; color: var(--text); letter-spacing: .5px; }
+.lp-card .lp-save { color: var(--accent); font-weight: 700; }
+.lp-note { font-size: 12px; color: var(--text3); }
+.lp-center { text-align: center; margin-top: 14px; }
+.lp-free { margin: 26px auto 0; max-width: 720px; padding: 18px; border: 1px dashed var(--border); border-radius: 14px; }
+.lp-free p { font-size: 14px; color: var(--text2); }
+.lp-faq { border-bottom: 1px solid var(--border2); }
+.lp-faq summary { cursor: pointer; font-weight: 700; padding: 14px 0; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.lp-faq summary::-webkit-details-marker { display: none; }
+.lp-faq summary::after { content: '+'; color: var(--accent); font-size: 22px; line-height: 1; }
+.lp-faq[open] summary::after { content: '–'; }
+.lp-faq p { color: var(--text2); font-size: 14px; padding: 0 0 14px; }
+.lp-faq a, .lp-center a, .lp-foot a { color: inherit; text-decoration: underline; }
+.lp-final { text-align: center; }
+.lp-foot { border-top: 1px solid var(--border2); padding: 22px 0 28px; text-align: center; font-size: 12px; color: var(--text3); }
+.lp-foot p + p { margin-top: 6px; }
+@media (min-width: 640px) {
+  .lp-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .lp-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .lp-cardsec { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 900px) { .lp-grid-4 { grid-template-columns: repeat(4, 1fr); } }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-btn, .lp-link { transition: transform .12s ease; }
+  .lp-btn:hover { transform: translateY(-1px); }
+}
 </style>
+<script>
+/* Página de apresentação: só para quem chega sem convite, nunca entrou neste aparelho e não está no app instalado.
+   Fora isso o app abre direto, como sempre (convite, volta do pagamento, link de acesso por e-mail, quem já é de casa).
+   LP_ALLOWED só diz "pode mostrar"; quem decide é o render() (lpSync). Na dúvida (erro, armazenamento bloqueado): não mostra. */
+(function () {
+  var ok = true;
+  try {
+    new URLSearchParams(location.search).forEach(function (_, k) { if (k !== 'ref' && !/^utm_/.test(k) && k !== 'fbclid' && k !== 'gclid') ok = false; });
+    if (localStorage.getItem('aceoma_returning') === '1') ok = false;
+    if ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone) ok = false;
+  } catch (e) { ok = false; }
+  window.LP_ALLOWED = ok;
+})();
+</script>
+<noscript><style>#landing { display: block !important; } #app { display: none; }</style></noscript>
 </head>
 <body>
+
+<!-- Página de apresentação (visitante novo, sem convite). O app a mostra só depois de confirmar que ninguém está logado (lpSync).
+     O texto é fixo aqui para o Google e os links compartilhados lerem; preços e prazos são conferidos contra o servidor por functions/test/client-landing-test.js. -->
+<div id="landing" class="lp">
+  <div class="lp-wrap">
+    <div class="lp-top"><button type="button" class="lp-link" onclick="lpGo('login')">Entrar</button></div>
+  </div>
+
+  <section class="lp-hero">
+    <div class="lp-wrap">
+      <img class="lp-logo" src="/logo.webp" alt="Pelada na Mão" width="150" height="150">
+      <p class="lp-eyebrow">Para quem organiza pelada</p>
+      <h1>Organize sua pelada <em>no celular</em></h1>
+      <p class="lp-lead">Convocação pelo WhatsApp, sorteio de times equilibrado, placar, ranking, conquistas e mensalidades. Tudo num só lugar.</p>
+      <div class="lp-cta">
+        <button type="button" class="lp-btn lp-btn-main" onclick="lpGo('signup')">Criar minha liga grátis</button>
+        <button type="button" class="lp-btn lp-btn-ghost" onclick="lpGo('login')">Já tenho conta</button>
+      </div>
+      <ul class="lp-checks">
+        <li>8 dias com tudo liberado</li>
+        <li>Sem cartão de crédito</li>
+        <li>Seus jogadores não pagam nada</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="como-funciona">
+    <div class="lp-wrap">
+      <h2>Como funciona</h2>
+      <p class="lp-sub">Em três passos a sua pelada vira uma liga de verdade.</p>
+      <ol class="lp-grid lp-grid-3">
+        <li class="lp-card"><span class="lp-n">1</span><h3>Crie a liga</h3><p>Dê um nome à sua pelada e escolha o dia do jogo. Leva poucos minutos.</p></li>
+        <li class="lp-card"><span class="lp-n">2</span><h3>Chame a galera</h3><p>Mande o link no WhatsApp. Cada jogador entra, confirma presença e já aparece no elenco.</p></li>
+        <li class="lp-card"><span class="lp-n">3</span><h3>Jogue e acompanhe</h3><p>Sorteie os times, registre o placar e veja o ranking e as conquistas se atualizarem.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="recursos">
+    <div class="lp-wrap">
+      <h2>Tudo da sua pelada, no mesmo lugar</h2>
+      <p class="lp-sub">Chega de planilha, de lista perdida no grupo e de discussão sobre quem foi campeão.</p>
+      <div class="lp-grid lp-grid-4">
+        <article class="lp-card"><div class="lp-ico">📋</div><h3>Convocação</h3><p>Abra a lista de presença, mande o link e veja quem vai. A galera recebe aviso no celular.</p></article>
+        <article class="lp-card"><div class="lp-ico">⚖️</div><h3>Sorteio de times</h3><p>Equilibrado pelas estrelas de cada jogador, aleatório ou manual. Os goleiros ficam bem distribuídos.</p></article>
+        <article class="lp-card"><div class="lp-ico">⚽</div><h3>Placar e campeonatos</h3><p>Jogos, final e quem fez cada gol. Tudo fica guardado no histórico.</p></article>
+        <article class="lp-card"><div class="lp-ico">🏆</div><h3>Ranking e artilharia</h3><p>Títulos (com meio título), gols, médias e sequências: a memória da sua pelada.</p></article>
+        <article class="lp-card"><div class="lp-ico">🎖️</div><h3>Conquistas</h3><p>Dezenas de conquistas para a resenha, como Invicto, Bicampeão e Veterano.</p></article>
+        <article class="lp-card"><div class="lp-ico">💵</div><h3>Financeiro</h3><p>Mensalidade, churrasco e despesas: quem pagou, quanto tem em caixa e cobrança pelo WhatsApp.</p></article>
+        <article class="lp-card"><div class="lp-ico">🗳️</div><h3>Votação de destaques</h3><p>Depois do jogo a galera vota na Bola Cheia e na Bola Murcha. Só quem jogou vota.</p></article>
+        <article class="lp-card"><div class="lp-ico">📤</div><h3>Cartão do jogador</h3><p>Cada craque compartilha o próprio cartão no WhatsApp, com títulos, gols e conquistas.</p></article>
+      </div>
+      <p class="lp-more">E ainda: previsão do tempo para o dia do jogo, avisos no celular, várias ligas na mesma conta e um app que se instala na tela inicial.</p>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="cartao">
+    <div class="lp-wrap lp-cardsec">
+      <div>
+        <h2 style="text-align:left">Seu cartão de craque</h2>
+        <p class="lp-sub lp-left">Títulos, gols, conquistas e campanha numa imagem pronta para mandar no grupo. É o jeito mais rápido de mostrar quem manda na pelada.</p>
+        <p class="lp-note">Os cartões ao lado são exemplos, com nomes inventados.</p>
+      </div>
+      <div class="lp-cards">
+        <figure><img src="/landing-cartao-campeao.webp" alt="Exemplo de cartão de jogador campeão, com moldura dourada, títulos, gols e conquistas" width="480" height="600" loading="lazy"><figcaption>Quem já foi campeão</figcaption></figure>
+        <figure><img src="/landing-cartao-estreante.webp" alt="Exemplo de cartão de jogador que ainda não foi campeão, com moldura verde" width="480" height="600" loading="lazy"><figcaption>Quem ainda vai ser</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="planos">
+    <div class="lp-wrap">
+      <h2>Comece grátis. Assine só se gostar.</h2>
+      <p class="lp-sub">Um plano por liga: só o admin assina, e o grupo todo usa. Os jogadores nunca pagam.</p>
+      <div class="lp-grid lp-grid-3">
+        <div class="lp-card lp-plan">
+          <h3>Teste grátis</h3>
+          <p class="lp-price"><b>8 dias</b></p>
+          <p>Tudo liberado, sem cartão de crédito. Quando acabar, a sua liga continua no plano gratuito.</p>
+        </div>
+        <div class="lp-card lp-plan lp-plan-hl">
+          <span class="lp-badge">Melhor valor</span>
+          <h3>Anual</h3>
+          <p class="lp-price"><b>R$ 238,80</b> por ano</p>
+          <p class="lp-save">R$ 19,90 por mês: você economiza R$ 120 por ano.</p>
+          <p>Pagamento único, parcelável em até 12x no cartão.</p>
+        </div>
+        <div class="lp-card lp-plan">
+          <h3>Mensal</h3>
+          <p class="lp-price"><b>R$ 29,90</b> por mês</p>
+          <p>Sem fidelidade: cancele quando quiser, pelo próprio app.</p>
+        </div>
+      </div>
+      <p class="lp-note lp-center">Pagamento pelo Mercado Pago. Os valores não são reembolsáveis: veja os <a href="/termos.html#c10">Termos de Uso</a>.</p>
+      <div class="lp-free">
+        <h3>E depois do teste, se eu não assinar?</h3>
+        <p>A sua liga não é bloqueada. Ela segue no plano gratuito: convocar, sortear os times e registrar os placares continuam funcionando, e todo o histórico fica guardado. O registro de gols, o ranking e as conquistas novas ficam pausados até a liga assinar.</p>
+      </div>
+      <div class="lp-cta"><button type="button" class="lp-btn lp-btn-main" onclick="lpGo('signup')">Criar minha liga grátis</button></div>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="perguntas">
+    <div class="lp-wrap lp-narrow">
+      <h2>Perguntas frequentes</h2>
+      <details class="lp-faq"><summary>Preciso instalar algum aplicativo?</summary><p>Não. O Pelada na Mão funciona no navegador do celular. Se quiser, dá para colocar o ícone na tela inicial, no Android e no iPhone.</p></details>
+      <details class="lp-faq"><summary>Os jogadores precisam pagar?</summary><p>Não. Só o admin assina o plano da liga. Os jogadores entram pelo link de convite e usam sem pagar nada.</p></details>
+      <details class="lp-faq"><summary>O que acontece quando o teste grátis acaba?</summary><p>A liga segue no plano gratuito, sem bloqueio e sem perder o histórico. Gols, ranking e conquistas novas ficam pausados até a assinatura.</p></details>
+      <details class="lp-faq"><summary>Dá para cancelar?</summary><p>A assinatura mensal se cancela pelo próprio app, sem falar com ninguém, e a liga continua com o plano até o fim do período já pago. O plano anual não renova sozinho.</p></details>
+      <details class="lp-faq"><summary>Posso ter mais de uma liga?</summary><p>Pode. A mesma conta participa de várias ligas e alterna entre elas.</p></details>
+      <details class="lp-faq"><summary>E os meus dados?</summary><p>O app mostra o que é guardado e quem vê cada coisa. Você pode apagar a sua conta ou anonimizar o seu nome no histórico quando quiser. Veja a <button type="button" class="lp-linkbtn" onclick="openPrivacyPolicy()">Política de Privacidade</button> e os <a href="/termos.html">Termos de Uso</a>.</p></details>
+      <details class="lp-faq"><summary>Como falo com vocês?</summary><p>Pelo e-mail <a href="mailto:contato@peladanamao.com.br">contato@peladanamao.com.br</a>.</p></details>
+    </div>
+  </section>
+
+  <section class="lp-sec lp-final">
+    <div class="lp-wrap">
+      <h2>Bora organizar a próxima pelada?</h2>
+      <p class="lp-sub">Crie a sua liga em poucos minutos e chame a galera.</p>
+      <div class="lp-cta"><button type="button" class="lp-btn lp-btn-main" onclick="lpGo('signup')">Criar minha liga grátis</button></div>
+    </div>
+  </section>
+
+  <div class="lp-foot">
+    <div class="lp-wrap">
+      <p>© 2026 Pelada na Mão</p>
+      <p><a href="/termos.html">Termos de Uso</a> · <button type="button" class="lp-linkbtn" onclick="openPrivacyPolicy()">Privacidade</button> · <a href="mailto:contato@peladanamao.com.br">contato@peladanamao.com.br</a></p>
+    </div>
+  </div>
+</div>
 
 <div id="app"></div>
 
@@ -584,6 +803,8 @@ const st = {
   appCfg: { hasFinais: true, gameDay: 2, hasChurrasco: false, churrascoSeparado: false },
   createAuthorized: false,
   _loginTab: 'email',
+  _loginIntent: '',   // 'signup' quando veio de "Criar minha liga grátis" na apresentação
+  _lpDismissed: false, // a pessoa já saiu da apresentação (entrar/criar conta)
   pendingCount: 0,
   linkRequestCount: 0,
   badgeShowAll: false,
@@ -1057,6 +1278,7 @@ function initFirebase() {
         st.userRole = null; st.userDoc = null; st.leagueId = null; st.availableLeagues = []; st.ready = true;
         render(); return;
       }
+      try { localStorage.setItem('aceoma_returning', '1'); } catch(_) {} // visitante de volta: abre direto no login, sem apresentação
       let returnedFromCheckout = false;
       try {
         const snap = await DB.doc(`users/${user.uid}`).get();
@@ -5000,6 +5222,7 @@ function toast(msg, type='err') {
 /* ── auth UI ─────────────────────────────────────────────────── */
 function vLogin() {
   const mode = st._loginTab || 'email';
+  const signup = st._loginIntent === 'signup'; // veio de "Criar minha liga grátis", na apresentação
   const googleSvg = `<svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0">
     <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.6 2.5 30.1 0 24 0 14.7 0 6.7 5.5 2.8 13.5l7.8 6C12.4 13.2 17.7 9.5 24 9.5z"/>
     <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.8-2.1 5.2-4.5 6.8l7 5.4C43 36.5 46.1 30.9 46.1 24.5z"/>
@@ -5025,12 +5248,17 @@ function vLogin() {
         style="width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;
                border:none;border-radius:10px;cursor:pointer;margin-top:12px;font-family:inherit">Enviar link</button>`;
   } else {
+    // "Criar minha liga grátis" (apresentação) abre o mesmo login, com "Criar conta" no lugar de destaque.
+    const enter = signup ? 'signup' : 'login';
+    const intro = signup ? `<p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Crie a sua conta</p>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">É o primeiro passo para criar a sua liga. O teste grátis de 8 dias começa quando a liga é criada.</p>` : '';
     body = `
+      ${intro}
       <button onclick="doLoginGoogle()"
         style="width:100%;padding:12px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
                border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
                justify-content:center;gap:10px;font-family:inherit;margin-bottom:20px">
-        ${googleSvg} Entrar com Google
+        ${googleSvg} ${signup ? 'Continuar com Google' : 'Entrar com Google'}
       </button>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
         <div style="flex:1;height:1px;background:var(--border)"></div>
@@ -5039,14 +5267,17 @@ function vLogin() {
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         ${inp('li-email','email','Email','onkeydown="if(event.key===\'Enter\')document.getElementById(\'li-pw\').focus()"')}
-        ${inp('li-pw','password','Senha','onkeydown="if(event.key===\'Enter\')doLoginEmail(\'login\')"')}
+        ${inp('li-pw','password','Senha','onkeydown="if(event.key===\'Enter\')doLoginEmail(\'' + enter + '\')"')}
       </div>
-      <button onclick="doLoginEmail('login')"
+      <button onclick="doLoginEmail('${enter}')"
         style="width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;
-               border:none;border-radius:10px;cursor:pointer;margin-top:14px;font-family:inherit">Entrar</button>
+               border:none;border-radius:10px;cursor:pointer;margin-top:14px;font-family:inherit">${signup ? 'Criar conta' : 'Entrar'}</button>
       <div style="display:flex;justify-content:space-between;margin-top:14px">
-        <button onclick="doLoginEmail('signup')"
-          style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Criar conta</button>
+        ${signup
+          ? `<button onclick="st._loginIntent='';render()"
+          style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Já tenho conta</button>`
+          : `<button onclick="doLoginEmail('signup')"
+          style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Criar conta</button>`}
         <button onclick="st._loginTab='link';render()"
           style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit">Entrar sem senha →</button>
       </div>
@@ -5064,7 +5295,8 @@ function vLogin() {
       ${body}
       <div id="login-err" style="margin-top:14px;color:var(--danger);font-size:13px;text-align:center"></div>
     </div>
-    <div style="display:flex;gap:16px;margin-top:20px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px 16px;margin-top:20px">
+      ${window.LP_ALLOWED === true ? `<button onclick="lpBack()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">← Conhecer o app</button>` : ''}
       <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🔒 Privacidade</button>
       <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text3);font-size:12px;text-decoration:underline;font-family:inherit">📄 Termos de Uso</a>
     </div>
@@ -6264,6 +6496,12 @@ function addMonthsISO(iso, months) {
   return d;
 }
 
+// Valores mostrados na tela de assinatura (e na apresentação). A cobrança de verdade é a do servidor (MP_PLANS em
+// functions/index.js): functions/test/client-landing-test.js confere que os dois lados batem.
+const PLAN_PRICES = { monthly: 29.9, annual: 238.8 };
+const PLAN_SAVING = Math.round((PLAN_PRICES.monthly * 12 - PLAN_PRICES.annual) * 100) / 100; // economia do anual: R$ 120,00 por ano
+const planBRL = v => 'R$ ' + Number(v).toFixed(2).replace('.', ',');
+
 function mSubscription() {
   if (st.modal?.type !== 'subscription') return '';
   const league = st.availableLeagues.find(l => l.id === st.leagueId);
@@ -6328,23 +6566,28 @@ function mSubscription() {
     actionsHtml = `<div style="display:flex;flex-direction:column;gap:10px">
         <button ${busy?'disabled':''} onclick="startSubscription('annual')"
           style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
-          Estender plano — R$ 238,80<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
+          Estender plano — ${planBRL(PLAN_PRICES.annual)}<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
           <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
         </button>
         ${monthlyRunning ? `<div style="font-size:12px;color:var(--text3);line-height:1.5;text-align:center">Ao estender, a assinatura mensal é cancelada sozinha: você não será cobrado de novo.</div>` : ''}
+        ${monthlyRunning ? `<div style="font-size:12px;color:var(--accent);font-weight:600;line-height:1.5;text-align:center">No anual são ${planBRL(PLAN_PRICES.annual)} por ano, contra ${planBRL(PLAN_PRICES.monthly * 12)} em 12 mensalidades: você economiza ${planBRL(PLAN_SAVING)}.</div>` : ''}
         ${monthlyRunning ? (st.modal.cancelAsk ? cancelBox : `<button ${busy?'disabled':''} onclick="askCancelSubscription()"
           style="position:relative;z-index:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar assinatura mensal</button>`) : ''}
         ${terms('estender o plano')}
       </div>`;
   } else {
+    // O anual vem primeiro e em destaque: é o melhor valor e quem assina por ele fica um ano sem pensar em cobrança.
     actionsHtml = `<div style="display:flex;flex-direction:column;gap:10px">
+        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
+          style="${planBtn};margin-top:8px;border:2px solid var(--accent);background:#00d67f14;color:var(--text)">
+          <span style="position:absolute;top:-11px;right:12px;background:var(--accent);color:#000;font-size:11px;font-weight:800;letter-spacing:.4px;padding:3px 10px;border-radius:20px">MELHOR VALOR · ECONOMIZE ${planBRL(PLAN_SAVING)}</span>
+          Anual — ${planBRL(PLAN_PRICES.annual)} <span style="color:var(--accent)">(${planBRL(PLAN_PRICES.annual / 12)} por mês)</span>
+          <div style="font-size:12px;font-weight:400;color:var(--text2);margin-top:2px">Em vez de ${planBRL(PLAN_PRICES.monthly * 12)} em 12 meses no plano mensal: você economiza ${planBRL(PLAN_SAVING)}</div>
+          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+        </button>
         <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
           style="${planBtn};border:1px solid var(--border);background:var(--s1);color:var(--text)">
-          Mensal — R$ 29,90/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês</div>
-        </button>
-        <button ${busy?'disabled':''} onclick="startSubscription('annual')"
-          style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
-          Anual — R$ 238,80 (equivale a R$19,90/mês)<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+          Mensal — ${planBRL(PLAN_PRICES.monthly)}/mês<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Cobrança automática todo mês, sem fidelidade: cancele quando quiser, aqui no app</div>
         </button>
         ${terms('assinar')}
       </div>`;
@@ -6788,9 +7031,34 @@ function mAdminPanel() {
   </div>`;
 }
 
+/* ── Apresentação (landing) ───────────────────────────────────────────────────────────────────
+   A página #landing (HTML no começo do <body>) aparece para o visitante novo: ninguém logado, sem convite nem outro
+   parâmetro no endereço, nunca entrou neste aparelho e fora do app instalado (LP_ALLOWED, calculado no <head>).
+   Quem toca em Entrar ou Criar minha liga vai para o login de sempre; o login tem o caminho de volta. */
+function lpSync() {
+  const show = !st.authUser && !!st.ready && window.LP_ALLOWED === true && !st._lpDismissed;
+  document.documentElement.classList.toggle('lp-show', show);
+  return show;
+}
+function lpGo(intent) {
+  st._lpDismissed = true;
+  st._loginIntent = intent === 'signup' ? 'signup' : '';
+  st._loginTab = 'email';
+  render();
+  window.scrollTo(0, 0);
+}
+function lpBack() {
+  st._lpDismissed = false;
+  st._loginIntent = '';
+  render();
+  window.scrollTo(0, 0);
+}
+/* ── fim da apresentação ──────────────────────────────────────────────────────────────────── */
+
 /* ── render ──────────────────────────────────────────────────── */
 function render() {
   const app=document.getElementById('app'); if(!app) return;
+  if (lpSync()) return; // visitante novo: fica a apresentação (HTML no começo do <body>), o app espera
 
   if (!st.authUser) {
     if (document.getElementById('main')) app.innerHTML='';

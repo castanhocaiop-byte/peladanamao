@@ -115,6 +115,10 @@ jobs:
         working-directory: functions
         run: node test/client-card-test.js
 
+      - name: Testes do app (página de apresentação, login e destaque do plano anual)
+        working-directory: functions
+        run: node test/client-landing-test.js
+
       - name: Testes do PIX copia e cola (código e leitura da chave)
         working-directory: functions
         run: node test/pix-test.js

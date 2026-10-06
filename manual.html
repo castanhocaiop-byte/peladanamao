@@ -464,6 +464,7 @@ p strong {
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
+      <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
     </ul>
   </nav>
 
@@ -500,6 +501,7 @@ p strong {
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
+      <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
     </ul>
   </nav>
 
@@ -2424,6 +2426,11 @@ p strong {
         </tbody>
       </table>
 
+      <div class="callout">
+        <div class="callout-label">Anual em destaque</div>
+        Na tela <strong>💳 Assinatura</strong>, quando a liga não tem plano em vigor (teste grátis, plano gratuito ou plano vencido), o <strong>anual vem primeiro</strong>, com borda verde e o selo <strong>MELHOR VALOR · ECONOMIZE R$ 120,00</strong>. A conta aparece na própria tela: R$ 238,80 por ano equivale a <strong>R$ 19,90 por mês</strong>, contra <strong>R$ 358,80</strong> em 12 mensalidades de R$ 29,90. O mensal vem em seguida, com o aviso de que não tem fidelidade e se cancela no próprio app. Quem já paga mensal e toca em <strong>Estender plano</strong> vê a mesma conta ("No anual são R$ 238,80 por ano, contra R$ 358,80 em 12 mensalidades: você economiza R$ 120,00"); quem já está no anual (ou no mensal já cancelado) só estende, sem a conta. Os valores da tela, os da página de apresentação (seção 30) e os cobrados pelo servidor são conferidos juntos por um teste automático: se um preço mudar num lugar só, o teste acusa.
+      </div>
+
       <h3 id="estender-plano">Estender plano</h3>
       <p>Quem já tem plano pago <strong>nunca é impedido de pagar de novo</strong>: com o plano em vigor (mensal ou anual), a tela de assinatura troca "Mensal" e "Anual" por <strong>Estender plano — R$ 238,80</strong>, que mostra a nova data de vencimento antes de pagar. Cada pagamento aprovado <strong>soma 12 meses à data de vencimento</strong> do plano — nenhum dia já pago se perde:</p>
       <table class="data-table">
@@ -2638,6 +2645,54 @@ p strong {
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
         O desenho usa o canvas do navegador (<code>drawMjCard</code>), com as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. A imagem é gerada ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela.
+      </div>
+    </section>
+
+    <!-- 30. Página de Apresentação (visitantes) -->
+    <section class="section" id="apresentacao">
+      <h2 class="section-title"><span class="sn">30</span> Página de Apresentação (visitantes)</h2>
+      <p>Quem abre <strong>peladanamao.com.br</strong> pela primeira vez, sem convite, vê uma <strong>página de apresentação</strong> antes do login: o que o app faz, como funciona, os recursos, o cartão do jogador, os planos com preço, as perguntas frequentes e um botão para <strong>criar a liga grátis</strong>. Antes, esse visitante caía direto na tela de login, sem saber do que se tratava.</p>
+
+      <h3>Quem vê e quem não vê</h3>
+      <table class="data-table">
+        <thead><tr><th>Quem abre o endereço</th><th>O que aparece</th></tr></thead>
+        <tbody>
+          <tr><td>Visitante novo neste aparelho, com o endereço limpo, ou vindo de um <strong>link de cartão</strong> (<code>?ref=cartao</code>) ou de um anúncio (<code>utm_…</code>, <code>fbclid</code>, <code>gclid</code>)</td><td>A apresentação.</td></tr>
+          <tr><td>Quem chega por um <strong>convite</strong> (<code>?invite=…&amp;liga=…</code>), pela volta do <strong>pagamento</strong> do Mercado Pago, pelo <strong>link de acesso por e-mail</strong> ou com qualquer outro parâmetro no endereço</td><td>O login, direto. A apresentação nunca fica no meio de um convite.</td></tr>
+          <tr><td>Quem <strong>já entrou</strong> neste aparelho (o app guarda uma marca no próprio aparelho, sem identificar a pessoa)</td><td>O login, direto.</td></tr>
+          <tr><td>Quem usa o <strong>app instalado</strong> na tela inicial</td><td>O login, direto.</td></tr>
+          <tr><td>Quem já está <strong>logado</strong></td><td>O app, direto: a apresentação nem chega a piscar. Ela só aparece depois que o app confirma que não há ninguém logado.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Os botões</h3>
+      <ul>
+        <li><strong>Criar minha liga grátis</strong> (no topo, nos planos e no fim): abre o login com <strong>Criar conta</strong> em destaque e a explicação de que o teste grátis de 8 dias começa quando a liga é criada.</li>
+        <li><strong>Entrar</strong> e <strong>Já tenho conta</strong>: abrem o login de sempre.</li>
+        <li>No login, <strong>← Conhecer o app</strong> volta para a apresentação. Só aparece para quem veio dela.</li>
+      </ul>
+
+      <h3>O que a página diz</h3>
+      <table class="data-table">
+        <thead><tr><th>Assunto</th><th>O que está escrito</th></tr></thead>
+        <tbody>
+          <tr><td>Teste grátis</td><td>8 dias com tudo liberado, sem cartão de crédito.</td></tr>
+          <tr><td>Planos</td><td>Anual R$ 238,80 por ano (R$ 19,90 por mês, economia de R$ 120 por ano, parcelável em até 12x), em destaque como "Melhor valor"; mensal R$ 29,90 por mês, sem fidelidade, cancelado pelo próprio app. Pagamento pelo Mercado Pago; valores não reembolsáveis, com o link da cláusula 10 dos Termos.</td></tr>
+          <tr><td>Quem paga</td><td>Um plano por liga: só o admin assina, e os jogadores nunca pagam.</td></tr>
+          <tr><td>Depois do teste</td><td>A liga não é bloqueada: segue no plano gratuito, com o histórico guardado; o registro de gols, o ranking e as conquistas novas ficam pausados (seção 25).</td></tr>
+          <tr><td>Cartões de exemplo</td><td>Duas imagens feitas pelo próprio app, com <strong>nomes inventados</strong> (a página avisa).</td></tr>
+          <tr><td>O que a página <strong>não</strong> promete</td><td>Garantia de devolução, número de usuários, depoimentos ou qualquer coisa que o produto não faça. Um teste automático procura essas expressões.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Para mudar um texto ou um preço</div>
+        O texto fica no começo do <code>index.html</code>, no bloco <code>#landing</code>, e o preço também aparece na tela de assinatura (<code>PLAN_PRICES</code>) e no servidor (<code>MP_PLANS</code>, em <code>functions/index.js</code>). O teste <code>client-landing-test.js</code> confere que os três lugares dizem o mesmo e que a página não ficou com texto de rascunho. Mudou um preço? Muda nos três.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        A página é HTML fixo (o Google e as prévias de link leem o texto sem precisar rodar JavaScript; sem JavaScript ela aparece mesmo assim, por um <code>&lt;noscript&gt;</code>). Um pequeno script no <code>&lt;head&gt;</code> calcula <code>LP_ALLOWED</code> (endereço sem parâmetros de convite, aparelho sem a marca <code>aceoma_returning</code>, fora do modo instalado; na dúvida, não mostra). Quem decide é o <code>render()</code>, por <code>lpSync()</code>: só mostra com o app pronto e ninguém logado, e trocando a classe <code>lp-show</code> do <code>&lt;html&gt;</code> (a apresentação é escondida por padrão). A marca <code>aceoma_returning</code> é gravada quando o Firebase confirma um login. A apresentação não usa as tags <code>header</code>, <code>main</code> e <code>nav</code>, porque o app tem regras de CSS próprias para elas. Os arquivos das duas imagens de cartão (<code>landing-cartao-campeao.webp</code> e <code>landing-cartao-estreante.webp</code>) estão na lista de permitidos do <code>.vercelignore</code>: sem isso o site publicado dá 404 nelas.
       </div>
     </section>
 
