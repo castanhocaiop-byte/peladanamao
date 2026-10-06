@@ -111,6 +111,10 @@ jobs:
         working-directory: functions
         run: node test/client-owner-metrics-test.js
 
+      - name: Testes do app (cartão do jogador)
+        working-directory: functions
+        run: node test/client-card-test.js
+
       - name: Testes do app (encerrar liga)
         working-directory: functions
         run: node test/client-close-league-test.js

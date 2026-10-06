@@ -22,19 +22,24 @@ const check = (label, cond, extra) => {
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ── contadores de uso ───────────────────────────────────────────────────────────────────────────
-function makeTrack({ authUser = { uid: 'u', email: 'x@y.z' }, noFN = false, sessionHas = [], sessionThrows = false, callableRejects = false, callableThrows = false } = {}) {
+function makeTrack({ authUser = { uid: 'u', email: 'x@y.z' }, noFN = false, sessionHas = [], sessionThrows = false, callableRejects = false, callableThrows = false, search = '', local = {}, localThrows = false } = {}) {
   const sent = [];
   const session = Object.fromEntries(sessionHas.map(k => ['aceoma_ev_' + k, '1']));
+  const store = { ...local };
   const env = {
     st: { authUser },
     FN: noFN ? null : { httpsCallable: name => { if (callableThrows) throw new Error('sem rede'); return payload => { sent.push([name, payload]); return callableRejects ? Promise.reject(new Error('falhou')) : Promise.resolve({ data: { ok: true } }); }; } },
     sessionStorage: sessionThrows
       ? { getItem() { throw new Error('indisponível'); }, setItem() { throw new Error('indisponível'); } }
       : { getItem: k => (k in session ? session[k] : null), setItem: (k, v) => { session[k] = String(v); } },
+    location: { search },
+    localStorage: localThrows
+      ? { getItem() { throw new Error('indisponível'); }, setItem() { throw new Error('indisponível'); }, removeItem() { throw new Error('indisponível'); } }
+      : { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
   };
   const names = Object.keys(env);
-  const api = new Function(...names, trackCode + '\nreturn { trackEvent, trackSeen };')(...names.map(n => env[n]));
-  return { api, sent, session };
+  const api = new Function(...names, trackCode + '\nreturn { trackEvent, trackSeen, trackRef };')(...names.map(n => env[n]));
+  return { api, sent, session, store };
 }
 
 let t = makeTrack();
@@ -63,6 +68,31 @@ check('trackSeen conta cada faixa marcada que apareceu na área desenhada', JSON
 t.api.trackSeen(null); t.api.trackSeen({});
 check('trackSeen com área vazia ou estranha não quebra', true);
 
+// ── link de cartão compartilhado (?ref=cartao) ─────────────────────────────────────────────────
+t = makeTrack({ search: '?ref=cartao' });
+check('?ref=cartao na página: guarda a origem (só isso, nada da pessoa)', t.store.aceoma_ref === 'cartao' && t.sent.length === 0, t.store);
+t = makeTrack({ search: '?liga=a&ref=cartao&invite=x' });
+check('?ref=cartao junto de outros parâmetros (convite): também é guardado', t.store.aceoma_ref === 'cartao');
+for (const search of ['', '?ref=outra', '?ref=', '?ref=CARTAO', '?x=cartao', '?ref=cartao%20']) {
+  check(`só o valor conhecido vale: "${search}" não guarda nada`, makeTrack({ search }).store.aceoma_ref === undefined);
+}
+t = makeTrack({ search: '?ref=cartao', authUser: null });
+t.api.trackSeen({ querySelectorAll: () => [] });
+check('ainda sem login: não conta e guarda a origem para depois', t.sent.length === 0 && t.store.aceoma_ref === 'cartao');
+t = makeTrack({ search: '?ref=cartao' });
+t.api.trackSeen({ querySelectorAll: () => [] });
+check('já logado: conta UMA entrada pelo cartão (cardVisit), sem nada da pessoa, e apaga a marca', JSON.stringify(t.sent) === JSON.stringify([['trackEvent', { name: 'cardVisit' }]]) && t.store.aceoma_ref === undefined, { sent: t.sent, store: t.store });
+t.api.trackSeen({ querySelectorAll: () => [] }); t.api.trackRef();
+check('…e não conta de novo nas próximas telas', t.sent.length === 1);
+t = makeTrack({ local: { aceoma_ref: 'qualquer-coisa' } });
+t.api.trackRef();
+check('marca adulterada no armazenamento: ignorada, nada é contado', t.sent.length === 0);
+t = makeTrack({ search: '?ref=cartao', noFN: true });
+t.api.trackRef();
+check('sem conexão com o servidor: não conta e não perde a marca', t.sent.length === 0 && t.store.aceoma_ref === 'cartao');
+threw = false; try { const x = makeTrack({ search: '?ref=cartao', localThrows: true }); x.api.trackRef(); x.api.trackSeen({ querySelectorAll: () => [] }); } catch (e) { threw = true; }
+check('armazenamento indisponível (modo privado): nada quebra', !threw);
+
 // ── painel do dono ──────────────────────────────────────────────────────────────────────────────
 function makePanel({ authUser = { email: 'castanho.caiop@gmail.com', emailVerified: true }, callFn = async () => ({}) } = {}) {
   const layerList = [];
@@ -87,7 +117,7 @@ const SAMPLE = {
     rates: { accountToLeagueOwner: 12.5, leagueToGame: 85.7, leagueActive14d: 71.4, trialToPaid: 75 },
     revenue: { mrr: 49.8, monthlyMrr: 29.9, annualMrr: 19.9, prices: { monthly: 29.9, annual: 238.8 } },
   },
-  events: { last7d: { planBannerSeen: 8, planBannerClick: 2, subscriptionOpened: 3, checkoutMonthly: 1, checkoutAnnual: 0, installBannerSeen: 20, installClick: 5, appInstalled: 2 }, last30d: { planBannerSeen: 40, planBannerClick: 10, subscriptionOpened: 12, checkoutMonthly: 2, checkoutAnnual: 1, installBannerSeen: 90, installClick: 18, appInstalled: 7 } },
+  events: { last7d: { planBannerSeen: 8, planBannerClick: 2, subscriptionOpened: 3, checkoutMonthly: 1, checkoutAnnual: 0, installBannerSeen: 20, installClick: 5, appInstalled: 2, cardOpen: 6, cardShare: 4, cardVisit: 1 }, last30d: { planBannerSeen: 40, planBannerClick: 10, subscriptionOpened: 12, checkoutMonthly: 2, checkoutAnnual: 1, installBannerSeen: 90, installClick: 18, appInstalled: 7, cardOpen: 25, cardShare: 20, cardVisit: 3 } },
   history: [{ date: '2026-10-18', accounts: 38, leagues: 6, mrr: 29.9, monthlyActive: 1 }, { date: '2026-10-19', accounts: 39, leagues: 7, mrr: 49.8, monthlyActive: 1 }, { date: '2026-10-20', accounts: 40, leagues: 7, mrr: 49.8, monthlyActive: 1 }],
 };
 
@@ -115,6 +145,7 @@ check('…o teste grátis: em teste, acabando em 3 dias, gratuito e antigas', R[
 check('…a receita em reais no formato brasileiro (R$ 49,80 = R$ 29,90 + R$ 19,90)', R['Receita mensal estimada']?.value === 'R$ 49,80' && /mensais R\$ 29,90 \+ anuais R\$ 19,90/.test(R['Receita mensal estimada'].hint), R['Receita mensal estimada']);
 check('…os planos: mensal, cancelado, anual e vencido', R['Plano mensal ativo']?.value === '1' && R['Plano mensal cancelado']?.value === '0' && R['Plano anual ativo']?.value === '1' && R['Plano pago vencido']?.value === '1', R);
 check('…o uso do app em 7 e 30 dias (7 / 30)', R['Viram a faixa do plano']?.value === '8 / 40' && R['Tocaram na faixa do plano']?.value === '2 / 10' && R['Viram a faixa Instalar']?.value === '20 / 90' && R['Instalaram o app']?.value === '2 / 7' && R['Checkout anual criado']?.value === '0 / 1' && R['Abriram a tela 💳 Assinatura']?.value === '3 / 12', R);
+check('…o cartão do jogador: aberturas, compartilhamentos (com a taxa de 80%) e entradas pelo link (7 / 30)', R['Abriram o cartão do jogador']?.value === '6 / 25' && R['Compartilharam o cartão']?.value === '4 / 20' && /^80% dos que abriram compartilharam/.test(R['Compartilharam o cartão']?.hint) && R['Entraram por um link de cartão']?.value === '1 / 3', { a: R['Abriram o cartão do jogador'], b: R['Compartilharam o cartão'], c: R['Entraram por um link de cartão'] });
 check('…as taxas de toque: 25% na faixa do plano e 20% em Instalar (30 dias)', /^25% das sessões que viram a faixa tocaram nela/.test(R['Tocaram na faixa do plano']?.hint) && /^20% tocaram em Instalar/.test(R['Tocaram em Instalar']?.hint), { a: R['Tocaram na faixa do plano'], b: R['Tocaram em Instalar'] });
 check('…a evolução desenhada (3 retratos → 4 gráficos de linha) com o primeiro e o último valor', (out.match(/<polyline/g) || []).length === 4 && /38 → 40/.test(text) && /R\$ 29,90 → R\$ 49,80/.test(text), { linhas: (out.match(/<polyline/g) || []).length });
 check('…nenhum "undefined", "NaN" ou "null" na tela', !/undefined|NaN|null/.test(out), out.match(/.{20}(undefined|NaN|null).{20}/)?.[0]);

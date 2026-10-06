@@ -85,7 +85,7 @@ const s7 = m.sumEvents(byDay, 7, NOW), s30 = m.sumEvents(byDay, 30, NOW);
 check('soma dos contadores nos últimos 7 dias (o dia 05/10 fica de fora)', s7.planBannerSeen === 8 && s7.planBannerClick === 2 && s7.installClick === 4 && s7.checkoutMonthly === 1 && s7.appInstalled === 0, s7);
 check('…e nos últimos 30 dias (o dia 05/10 entra)', s30.planBannerSeen === 108, s30);
 check('valores inválidos nos contadores são ignorados', m.sumEvents({ '2026-10-20': { planBannerSeen: 'x', installClick: null, appInstalled: 2 } }, 1, NOW).planBannerSeen === 0);
-check('lista de eventos: 6 do app + 2 do servidor, sem repetição', m.EVENT_NAMES.length === 8 && new Set(m.EVENT_NAMES).size === 8 && m.EVENT_NAMES_CLIENT.length === 6 && m.EVENT_NAMES_SERVER.length === 2);
+check('lista de eventos: 9 do app + 2 do servidor, sem repetição', m.EVENT_NAMES.length === 11 && new Set(m.EVENT_NAMES).size === 11 && m.EVENT_NAMES_CLIENT.length === 9 && m.EVENT_NAMES_SERVER.length === 2);
 
 console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
 if (fails) process.exitCode = 1;

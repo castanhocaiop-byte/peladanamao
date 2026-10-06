@@ -1261,6 +1261,14 @@ function notifBanner() {
    só soma 1 ao contador do dia: não guarda quem foi. Cada aviso vai uma vez por sessão (aba), para o número
    contar pessoas e não redesenhos da tela. Falha em silêncio: contar nunca atrapalha o app. */
 const _evSent = new Set();
+// Link de cartão compartilhado (?ref=cartao): guarda a origem e, quando a pessoa já está logada, conta UMA entrada pelo
+// cartão (sem saber quem é). Só aceita o valor conhecido.
+try { if (new URLSearchParams(location.search).get('ref') === 'cartao') localStorage.setItem('aceoma_ref', 'cartao'); } catch(_) {}
+function trackRef() {
+  try {
+    if (localStorage.getItem('aceoma_ref') === 'cartao' && st.authUser && FN) { localStorage.removeItem('aceoma_ref'); trackEvent('cardVisit', false); }
+  } catch(_) {}
+}
 function trackEvent(name, oncePerSession = true) {
   try {
     if (!FN || !st.authUser) return;
@@ -1275,6 +1283,7 @@ function trackEvent(name, oncePerSession = true) {
 // Depois de desenhar uma área: conta os avisos marcados com data-ev que apareceram nela.
 function trackSeen(root) {
   try { root?.querySelectorAll?.('[data-ev]').forEach(el => trackEvent(el.dataset.ev)); } catch(_) {}
+  trackRef();
 }
 
 /* ── Instalar o app ──────────────────────────────────────────────────────────────────────
@@ -1447,6 +1456,236 @@ async function signOutUser() {
   await AUTH.signOut();
 }
 
+/* ── Cartão do jogador (compartilhar) ─────────────────────────────────────────────────────
+   Uma imagem 1080×1350 (formato bom para WhatsApp e Instagram), desenhada no próprio aparelho com o que a aba
+   Meu Craque acabou de mostrar: nome, foto (se tiver), títulos, campeonatos, gols e as conquistas mais raras.
+   Só sai do aparelho se a pessoa tocar em Compartilhar (ou Baixar). Nunca leva e-mail nem WhatsApp. O link que
+   acompanha o cartão tem ?ref=cartao: quem entra por ele é contado (sem saber quem é) no painel do dono. */
+const MJ_CARD = { W: 1080, H: 1350, LINK: 'https://peladanamao.com.br/?ref=cartao', FILE: 'cartao-pelada-na-mao.png' };
+const MJ_GOLD = '#f0b429', MJ_GREEN = '#00d67f', MJ_TEXT = '#e6edf3', MJ_MUTED = '#8b949e';
+let _mjCardBlob = null, _mjCardUrl = null;
+
+// Normaliza o que a aba Meu Craque calculou. Pura: só texto e números, nada de função nem de dado de contato.
+function mjCardData(s = {}) {
+  const num = n => Math.max(0, Math.round(Number(n) || 0));
+  const name = String(s.name || '').trim() || 'Jogador';
+  const matches = num(s.matches);
+  const photo = typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '';
+  const titlesNum = Number(s.titlesNum) || 0;
+  return {
+    name,
+    league: String(s.league || '').trim(),
+    photo,
+    initials: name.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽',
+    isChampion: titlesNum > 0,
+    subtitle: String(s.subtitle || '').trim(),
+    stats: [
+      ['TÍTULOS', String(s.titlesText ?? '0'), ''],
+      ['CAMPEONATOS', String(num(s.champs)), s.champsTotal ? 'de ' + num(s.champsTotal) + ' realizados' : ''],
+      ['GOLS', String(num(s.goals)), s.goalsNote ? String(s.goalsNote) : ''],
+      ['ARTILHARIA', String(num(s.art)), 'campeonatos como artilheiro'],
+    ],
+    record: matches > 0 ? { w: num(s.w), d: num(s.d), l: num(s.l), matches } : null,
+    badges: (Array.isArray(s.badges) ? s.badges : []).filter(b => b && b.emoji && b.label).slice(0, 6).map(b => ({ emoji: String(b.emoji), label: String(b.label) })),
+  };
+}
+
+function mjRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Texto que cabe na largura: diminui a fonte até o mínimo e, se ainda não couber, corta com reticências.
+function mjFitText(ctx, text, maxW, size, minSize, family, weight) {
+  let s = size;
+  ctx.font = `${weight} ${s}px ${family}`;
+  while (ctx.measureText(text).width > maxW && s > minSize) { s -= 2; ctx.font = `${weight} ${s}px ${family}`; }
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1); // as reticências também têm de caber
+  return t.replace(/\s+$/, '') + '…';
+}
+
+const MJ_HEAD = '"Bebas Neue", Impact, "Arial Narrow", sans-serif';
+const MJ_BODY = 'Inter, "Segoe UI", system-ui, sans-serif';
+
+// Desenha o cartão. `photoImg` e `logoImg` são imagens já carregadas (ou null: sem foto, vira iniciais).
+function drawMjCard(ctx, c, photoImg, logoImg) {
+  const { W, H } = MJ_CARD;
+  const accent = c.isChampion ? MJ_GOLD : MJ_GREEN;
+  // fundo: degradê escuro com um clarão da cor do jogador atrás da foto
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0d1117'); bg.addColorStop(1, c.isChampion ? '#2a1f05' : '#0b2a21');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W / 2, 330, 20, W / 2, 330, 500);
+  glow.addColorStop(0, c.isChampion ? 'rgba(240,180,41,0.32)' : 'rgba(0,214,127,0.26)'); glow.addColorStop(1, 'rgba(13,17,23,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  // moldura
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo e nome da liga
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+
+  // foto redonda com anel
+  const cx = W / 2, cy = 330, r = 140;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 14, 0, Math.PI * 2); ctx.fillStyle = accent; ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+  if (photoImg) {
+    const iw = photoImg.naturalWidth || photoImg.width || 1, ih = photoImg.naturalHeight || photoImg.height || 1;
+    const k = Math.max((r * 2) / iw, (r * 2) / ih);
+    ctx.drawImage(photoImg, cx - (iw * k) / 2, cy - (ih * k) / 2, iw * k, ih * k);
+  } else {
+    ctx.fillStyle = '#161b22'; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = accent;
+    ctx.font = `400 190px ${MJ_HEAD}`; ctx.fillText(c.initials, cx, cy + 8);
+  }
+  ctx.restore();
+
+  // nome e subtítulo
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(mjFitText(ctx, c.name.toUpperCase(), 920, 108, 52, MJ_HEAD, 400), cx, 596);
+  if (c.subtitle) { ctx.fillStyle = accent; ctx.fillText(mjFitText(ctx, c.subtitle, 900, 40, 28, MJ_BODY, 700), cx, 650); }
+
+  // conquistas mais raras (emojis) e o nome da mais rara
+  let y = 676;
+  if (c.badges.length) {
+    ctx.font = `400 58px ${MJ_BODY}`; ctx.fillStyle = MJ_TEXT;
+    const step = 112, x0 = cx - ((c.badges.length - 1) * step) / 2;
+    c.badges.forEach((b, i) => ctx.fillText(b.emoji, x0 + i * step, y + 46));
+    ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, 'Conquista mais rara: ' + c.badges[0].label, 900, 30, 22, MJ_BODY, 600), cx, y + 96);
+    y += 124;
+  } else { y = 740; }
+
+  // números: 2 colunas × 2 linhas
+  const tileW = 456, tileH = 112, x1 = 56, x2 = W - 56 - tileW;
+  c.stats.forEach(([label, value, note], i) => {
+    const x = i % 2 === 0 ? x1 : x2, ty = y + Math.floor(i / 2) * (tileH + 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; mjRoundRect(ctx, x, ty, tileW, tileH, 26); ctx.fill();
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff';
+    ctx.font = `400 76px ${MJ_HEAD}`; ctx.fillText(value, x + 28, ty + 80);
+    const vw = ctx.measureText(value).width;
+    ctx.fillStyle = MJ_MUTED; ctx.font = `700 26px ${MJ_BODY}`; ctx.fillText(label, x + 28 + vw + 18, ty + 54);
+    if (note) { ctx.font = `500 21px ${MJ_BODY}`; ctx.fillText(mjFitText(ctx, note, tileW - 56 - vw - 18, 21, 15, MJ_BODY, 500), x + 28 + vw + 18, ty + 84); }
+  });
+  y += 2 * (tileH + 16);
+
+  // campanha: vitórias, empates, derrotas
+  if (c.record) {
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; mjRoundRect(ctx, x1, y, W - 112, 84, 26); ctx.fill();
+    ctx.textAlign = 'center'; ctx.font = `700 40px ${MJ_BODY}`;
+    const seg = [['V', c.record.w, MJ_GREEN], ['E', c.record.d, '#f5c842'], ['D', c.record.l, '#ff5c5c']];
+    seg.forEach(([l, n, col], i) => { ctx.fillStyle = col; ctx.fillText(`${l} ${n}`, W / 2 - 240 + i * 240, y + 56); });
+    ctx.fillStyle = MJ_MUTED; ctx.font = `500 22px ${MJ_BODY}`; ctx.fillText(`${c.record.matches} jogo${c.record.matches > 1 ? 's' : ''}`, W - 56 - 110, y + 54);
+  }
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`;
+  ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`;
+  ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+
+// Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
+function mjLoadImage(url) {
+  return new Promise(resolve => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const t = setTimeout(() => resolve(null), 7000);
+    img.onload = () => { clearTimeout(t); resolve(img); };
+    img.onerror = () => { clearTimeout(t); resolve(null); };
+    img.src = url;
+  });
+}
+const mjCanvasBlob = canvas => new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('sem imagem'))), 'image/png'));
+
+// Monta a imagem. Se a foto "contaminar" o canvas (servidor sem CORS), refaz sem a foto: o cartão sai com as iniciais.
+async function renderMjCard(card) {
+  try { await Promise.all([document.fonts?.load(`400 40px "Bebas Neue"`), document.fonts?.load(`700 30px Inter`)]); } catch(_) {}
+  const [photo, logo] = await Promise.all([mjLoadImage(card.photo), mjLoadImage('/logo.webp')]);
+  const make = async photoImg => {
+    const canvas = document.createElement('canvas');
+    canvas.width = MJ_CARD.W; canvas.height = MJ_CARD.H;
+    drawMjCard(canvas.getContext('2d'), card, photoImg, logo);
+    return mjCanvasBlob(canvas);
+  };
+  try { return await make(photo); } catch(e) { if (!photo) throw e; return make(null); }
+}
+
+function closeMjCard() {
+  document.getElementById('mj-card')?.remove();
+  if (_mjCardUrl) { try { URL.revokeObjectURL(_mjCardUrl); } catch(_) {} _mjCardUrl = null; }
+  _mjCardBlob = null;
+}
+
+// Abre a prévia: gera a imagem (1ª vez que toca), mostra, e deixa Compartilhar/Baixar prontos para o 2º toque —
+// o iPhone só deixa compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio.
+async function openMjCard() {
+  const card = st._mjCard;
+  if (!card) return;
+  trackEvent('cardOpen');
+  closeMjCard();
+  const root = document.createElement('div');
+  root.id = 'mj-card';
+  root.className = 'overlay';
+  root.onclick = closeMjCard;
+  const sheet = body => `<div class="sheet" onclick="event.stopPropagation()" style="max-height:92dvh;display:flex;flex-direction:column">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:17px;font-weight:800">📤 Seu cartão</div>
+      <button onclick="closeMjCard()" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding-right:6px">${body}</div></div>`;
+  root.innerHTML = sheet('<div style="padding:40px 0;text-align:center;color:var(--text3);font-size:13px">Montando seu cartão…</div>');
+  document.body.appendChild(root);
+  try {
+    const blob = await renderMjCard(card);
+    if (document.getElementById('mj-card') !== root) return; // fechou antes de ficar pronto
+    _mjCardBlob = blob;
+    _mjCardUrl = URL.createObjectURL(blob);
+    root.innerHTML = sheet(`<img src="${_mjCardUrl}" alt="Seu cartão no Pelada na Mão" style="display:block;width:100%;max-width:360px;margin:0 auto 14px;border-radius:14px;border:1px solid var(--border)">
+      <button onclick="shareMjCard()" style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Compartilhar</button>
+      <button onclick="downloadMjCard()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Baixar a imagem</button>
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem foi feita no seu aparelho e só sai dele se você compartilhar. Não leva e-mail nem WhatsApp.</div>`);
+  } catch(e) {
+    if (document.getElementById('mj-card') === root) root.innerHTML = sheet('<div style="padding:30px 4px;color:var(--danger);font-size:13px;text-align:center">Não foi possível montar o cartão agora. Tente de novo.</div>');
+  }
+}
+
+function downloadMjCard() {
+  if (!_mjCardUrl) return;
+  const a = document.createElement('a');
+  a.href = _mjCardUrl; a.download = MJ_CARD.FILE;
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Imagem salva. É só enviar onde quiser! 📲', 'ok');
+}
+
+// Compartilhar pela janela do próprio celular (WhatsApp, Instagram…). Sem suporte a arquivo (computador, navegador
+// antigo) ou com erro: baixa a imagem. Cancelar a janela não é erro e não baixa nada.
+async function shareMjCard() {
+  const blob = _mjCardBlob;
+  if (!blob) return;
+  trackEvent('cardShare', false);
+  const file = new File([blob], MJ_CARD.FILE, { type: 'image/png' });
+  const data = { files: [file], title: 'Meu cartão no Pelada na Mão', text: `Meu cartão no Pelada na Mão ⚽🏆 Faça o da sua pelada: ${MJ_CARD.LINK}` };
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare(data)) { await navigator.share(data); return; }
+  } catch(e) { if (e && e.name === 'AbortError') return; }
+  downloadMjCard();
+}
+
 /* ── Painel do dono: métricas do funil ───────────────────────────────────────────────────
    Só o dono do sistema (e-mail verificado) vê o botão 📊; o servidor confere de novo (getFunnelMetrics).
    Camada solta no <body> (abre em qualquer tela). Só números agregados: nenhum dado de pessoa. */
@@ -1475,6 +1714,7 @@ function ownerMetricsHtml(m) {
   };
   const ev = (label, key, rate) => row(label, `${num(e7[key])} <span style="color:var(--text3);font-weight:500">/ ${num(e30[key])}</span>`, rate || '');
   const clickRate = e30.planBannerSeen > 0 ? `${pc(Math.round((e30.planBannerClick / e30.planBannerSeen) * 1000) / 10)} das sessões que viram a faixa tocaram nela (30 dias)` : '';
+  const shareRate = e30.cardOpen > 0 ? `${pc(Math.round((e30.cardShare / e30.cardOpen) * 1000) / 10)} dos que abriram compartilharam (30 dias)` : '';
   const installRate = e30.installBannerSeen > 0 ? `${pc(Math.round((e30.installClick / e30.installBannerSeen) * 1000) / 10)} tocaram em Instalar (30 dias)` : '';
   const when = f.generatedAt ? new Date(f.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   return `<div style="font-size:11px;color:var(--text3);margin-bottom:2px">Calculado em ${when}. Só números agregados: nada de pessoa.</div>
@@ -1507,6 +1747,9 @@ function ownerMetricsHtml(m) {
     ${ev('Viram a faixa Instalar', 'installBannerSeen')}
     ${ev('Tocaram em Instalar', 'installClick', installRate)}
     ${ev('Instalaram o app', 'appInstalled')}
+    ${ev('Abriram o cartão do jogador', 'cardOpen')}
+    ${ev('Compartilharam o cartão', 'cardShare', shareRate)}
+    ${ev('Entraram por um link de cartão', 'cardVisit', 'pessoas já logadas que chegaram pelo link ?ref=cartao')}
     ${h('Evolução (retrato diário, 60 dias)')}
     ${hist.length >= 2 ? trend('Contas', 'accounts', num) + trend('Ligas', 'leagues', num) + trend('Receita mensal estimada', 'mrr', brl) + trend('Planos pagos ativos', 'monthlyActive', num)
       : '<div style="font-size:12px;color:var(--text3);padding:8px 0">O retrato do dia é gravado de madrugada (3h30). A evolução aparece a partir do segundo dia.</div>'}`;
@@ -1613,6 +1856,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Jogador</strong> (quando sua conta está vinculada a um): nome no elenco, estrelas, gols, times, títulos e votos recebidos.')}
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades e cobranças avulsas, se a liga usa essa função.')}
+        ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto e estatísticas), e só sai dele se você tocar em Compartilhar. Nunca leva e-mail nem WhatsApp.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista), sem identificar quem foi. Servem para melhorar o produto.')}
       </ul>
 
@@ -5452,6 +5696,15 @@ function vMeuJogador() {
   const teamWinPct = teamHistory.length ? Math.round(teamWins.length/teamHistory.length*100) : null;
   const avgChampTeamStars = teamWins.length ? +(teamWins.reduce((s,e)=>s+e.teamStars,0)/teamWins.length).toFixed(1) : null;
 
+  // Dados do cartão compartilhável: os mesmos números que esta tela acabou de calcular (sem simulação do admin e só
+  // para quem já jogou). Guarda só texto e números: nada de contato.
+  st._mjCard = (!isSimulating && champsPlayed > 0) ? mjCardData({
+    name: myName, league: st.availableLeagues.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey],
+    titlesText: fmtT(titles), titlesNum: titles, subtitle, champs: champsPlayed, champsTotal: champsTotalCount,
+    goals: totalGoals, goalsNote: 'desde 08/09/2026', art: myArt, w: myW, d: myD, l: myL, matches: myMatchesPlayed,
+    badges: earnedBadges.slice().sort((a, b) => getBadgeHolders(a.id).length - getBadgeHolders(b.id).length),
+  }) : null;
+
   return `<div style="padding:14px">
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
       <span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap">👁 Ver como:</span>
@@ -5524,6 +5777,7 @@ function vMeuJogador() {
           ${payBadge}
         </div>
         <div style="font-size:12px;color:var(--text3)">${subtitle}</div>
+        ${st._mjCard ? `<button onclick="openMjCard()" style="margin-top:8px;background:var(--s2);border:1px solid var(--border);border-radius:20px;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;padding:5px 12px;font-family:inherit">📤 Compartilhar meu cartão</button>` : ''}
         ${!isSimulating && st.photos?.[myKey] ? `<button onclick="removePlayerPhoto('${myKey}')" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:0;margin-top:2px;text-decoration:underline;font-family:inherit">remover foto</button>` : ''}
       </div>
     </div>

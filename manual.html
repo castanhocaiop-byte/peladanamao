@@ -463,6 +463,7 @@ p strong {
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
+      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
     </ul>
   </nav>
 
@@ -498,6 +499,7 @@ p strong {
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
+      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
     </ul>
   </nav>
 
@@ -2528,7 +2530,7 @@ p strong {
       </table>
 
       <h3>Uso do app (contadores anônimos)</h3>
-      <p>Alguns passos acontecem só na tela da pessoa, e o servidor não vê sozinho. Para eles o app avisa o servidor, que <strong>soma 1 a um contador do dia</strong>: viram a faixa do plano, tocaram nela, abriram a tela 💳, viram a faixa Instalar, tocaram em Instalar e instalaram o app. Os checkouts (mensal e anual) são contados pelo próprio servidor quando o Mercado Pago aceita criar o pagamento. A tela mostra "7 dias / 30 dias" e as taxas de toque.</p>
+      <p>Alguns passos acontecem só na tela da pessoa, e o servidor não vê sozinho. Para eles o app avisa o servidor, que <strong>soma 1 a um contador do dia</strong>: viram a faixa do plano, tocaram nela, abriram a tela 💳, viram a faixa Instalar, tocaram em Instalar, instalaram o app, abriram o cartão do jogador, compartilharam o cartão e entraram por um link de cartão. Os checkouts (mensal e anual) são contados pelo próprio servidor quando o Mercado Pago aceita criar o pagamento. A tela mostra "7 dias / 30 dias" e as taxas de toque.</p>
       <ul>
         <li>Cada aviso conta <strong>uma vez por sessão</strong> (aba aberta): o número representa pessoas e não redesenhos da tela.</li>
         <li>Os contadores só existem a partir desta versão: antes disso não há histórico de uso.</li>
@@ -2546,6 +2548,45 @@ p strong {
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
         Funções <code>getFunnelMetrics</code> (só o dono, com e-mail verificado, no máximo 20 chamadas por minuto), <code>trackEvent</code> (qualquer pessoa logada, só os nomes da lista, 120 por minuto) e <code>snapshotFunnelMetrics</code> (diária). Os dados ficam em <code>metrics_events/AAAA-MM-DD</code> (contadores), <code>metrics_daily/AAAA-MM-DD</code> (retratos) e <code>leagues/{liga}/billing_meta/checkout</code> (marca do checkout, que some junto com a liga ao encerrá-la); as regras do banco fecham as três ao navegador. O cálculo é uma função pura (<code>functions/funnel-metrics.js</code>) coberta por testes, inclusive nos emuladores.
+      </div>
+    </section>
+
+    <!-- 29. Cartão do Jogador (compartilhar) -->
+    <section class="section" id="cartao-jogador">
+      <h2 class="section-title"><span class="sn">29</span> Cartão do Jogador (compartilhar)</h2>
+      <p>Na aba <strong>EU (Meu Craque)</strong>, embaixo do nome, o botão <strong>📤 Compartilhar meu cartão</strong> monta uma imagem com as estatísticas do jogador, no formato de cartão, pronta para mandar no WhatsApp, no Instagram ou onde a pessoa quiser. É a forma de a pelada aparecer fora do app: quem vê o cartão de um colega fica sabendo do Pelada na Mão.</p>
+
+      <table class="data-table">
+        <thead><tr><th>O que aparece no cartão</th><th>De onde vem</th></tr></thead>
+        <tbody>
+          <tr><td>Nome, foto (ou as iniciais, se não tiver foto) e nome da liga</td><td>O mesmo nome e a mesma foto da aba EU. Quem anonimizou o nome no histórico aparece com o nome anônimo e sem foto.</td></tr>
+          <tr><td>Títulos (com ½), campeonatos disputados, gols e artilharia</td><td>Os mesmos números que a aba EU mostra, calculados com as mesmas regras (datas de corte incluídas: os gols contam a partir de 08/09/2026, e o cartão diz isso).</td></tr>
+          <tr><td>Campanha: vitórias, empates, derrotas e total de jogos</td><td>O "Resumo de Jogos" da aba EU. Só aparece para quem já tem jogo registrado.</td></tr>
+          <tr><td>Até 6 conquistas, da mais rara para a mais comum</td><td>As conquistas (badges) que o jogador já tem; a mais rara da liga vem primeiro e dá nome à legenda "Conquista mais rara".</td></tr>
+          <tr><td>Moldura dourada para quem já foi campeão, verde para quem ainda não foi</td><td>Os títulos do jogador.</td></tr>
+          <tr><td>Rodapé "Crie a liga da sua pelada · peladanamao.com.br"</td><td>Fixo: é o convite para quem vê o cartão.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Como compartilhar</h3>
+      <ol>
+        <li>Tocar em <strong>📤 Compartilhar meu cartão</strong>: o app monta a imagem (1080×1350 pixels) e mostra a prévia.</li>
+        <li>Tocar em <strong>📤 Compartilhar</strong>: abre a janela do próprio celular com WhatsApp, Instagram e os demais aplicativos. O texto que vai junto traz o endereço <code>peladanamao.com.br/?ref=cartao</code>.</li>
+        <li>Se o aparelho não compartilha arquivo (computador, navegador antigo), ou se der erro, o app <strong>baixa a imagem</strong> para a pessoa enviar como preferir. Também dá para tocar em <strong>⬇️ Baixar a imagem</strong>.</li>
+      </ol>
+      <p>Quem só <strong>cancela</strong> a janela de compartilhar não recebe erro nem download. O botão só aparece para quem já disputou pelo menos um campeonato, e <strong>não</strong> aparece quando o admin usa "👁 Ver como" (simulação).</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Privacidade (LGPD)</div>
+        A imagem é <strong>montada no aparelho de quem toca no botão</strong> e só sai dele se a pessoa compartilhar ou baixar: nada é enviado ao servidor. Entram só nome, foto, nome da liga e estatísticas que a própria pessoa já vê; <strong>nunca</strong> e-mail, WhatsApp ou qualquer contato. Um teste automático garante que o código que desenha o cartão nem cita esses campos. A política de privacidade do app informa isso ("Cartão do jogador").
+      </div>
+
+      <h3>Como medimos o efeito</h3>
+      <p>O painel do dono (seção 28) tem três contadores anônimos: <strong>abriram o cartão</strong>, <strong>compartilharam</strong> (com a taxa de quem abriu e compartilhou) e <strong>entraram por um link de cartão</strong>: pessoas que chegaram pelo endereço com <code>?ref=cartao</code> e já estão logadas. Nenhum deles guarda quem foi.</p>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        O desenho usa o canvas do navegador (<code>drawMjCard</code>), com as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. A imagem é gerada ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela.
       </div>
     </section>
 
