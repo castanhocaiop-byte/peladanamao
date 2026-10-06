@@ -557,7 +557,7 @@ const st = {
   createMode: 'draw', // 'draw' (sortear) ou 'manual' (montar à mão) — a tela "Novo Campeonato" alterna entre os dois
   createTeamsSource: null, // 'draw' quando os times marcados vieram de um sorteio aplicado (só de exibição: muda o rótulo da aba "Manual" pra não parecer escolha manual)
   playerTeamMap: {},
-  finCfg: {valorMensalidade: 50, valorChurrasco: 0, valorSomenteChurrasco: 0, saldoInicial: 0, reserva: 300, valorAvulso: 20, vencimentoDia: 10, chavePix: ''},
+  finCfg: {valorMensalidade: 50, valorChurrasco: 0, valorSomenteChurrasco: 0, saldoInicial: 0, reserva: 300, valorAvulso: 20, vencimentoDia: 10, chavePix: '', chavePixTipo: ''},
   finMens: {},
   finDesp: [],
   finAvulsos: [],
@@ -911,6 +911,7 @@ function startListeners() {
       valorAvulso: data.valorAvulso ?? 0,
       vencimentoDia: data.vencimentoDia ?? 0,
       chavePix: data.chavePix ?? '',
+      chavePixTipo: data.chavePixTipo ?? '',
     };
     if(st.view==='financeiro'||st.view==='meuJogador') render();
   }, ()=>{});
@@ -1715,6 +1716,7 @@ function ownerMetricsHtml(m) {
   const ev = (label, key, rate) => row(label, `${num(e7[key])} <span style="color:var(--text3);font-weight:500">/ ${num(e30[key])}</span>`, rate || '');
   const clickRate = e30.planBannerSeen > 0 ? `${pc(Math.round((e30.planBannerClick / e30.planBannerSeen) * 1000) / 10)} das sessões que viram a faixa tocaram nela (30 dias)` : '';
   const shareRate = e30.cardOpen > 0 ? `${pc(Math.round((e30.cardShare / e30.cardOpen) * 1000) / 10)} dos que abriram compartilharam (30 dias)` : '';
+  const pixRate = e30.pixOpen > 0 ? `${pc(Math.round((e30.pixCopy / e30.pixOpen) * 1000) / 10)} dos que abriram copiaram o código (30 dias)` : '';
   const installRate = e30.installBannerSeen > 0 ? `${pc(Math.round((e30.installClick / e30.installBannerSeen) * 1000) / 10)} tocaram em Instalar (30 dias)` : '';
   const when = f.generatedAt ? new Date(f.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   return `<div style="font-size:11px;color:var(--text3);margin-bottom:2px">Calculado em ${when}. Só números agregados: nada de pessoa.</div>
@@ -1750,6 +1752,8 @@ function ownerMetricsHtml(m) {
     ${ev('Abriram o cartão do jogador', 'cardOpen')}
     ${ev('Compartilharam o cartão', 'cardShare', shareRate)}
     ${ev('Entraram por um link de cartão', 'cardVisit', 'pessoas já logadas que chegaram pelo link ?ref=cartao')}
+    ${ev('Abriram o Pagar com PIX', 'pixOpen')}
+    ${ev('Copiaram o código PIX', 'pixCopy', pixRate)}
     ${h('Evolução (retrato diário, 60 dias)')}
     ${hist.length >= 2 ? trend('Contas', 'accounts', num) + trend('Ligas', 'leagues', num) + trend('Receita mensal estimada', 'mrr', brl) + trend('Planos pagos ativos', 'monthlyActive', num)
       : '<div style="font-size:12px;color:var(--text3);padding:8px 0">O retrato do dia é gravado de madrugada (3h30). A evolução aparece a partir do segundo dia.</div>'}`;
@@ -1855,7 +1859,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Conta:</strong> e-mail, nome, e os aparelhos em que você ativou notificações. O e-mail dos admins também recebe avisos do serviço, como o vencimento do plano e o aviso de liga sem uso.')}
         ${li('<strong>Jogador</strong> (quando sua conta está vinculada a um): nome no elenco, estrelas, gols, times, títulos e votos recebidos.')}
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
-        ${li('<strong>Financeiro:</strong> mensalidades e cobranças avulsas, se a liga usa essa função.')}
+        ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto e estatísticas), e só sai dele se você tocar em Compartilhar. Nunca leva e-mail nem WhatsApp.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista), sem identificar quem foi. Servem para melhorar o produto.')}
       </ul>
@@ -2739,6 +2743,277 @@ function waConvocacaoLink(whatsapp, preset) {
   return `https://wa.me/${full}?text=${encodeURIComponent(convocacaoMsg(preset))}`;
 }
 
+/* ── PIX copia e cola ───────────────────────────────────────────────────────────────────────────
+   Monta o "Pix Copia e Cola" (BR Code estático do Banco Central) com o valor já preenchido, para o jogador pagar a
+   mensalidade em dois toques. O dinheiro vai direto do banco do jogador para a chave do admin: o app só escreve o texto
+   do código. Não recebe, não guarda e não confirma pagamento (o admin continua marcando como pago) e nada disto vai
+   para o servidor. */
+const PIX_TIPOS = { cpf: 'CPF', cnpj: 'CNPJ', celular: 'celular', email: 'e-mail', aleatoria: 'chave aleatória' };
+const PIX_EMAIL = /^[a-z0-9._%+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)+$/;
+const PIX_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// CRC-16/CCITT-FALSE (polinômio 0x1021, início 0xFFFF): o fecho que todo banco confere no fim do código.
+function pixCrc16(texto) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < texto.length; i++) {
+    crc ^= texto.charCodeAt(i) << 8;
+    for (let b = 0; b < 8; b++) crc = ((crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1) & 0xFFFF;
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+// Um campo do código: número do campo + tamanho com 2 dígitos + valor. Passar de 99 caracteres geraria um código inválido.
+function pixField(id, valor) {
+  if (valor.length > 99) throw new Error('campo ' + id + ' do PIX passou de 99 caracteres');
+  return id + String(valor.length).padStart(2, '0') + valor;
+}
+
+// Texto "limpo" para os campos livres: sem acento, emoji nem símbolo, e cortado no tamanho máximo do campo.
+function pixText(s, max, { upper = false, punct = false } = {}) {
+  if (!(max > 0)) return '';
+  let t = String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(punct ? /[^A-Za-z0-9 .\-\/]/g : /[^A-Za-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (upper) t = t.toUpperCase();
+  return t.slice(0, max).trim();
+}
+
+function pixCpfValid(d) {
+  if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = n => { let s = 0; for (let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+  return dv(9) === +d[9] && dv(10) === +d[10];
+}
+
+// Vale para o CNPJ numérico de sempre e para o novo, com letras (a letra vale o seu código ASCII menos 48).
+function pixCnpjValid(c) {
+  if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(c) || /^(.)\1{13}$/.test(c)) return false;
+  const dv = n => { let s = 0, p = n - 7; for (let i = 0; i < n; i++) { s += (c.charCodeAt(i) - 48) * p; p = p === 2 ? 9 : p - 1; } const r = s % 11; return r < 2 ? 0 : 11 - r; };
+  return dv(12) === +c[12] && dv(13) === +c[13];
+}
+
+// Celular com DDD (e o 9 na frente do número), com ou sem +55, pontuação e espaços. Devolve +55DDNNNNNNNNN, ou ''.
+function pixPhone(s) {
+  const m = /^(?:\+?55)?([1-9][1-9])(9\d{8})$/.exec(String(s).replace(/[\s().\-]/g, ''));
+  return m ? '+55' + m[1] + m[2] : '';
+}
+
+// Lê a chave que o admin digitou e devolve a chave no formato do código:
+//   { ok:true, tipo, chave }                    reconhecida
+//   { ok:false, ambigua:true, opcoes:[...] }    11 números que servem de CPF e de celular: o admin escolhe (adivinhar
+//                                                errado mandaria o dinheiro para outra pessoa)
+//   { ok:false, motivo:'vazio' | 'invalida' }
+function pixParseKey(raw, tipo) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (!t) return { ok: false, motivo: 'vazio' };
+  const seco = t.replace(/[\s.\-\/()]/g, '');
+  const certa = (tp, chave) => ({ ok: true, tipo: tp, chave });
+  const tenta = {
+    cpf: () => pixCpfValid(seco) ? certa('cpf', seco) : null,
+    cnpj: () => pixCnpjValid(seco.toUpperCase()) ? certa('cnpj', seco.toUpperCase()) : null,
+    celular: () => { const p = pixPhone(t); return p ? certa('celular', p) : null; },
+    email: () => { const e = t.toLowerCase(); return e.length <= 77 && PIX_EMAIL.test(e) ? certa('email', e) : null; },
+    aleatoria: () => { const u = t.toLowerCase(); return PIX_UUID.test(u) ? certa('aleatoria', u) : null; },
+  };
+  const invalida = { ok: false, motivo: 'invalida' };
+  if (tipo) return (Object.prototype.hasOwnProperty.call(tenta, tipo) && tenta[tipo]()) || invalida;
+  if (t.includes('@')) return tenta.email() || invalida;
+  if (PIX_UUID.test(t.toLowerCase())) return tenta.aleatoria() || invalida;
+  if (t.startsWith('+')) return tenta.celular() || invalida;
+  if (/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(t)) return tenta.cpf() || invalida;
+  if (/[()]/.test(t)) return tenta.celular() || invalida;
+  if (/^\d{11}$/.test(seco)) {
+    const c = tenta.cpf(), p = tenta.celular();
+    if (c && p) return { ok: false, ambigua: true, opcoes: ['cpf', 'celular'] };
+    return c || p || invalida;
+  }
+  if (/^55\d{11}$/.test(seco)) return tenta.celular() || invalida;
+  if (/^[0-9A-Za-z]{14}$/.test(seco)) return tenta.cnpj() || invalida;
+  return invalida;
+}
+
+// Valor do código: "50.00" (ponto, duas casas). Vazio se não for um valor maior que zero.
+function pixAmount(v) {
+  const n = Number(v);
+  if (!isFinite(n) || n <= 0) return '';
+  const c = Math.round((n + Number.EPSILON) * 100); // 1,005 vira 1,01 (e não 1,00 por causa da conta em ponto flutuante)
+  if (c < 1 || c > 99999999999) return '';
+  return Math.floor(c / 100) + '.' + String(c % 100).padStart(2, '0');
+}
+
+// O código completo. A chave já vem validada (pixParseKey); nome e cidade são exigidos pelo formato, mas o banco do
+// jogador mostra o nome de quem é dono da chave. A mensagem (campo 02) só entra se couber nos 99 caracteres do campo 26.
+function pixBrCode({ chave, nome, cidade, valor, info }) {
+  if (!chave || chave.length > 77) throw new Error('chave PIX inválida');
+  let conta = pixField('00', 'br.gov.bcb.pix') + pixField('01', chave);
+  const livre = 99 - conta.length - 4;
+  const msg = livre > 0 ? pixText(info, livre, { punct: true }) : '';
+  if (msg) conta += pixField('02', msg);
+  const v = pixAmount(valor);
+  const corpo = pixField('00', '01') + pixField('26', conta) + pixField('52', '0000') + pixField('53', '986')
+    + (v ? pixField('54', v) : '') + pixField('58', 'BR')
+    + pixField('59', pixText(nome, 25, { upper: true }) || 'PELADA NA MAO')
+    + pixField('60', pixText(cidade, 15, { upper: true }) || 'BRASIL')
+    + pixField('62', pixField('05', '***')) + '6304';
+  return corpo + pixCrc16(corpo);
+}
+
+// A chave com parte escondida, para mostrar na tela sem expor a chave inteira.
+function pixMaskKey(chave, tipo) {
+  if (tipo === 'cpf') return '***.' + chave.slice(3, 6) + '.' + chave.slice(6, 9) + '-**';
+  if (tipo === 'cnpj') return '**.***.' + chave.slice(5, 8) + '/' + chave.slice(8, 12) + '-**';
+  if (tipo === 'celular') return '(' + chave.slice(3, 5) + ') *****-' + chave.slice(-4);
+  if (tipo === 'email') { const [u, d] = chave.split('@'); return u.slice(0, 1) + '***@' + d; }
+  return chave.slice(0, 8) + '…';
+}
+
+const pixBRL = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+const pixLeagueName = () => st.availableLeagues?.find(l => l.id === st.leagueId)?.name || '';
+
+// A chave do admin pronta para virar código (ou null: sem chave, ou chave que o app não reconheceu).
+function pixSetup() {
+  const k = pixParseKey(st.finCfg?.chavePix, st.finCfg?.chavePixTipo || '');
+  return k.ok ? k : null;
+}
+
+// O que um jogador deve em um mês, pelas mesmas regras da lista de contribuições do Financeiro.
+function pixDue(nome, mes) {
+  const cfg = st.finCfg || {};
+  const pags = st.finMens?.[mes]?.pagamentos || {};
+  const soChurrasco = !!st.players?.find(p => p.name === nome)?.somenteChurrasco;
+  const churrascoSeparado = !!(st.appCfg?.hasChurrasco && st.appCfg?.churrascoSeparado);
+  const itens = [];
+  const valM = +cfg.valorMensalidade || 0;
+  if (!soChurrasco && valM > 0 && !getPaid(pags, nome, 'mensalidade')) itens.push({ tipo: 'mensalidade', label: 'Mensalidade', valor: valM });
+  const valC = soChurrasco ? (+cfg.valorSomenteChurrasco || 0) : (+cfg.valorChurrasco || 0);
+  if (churrascoSeparado && valC > 0 && !getPaid(pags, nome, 'churrasco')) itens.push({ tipo: 'churrasco', label: 'Churrasco', valor: valC });
+  return { itens, total: itens.reduce((s, i) => s + Math.round(i.valor * 100), 0) / 100 };
+}
+
+// O código de um jogador para um mês ('' se não há o que pagar ou a chave não está pronta).
+function pixPayload(nome, mes) {
+  const k = pixSetup(), due = pixDue(nome, mes);
+  if (!k || !(due.total > 0)) return '';
+  const [a, m] = String(mes).split('-');
+  return pixBrCode({ chave: k.chave, nome: pixLeagueName(), cidade: 'BRASIL', valor: due.total,
+    info: due.itens.map(i => i.label).join(' e ') + ' ' + m + '/' + a + ' ' + nome });
+}
+
+// Código de R$ 1,00 para o admin conferir, no app do banco dele, se a chave aparece com o nome certo.
+function pixTestPayload(raw, tipo) {
+  const k = pixParseKey(raw, tipo);
+  return k.ok ? pixBrCode({ chave: k.chave, nome: pixLeagueName(), cidade: 'BRASIL', valor: 1, info: 'Teste Pelada na Mao' }) : '';
+}
+
+async function pixCopyText(texto) {
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(texto); return true; } } catch (_) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, texto.length);
+    const ok = document.execCommand('copy'); ta.remove(); return !!ok;
+  } catch (_) { return false; }
+}
+
+// O botão "Pagar com PIX" de um jogador: só existe se há algo a pagar e a chave do admin está pronta.
+function pixButton(nome, mes, estilo) {
+  const due = pixDue(nome, mes);
+  if (!pixSetup() || !(due.total > 0)) return '';
+  const attrs = `data-player="${esc(nome)}" data-month="${esc(mes)}" onclick="openPixPay(this.dataset.month,this.dataset.player)"`;
+  if (estilo === 'row') return `<button ${attrs} title="Pagar com PIX copia e cola" style="padding:5px 10px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:inherit">💸 PIX</button>`;
+  return `<button ${attrs} style="margin-top:8px;padding:6px 14px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">💸 Pagar com PIX · ${pixBRL(due.total)}</button>`;
+}
+
+function openPixPay(mes, nome) {
+  if (!/^\d{4}-\d{2}$/.test(String(mes)) || !pixSetup() || !(pixDue(nome, mes).total > 0)) return;
+  trackEvent('pixOpen');
+  st.modal = { type: 'pixPay', month: mes, name: nome };
+  render();
+}
+
+async function copyPixCode() {
+  const m = st.modal;
+  if (!m || m.type !== 'pixPay') return;
+  const code = pixPayload(m.name, m.month);
+  if (!code) { toast('Não há nada pendente para pagar.'); return; }
+  trackEvent('pixCopy', false);
+  if (await pixCopyText(code)) { toast('Código copiado! Cole no Pix Copia e Cola do seu banco.', 'ok'); return; }
+  st.modal = { ...m, showCode: true };
+  render();
+  toast('Não consegui copiar sozinho. Toque no código e copie.');
+}
+
+function mPixPay() {
+  const m = st.modal;
+  if (!m || m.type !== 'pixPay') return '';
+  const k = pixSetup();
+  const due = pixDue(m.name, m.month);
+  const mes = new Date(`${m.month}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const nota = t => `<p style="margin:10px 0 0;font-size:11px;line-height:1.5;color:var(--text3)">${t}</p>`;
+  let corpo;
+  if (!k) corpo = nota('O admin ainda não cadastrou uma chave PIX que o app reconheça. Peça a ele para conferir em ⚙️ Configurar valores.');
+  else if (!(due.total > 0)) corpo = `<div style="text-align:center;padding:18px 0;font-size:14px;font-weight:700;color:var(--accent)">✅ Nada pendente em ${mes}.</div>`;
+  else {
+    const linha = (txt, valor, forte) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border2);font-size:${forte ? 15 : 13}px;${forte ? 'font-weight:800' : 'color:var(--text2)'}"><span>${txt}</span><b>${valor}</b></div>`;
+    corpo = `<div style="background:var(--s1);border:1px solid var(--border2);border-radius:10px;padding:2px 12px">
+        ${due.itens.map(i => linha(`${i.label} · ${mes}`, pixBRL(i.valor))).join('')}
+        ${linha('Total', pixBRL(due.total), true)}
+      </div>
+      <div style="margin:10px 0 14px;font-size:12px;color:var(--text3);line-height:1.5">Para: <strong style="color:var(--text2)">${esc(pixLeagueName())}</strong> · chave PIX (${PIX_TIPOS[k.tipo]}) ${esc(pixMaskKey(k.chave, k.tipo))}</div>
+      <button class="btn btn-primary" onclick="copyPixCode()">📋 Copiar PIX copia e cola</button>
+      ${m.showCode ? `<textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;margin-top:10px;min-height:96px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:12px;font-family:monospace;word-break:break-all">${esc(pixPayload(m.name, m.month))}</textarea>` : ''}
+      <ol style="margin:14px 0 0;padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
+        <li>Toque em <strong>Copiar</strong>.</li>
+        <li>No app do seu banco, abra o Pix e escolha <strong>Pix Copia e Cola</strong>. Cole o código: o valor já vem preenchido.</li>
+        <li>Confira o nome de quem recebe e pague.</li>
+        <li>Depois de pagar, avise o admin: é ele quem marca a mensalidade como paga no app.</li>
+      </ol>
+      ${nota('O pagamento vai direto do seu banco para a chave do admin. O Pelada na Mão não recebe nem guarda esse dinheiro.')}`;
+  }
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:14px">💸 Pagar com PIX</div>
+      ${corpo}
+      <button class="btn btn-ghost" onclick="closeModal()" style="margin-top:12px">Fechar</button>
+    </div>
+  </div>`;
+}
+
+// Painel ⚙️ Financeiro (admin): o que o app entendeu da chave digitada.
+function pixKeyStatusHtml(m) {
+  const k = pixParseKey(m.chavePix, m.chavePixTipo || '');
+  const nota = (cor, txt) => `<p style="margin:6px 0 0;font-size:11px;line-height:1.5;color:${cor}">${txt}</p>`;
+  const btn = (onclick, txt) => `<button type="button" onclick="${onclick}" style="margin:8px 8px 0 0;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">${txt}</button>`;
+  if (k.motivo === 'vazio') return nota('var(--text3)', 'Com a chave cadastrada, cada jogador ganha o botão <strong>💸 Pagar com PIX</strong>, com o valor já preenchido. A chave também vai nas mensagens de cobrança do WhatsApp.');
+  if (k.ok) return nota('var(--accent)', `✓ Chave reconhecida: ${PIX_TIPOS[k.tipo]}.`)
+    + btn('copyPixTest()', '📋 Copiar código de teste (R$ 1,00)')
+    + nota('var(--text3)', 'Cole no app do seu banco só para conferir se aparece o seu nome como quem recebe. Não precisa pagar.');
+  if (k.ambigua) return nota('#F5C842', 'Esses números podem ser um CPF ou um celular. Qual é a sua chave?') + btn("pixPickType('cpf')", 'É um CPF') + btn("pixPickType('celular')", 'É um celular');
+  return nota('#FF5C5C', 'Não reconheci essa chave. Confira se é um CPF, CNPJ, celular com DDD, e-mail ou chave aleatória. Sem uma chave que o app reconheça, o botão 💸 Pagar com PIX não aparece para os jogadores.');
+}
+
+function pixKeyInput(valor) {
+  st.modal.chavePix = valor;
+  st.modal.chavePixTipo = ''; // texto novo: a escolha anterior (CPF ou celular) já não vale
+  const el = document.getElementById('pix-key-status');
+  if (el) el.innerHTML = pixKeyStatusHtml(st.modal);
+}
+
+function pixPickType(tipo) {
+  if (!st.modal || st.modal.type !== 'finConfig') return;
+  st.modal.chavePixTipo = tipo;
+  render();
+}
+
+async function copyPixTest() {
+  const m = st.modal;
+  if (!m || m.type !== 'finConfig') return;
+  const code = pixTestPayload(m.chavePix, m.chavePixTipo || '');
+  if (!code) { toast('Confira a chave PIX antes de testar.'); return; }
+  if (await pixCopyText(code)) toast('Código de teste copiado! Cole no Pix Copia e Cola do seu banco, só para conferir o nome.', 'ok');
+  else toast('Não consegui copiar o código de teste neste aparelho.');
+}
+/* ── fim do PIX copia e cola ────────────────────────────────────────────────────────────────── */
+
 function waMensalidadeLink(whatsapp, playerName, valor, mes) {
   const num = whatsapp.replace(/\D/g,'');
   const full = num.startsWith('55') ? num : '55' + num;
@@ -2751,12 +3026,14 @@ function waMensalidadeLink(whatsapp, playerName, valor, mes) {
   const vencido = today >= vencDate;
   const chavePix = (st.finCfg?.chavePix||'').trim();
   const pixLine = chavePix ? `\n\n🔑 Chave PIX: ${chavePix}` : '';
+  const appLine = pixSetup() && +valor > 0 ? `\n\n💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: ${location.origin}` : '';
+  const liga = pixLeagueName() || 'Pelada na Mão';
   let msg;
   if (vencido) {
-    msg = `⚽ Olá, ${playerName}!\n\nSua mensalidade do *Futebol ACEOMA* de ${mesLabel} está *em atraso*.\n\n💰 Valor: ${valFmt}${pixLine}`;
+    msg = `⚽ Olá, ${playerName}!\n\nSua mensalidade da liga *${liga}* de ${mesLabel} está *em atraso*.\n\n💰 Valor: ${valFmt}${pixLine}${appLine}`;
   } else {
     const vencFmt = `${String(vencDia).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${ym}`;
-    msg = `⚽ Olá, ${playerName}!\n\nLembrando que sua mensalidade do *Futebol ACEOMA* de ${mesLabel} vence em *${vencFmt}*.\n\n💰 Valor: ${valFmt}${pixLine}`;
+    msg = `⚽ Olá, ${playerName}!\n\nLembrando que sua mensalidade da liga *${liga}* de ${mesLabel} vence em *${vencFmt}*.\n\n💰 Valor: ${valFmt}${pixLine}${appLine}`;
   }
   return `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
 }
@@ -4872,7 +5149,7 @@ async function completeSetup() {
     }, { merge: true });
     await ldoc('financeiro_config/main').set({
       valorMensalidade: 0, valorChurrasco: 0, valorSomenteChurrasco: 0,
-      reserva: 0, saldoInicial: 0, valorAvulso: 0, vencimentoDia: 0, chavePix: '',
+      reserva: 0, saldoInicial: 0, valorAvulso: 0, vencimentoDia: 0, chavePix: '', chavePixTipo: '',
     });
     st._setupStep = null;
     startListeners();
@@ -5777,6 +6054,7 @@ function vMeuJogador() {
           ${payBadge}
         </div>
         <div style="font-size:12px;color:var(--text3)">${subtitle}</div>
+        ${isSimulating ? '' : pixButton(myName, curMonth, 'pill')}
         ${st._mjCard ? `<button onclick="openMjCard()" style="margin-top:8px;background:var(--s2);border:1px solid var(--border);border-radius:20px;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;padding:5px 12px;font-family:inherit">📤 Compartilhar meu cartão</button>` : ''}
         ${!isSimulating && st.photos?.[myKey] ? `<button onclick="removePlayerPhoto('${myKey}')" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:0;margin-top:2px;text-decoration:underline;font-family:inherit">remover foto</button>` : ''}
       </div>
@@ -6554,7 +6832,7 @@ function render() {
   }
   if(main) main.innerHTML=planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -8733,7 +9011,7 @@ function vFinanceiro() {
         ? `<div style="font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:2px">••••••</div>`
         : `<div style="font-size:16px;font-weight:700;color:${previsao>=0?'var(--accent)':'var(--danger)'};margin-top:3px">${fmtR(previsao)}</div>`}
     </div>
-    ${isAdmin()?`<button onclick="st.modal={type:'finConfig',valorMensalidade:${valM},valorChurrasco:${valC},valorSomenteChurrasco:${cfg.valorSomenteChurrasco||0},reserva:${reserva},saldoInicial:${cfg.saldoInicial||0},valorAvulso:${cfg.valorAvulso??0},vencimentoDia:${cfg.vencimentoDia??0},chavePix:st.finCfg?.chavePix||''};render()"
+    ${isAdmin()?`<button onclick="st.modal={type:'finConfig',valorMensalidade:${valM},valorChurrasco:${valC},valorSomenteChurrasco:${cfg.valorSomenteChurrasco||0},reserva:${reserva},saldoInicial:${cfg.saldoInicial||0},valorAvulso:${cfg.valorAvulso??0},vencimentoDia:${cfg.vencimentoDia??0},chavePix:st.finCfg?.chavePix||'',chavePixTipo:st.finCfg?.chavePixTipo||''};render()"
       style="margin-top:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer">⚙️ Configurar valores</button>`:''}
   </div>
 
@@ -8784,12 +9062,14 @@ function vFinanceiro() {
       const pC=hasChurrSep?getPaid(pagamentos,p.name,'churrasco'):null;
       const tot=isCO?(pC?valCS:0):(pM?valM:0)+(pC?valC:0);
       const pWa = isAdmin() ? waOf(p) : '';
+      const isMe = st.userDoc?.playerKey === playerKey(p.name);
+      const pixBtn = isMe ? pixButton(p.name, month, 'row') : '';
       const waPayBtn = pWa && !isCO && !pM
         ? `<a href="${waMensalidadeLink(pWa, p.name, valM, st.finMonth)}" target="_blank" rel="noopener"
              style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#25D36618;border:1.5px solid #25D366;color:#25D366;font-size:14px;text-decoration:none;flex-shrink:0" title="Cobrar mensalidade via WhatsApp">💬</a>`
         : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2)">
-        <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isCO?` <span style="font-size:10px;color:#FF8A3C">🍖</span>`:''}  </span>
+        <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}${isCO?` <span style="font-size:10px;color:#FF8A3C">🍖</span>`:''}${pixBtn ? `<span style="display:block;margin-top:6px">${pixBtn}</span>` : ''}  </span>
         ${tot?`<span style="font-size:12px;color:var(--accent);font-weight:600">${fmtR(tot)}</span>`:`<span style="font-size:12px;color:var(--text3)">pendente</span>`}
         ${isAdmin()?(isCO?'':`<button data-player="${esc(p.name)}" data-type="mensalidade" onclick="togglePagamento(this.dataset.player,this.dataset.type)"
           style="${btnS(pM)}">💵${pM?' ✓':''}</button>`):''}
@@ -9069,10 +9349,10 @@ function mFinConfig() {
       </div>
       <div style="margin-bottom:14px">
         <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">🔑 Chave PIX</label>
-        <input type="text" placeholder="CPF, e-mail, telefone ou chave aleatória"
+        <input type="text" placeholder="CPF, CNPJ, celular, e-mail ou chave aleatória"
           value="${esc(m.chavePix||'')}"
-          oninput="st.modal.chavePix=this.value" style="${inp}">
-        <p style="margin:5px 0 0;font-size:11px;color:var(--text3)">Incluída nas mensagens de cobrança enviadas pelo WhatsApp.</p>
+          oninput="pixKeyInput(this.value)" style="${inp}">
+        <div id="pix-key-status">${pixKeyStatusHtml(m)}</div>
       </div>
       <div style="margin-bottom:24px">
         <label style="font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:5px">Saldo Inicial (R$)</label>
@@ -9232,6 +9512,8 @@ async function saveFinConfig() {
   const m = st.modal;
   if (!m || !DB) return;
   try {
+    const pixKey = (m.chavePix||'').trim();
+    const pix = pixParseKey(pixKey, m.chavePixTipo || '');
     await ldoc('financeiro_config/main').set({
       valorMensalidade: +m.valorMensalidade || 0,
       valorChurrasco: +m.valorChurrasco || 0,
@@ -9240,11 +9522,14 @@ async function saveFinConfig() {
       saldoInicial: +m.saldoInicial || 0,
       valorAvulso: +m.valorAvulso || 0,
       vencimentoDia: +m.vencimentoDia || 0,
-      chavePix: (m.chavePix||'').trim(),
+      chavePix: pixKey,
+      chavePixTipo: pix.ok ? pix.tipo : '',
     });
     st.modal = null;
     render();
-    toast('Configuração salva!', 'ok');
+    toast(pixKey && !pix.ok
+      ? (pix.ambigua ? 'Configuração salva! Falta escolher se a chave PIX é CPF ou celular para liberar o botão Pagar com PIX.' : 'Configuração salva! A chave PIX não foi reconhecida: o botão Pagar com PIX só aparece com uma chave válida.')
+      : 'Configuração salva!', 'ok');
   } catch(e) { toast('Erro: '+(e?.message||e)); }
 }
 

@@ -1246,7 +1246,56 @@ p strong {
       </div>
 
       <h3>🔑 Chave PIX</h3>
-      <p>Em ⚙️ Configurar valores, há um campo <strong>Chave PIX</strong> (CPF, e-mail, telefone ou chave aleatória). Quando preenchido, a chave é incluída automaticamente nas mensagens de cobrança enviadas pelo WhatsApp.</p>
+      <p>Em ⚙️ Configurar valores, o campo <strong>Chave PIX</strong> aceita CPF, CNPJ, celular, e-mail ou chave aleatória. O app reconhece o tipo sozinho e avisa embaixo do campo, por exemplo <em>✓ Chave reconhecida: CPF</em>. A chave vai nas mensagens de cobrança do WhatsApp e, quando é reconhecida, libera o botão <strong>💸 Pagar com PIX</strong> para os jogadores (próxima seção).</p>
+
+      <table class="data-table">
+        <thead><tr><th>O que você digita</th><th>Como o app entende</th></tr></thead>
+        <tbody>
+          <tr><td>123.456.789-09</td><td>CPF (o app confere os dígitos verificadores)</td></tr>
+          <tr><td>11.222.333/0001-81 (ou o CNPJ novo, com letras)</td><td>CNPJ</td></tr>
+          <tr><td>(11) 91234-5678 ou +55 11 91234-5678</td><td>Celular, com DDD e o 9 na frente</td></tr>
+          <tr><td>nome@exemplo.com</td><td>E-mail</td></tr>
+          <tr><td>123e4567-e12b-12d1-a456-426655440000</td><td>Chave aleatória</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout gold">
+        <div class="callout-label gold">11 números: CPF ou celular?</div>
+        Um CPF digitado só com números pode ser também um celular válido, porque os dois têm 11 dígitos. Quando isso acontece, o app <strong>não adivinha</strong>: mostra os botões <strong>É um CPF</strong> e <strong>É um celular</strong> e só libera o PIX depois da sua escolha, porque errar mandaria o dinheiro para outra pessoa. Digitando o CPF com pontos e traço (000.000.000-00) ou o celular com parênteses, o app já sabe qual é.
+      </div>
+
+      <p>Quando a chave é reconhecida, aparece o botão <strong>📋 Copiar código de teste (R$ 1,00)</strong>. Cole o código no app do seu banco só para conferir se aparece o <strong>seu nome</strong> como quem recebe. Não precisa pagar nada.</p>
+      <p>Se a chave não for reconhecida, o botão 💸 não aparece para os jogadores, e o texto digitado continua indo nas mensagens do WhatsApp, como antes.</p>
+
+      <h3 id="pagar-com-pix">💸 Pagar com PIX (copia e cola)</h3>
+      <p>Com a chave cadastrada, quem tem mensalidade (ou churrasco) em aberto vê o botão <strong>💸 Pagar com PIX · R$ 50,00</strong> na aba <strong>EU (Meu Craque)</strong>, embaixo do nome, e um botão <strong>💸 PIX</strong> na própria linha, em <strong>Financeiro</strong>. Ao tocar, o app mostra o que é devido no mês e o jogador faz:</p>
+      <ol>
+        <li>Toca em <strong>📋 Copiar PIX copia e cola</strong>.</li>
+        <li>No app do banco, abre o Pix e escolhe <strong>Pix Copia e Cola</strong>. Cola o código: <strong>o valor já vem preenchido</strong>.</li>
+        <li>Confere o nome de quem recebe e paga.</li>
+        <li>Avisa o admin, que marca a mensalidade como paga (💵) no app, como sempre.</li>
+      </ol>
+
+      <table class="data-table">
+        <thead><tr><th>Detalhe</th><th>Como funciona</th></tr></thead>
+        <tbody>
+          <tr><td>Valor</td><td>A mensalidade em aberto do mês e, se a liga cobra churrasco separado, o churrasco em aberto: um código só, com o total. Quem é <em>Só Churrasco</em> paga o valor próprio do churrasco e nunca a mensalidade. Quem já pagou não vê o botão.</td></tr>
+          <tr><td>Mensagem do pagamento</td><td>O código leva uma mensagem curta, como <em>Mensalidade 10/2026 Rodrigo</em>. Muitos bancos mostram essa mensagem no extrato de quem recebe, o que ajuda o admin a reconhecer quem pagou quando o jogador é conhecido por apelido e o nome no banco é outro.</td></tr>
+          <tr><td>Chave na tela</td><td>A janela mostra a chave com parte escondida (por exemplo ***.456.789-**). O nome de quem recebe aparece no app do banco do jogador.</td></tr>
+          <tr><td>Se não conseguir copiar</td><td>Alguns aparelhos bloqueiam a cópia automática. Nesse caso o app mostra o código num campo para o jogador tocar e copiar na mão.</td></tr>
+          <tr><td>Quem não vê o botão</td><td>Quem não tem nada em aberto, quem ainda não está vinculado a um jogador e o admin usando <em>👁 Ver como</em>.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Dinheiro e responsabilidade</div>
+        O Pelada na Mão <strong>não recebe, não guarda e não intermedeia</strong> o dinheiro. O pagamento vai direto do banco do jogador para a chave do admin, e o app só escreve o texto do código. Por isso o app também não sabe se o pagamento foi feito: o admin continua conferindo no próprio banco e marcando 💵 como pago. Isso está de acordo com os Termos de Uso (o PIX é combinado diretamente entre jogadores e admin).
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        O código segue o padrão <em>BR Code</em> do Banco Central (Pix estático): GUI <code>br.gov.bcb.pix</code>, chave, mensagem, moeda 986 (real), valor com ponto e duas casas, nome da liga (sem acento, em maiúsculas, até 25 letras), cidade genérica, <code>txid ***</code> e o fecho CRC-16. É montado no aparelho de quem toca no botão (<code>pixBrCode</code>), sem enviar nada ao servidor. Foi conferido contra o exemplo do manual do Banco Central e contra duas bibliotecas públicas de PIX, com milhares de casos. O painel do dono (seção 28) tem dois contadores anônimos: <strong>abriram o Pagar com PIX</strong> e <strong>copiaram o código</strong>.
+      </div>
 
       <h3>💬 Cobrar mensalidade via WhatsApp</h3>
       <p>Na lista de contribuições do mês, todo jogador regular com mensalidade <strong>em aberto</strong> e WhatsApp cadastrado exibe um botão 💬 ao lado do nome (exclusivo do admin). A mensagem varia conforme o dia de vencimento configurado:</p>
@@ -1254,20 +1303,22 @@ p strong {
       <div class="example">
         <div class="ex-label">Antes do vencimento</div>
         ⚽ Olá, <em>[nome]</em>!<br><br>
-        Lembrando que sua mensalidade do <strong>Futebol ACEOMA</strong> de <em>[mês]</em> vence em <strong>DD/MM/AAAA</strong>.<br><br>
-        💰 Valor: R$ <em>[valor]</em><br>
-        🔑 Chave PIX: <em>[chave]</em>
+        Lembrando que sua mensalidade da liga <strong>[nome da liga]</strong> de <em>[mês]</em> vence em <strong>DD/MM/AAAA</strong>.<br><br>
+        💰 Valor: R$ <em>[valor]</em><br><br>
+        🔑 Chave PIX: <em>[chave]</em><br><br>
+        💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: <em>[endereço do app]</em>
       </div>
 
       <div class="example">
         <div class="ex-label">No vencimento ou depois (em atraso)</div>
         ⚽ Olá, <em>[nome]</em>!<br><br>
-        Sua mensalidade do <strong>Futebol ACEOMA</strong> de <em>[mês]</em> está <strong>em atraso</strong>.<br><br>
-        💰 Valor: R$ <em>[valor]</em><br>
-        🔑 Chave PIX: <em>[chave]</em>
+        Sua mensalidade da liga <strong>[nome da liga]</strong> de <em>[mês]</em> está <strong>em atraso</strong>.<br><br>
+        💰 Valor: R$ <em>[valor]</em><br><br>
+        🔑 Chave PIX: <em>[chave]</em><br><br>
+        💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: <em>[endereço do app]</em>
       </div>
 
-      <p>O botão 💬 desaparece automaticamente quando a mensalidade é marcada como paga. Jogadores marcados como <em>Só Churrasco</em> não têm botão de cobrança de mensalidade. A linha do PIX aparece apenas se a chave estiver configurada.</p>
+      <p>O botão 💬 desaparece automaticamente quando a mensalidade é marcada como paga. Jogadores marcados como <em>Só Churrasco</em> não têm botão de cobrança de mensalidade. A linha da chave PIX aparece apenas se a chave estiver configurada, e a última linha (o convite para pagar com PIX no app) só aparece quando a chave é reconhecida e há valor a cobrar. A mensagem usa o nome da sua liga.</p>
     </section>
 
     <!-- 13. Conquistas (Badges) -->

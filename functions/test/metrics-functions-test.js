@@ -123,9 +123,9 @@ const reset = () => { store.clear(); logs.length = 0; setShouldFail = null; mpRe
   await call(fns.trackEvent, { name: 'planBannerSeen' }, user('u2'));
   await call(fns.trackEvent, { name: 'installClick' }, user('u1'));
   check('trackEvent: pessoas diferentes somam no mesmo contador', store.get(`metrics_events/${today()}`).planBannerSeen === 2 && store.get(`metrics_events/${today()}`).installClick === 1);
-  for (const nome of ['cardOpen', 'cardShare', 'cardVisit']) {
+  for (const nome of ['cardOpen', 'cardShare', 'cardVisit', 'pixOpen', 'pixCopy']) {
     const rr = await tryCall(fns.trackEvent, { name: nome }, user('u1'));
-    check(`trackEvent: o evento do cartão do jogador "${nome}" é aceito e soma 1 no contador do dia`, rr.res?.ok === true && store.get(`metrics_events/${today()}`)[nome] === 1, store.get(`metrics_events/${today()}`));
+    check(`trackEvent: o evento do cartão do jogador / do PIX copia e cola "${nome}" é aceito e soma 1 no contador do dia`, rr.res?.ok === true && store.get(`metrics_events/${today()}`)[nome] === 1, store.get(`metrics_events/${today()}`));
   }
   check('trackEvent: só o contador é gravado, nunca quem foi (nem id, nem e-mail)', !/u1|u2|@/.test(JSON.stringify([...store.entries()].filter(([k]) => k.startsWith('metrics_')))), [...store.entries()]);
   for (const bad of ['', 'qualquerCoisa', 'checkoutMonthly', '__proto__', 'a'.repeat(100), undefined, 42]) {

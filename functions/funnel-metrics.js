@@ -16,7 +16,7 @@ const TRIAL_ENDING_DAYS = 3; // "teste acabando": faltam até 3 dias (igual ao e
 const OFFER_DAYS = 5;        // a faixa do plano aparece nos últimos 5 dias do teste (igual ao app)
 const ACTIVE_DAYS = 14;      // liga "usada recentemente"
 
-const EVENT_NAMES_CLIENT = ["planBannerSeen", "planBannerClick", "subscriptionOpened", "installBannerSeen", "installClick", "appInstalled", "cardOpen", "cardShare", "cardVisit"];
+const EVENT_NAMES_CLIENT = ["planBannerSeen", "planBannerClick", "subscriptionOpened", "installBannerSeen", "installClick", "appInstalled", "cardOpen", "cardShare", "cardVisit", "pixOpen", "pixCopy"];
 const EVENT_NAMES_SERVER = ["checkoutMonthly", "checkoutAnnual"];
 const EVENT_NAMES = [...EVENT_NAMES_CLIENT, ...EVENT_NAMES_SERVER];
 

@@ -115,6 +115,14 @@ jobs:
         working-directory: functions
         run: node test/client-card-test.js
 
+      - name: Testes do PIX copia e cola (código e leitura da chave)
+        working-directory: functions
+        run: node test/pix-test.js
+
+      - name: Testes do app (PIX copia e cola: botão, janela, configuração e WhatsApp)
+        working-directory: functions
+        run: node test/client-pix-test.js
+
       - name: Testes do app (encerrar liga)
         working-directory: functions
         run: node test/client-close-league-test.js
