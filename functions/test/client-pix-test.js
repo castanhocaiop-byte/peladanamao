@@ -99,7 +99,9 @@ e = makeEnv({ st: { finCfg: { valorMensalidade: 0, chavePix: CPF, chavePixTipo: 
 check('mensalidade configurada com R$ 0: nada a cobrar (sem botão, sem código)', e.api.pixDue('Ana Maria', MES).total === 0 && e.api.pixButton('Ana Maria', MES, 'pill') === '' && e.api.pixPayload('Ana Maria', MES) === '');
 e = makeEnv({ st: { finCfg: { valorMensalidade: '50,5', chavePix: CPF } } });
 check('valor salvo como texto inválido não vira "NaN" (conta como zero)', e.api.pixDue('Ana Maria', MES).total === 0);
-check('jogador que não está na lista de jogadores ainda é cobrado como jogador comum', makeEnv().api.pixDue('Desconhecido', MES).total === 50);
+check('quem não está no elenco (nome que não existe, ou a chave no lugar do nome em Meu Craque) não tem o que pagar: sem botão e sem código', (() => { const x = makeEnv(); return x.api.pixDue('Desconhecido', MES).total === 0 && x.api.pixButton('Desconhecido', MES, 'pill') === '' && x.api.pixPayload('Desconhecido', MES) === ''; })());
+check('quem saiu da liga (jogador inativo) também não: a lista do Financeiro só cobra jogadores ativos', (() => { const x = makeEnv({ st: { players: [{ name: 'Ana Maria', active: false }] } }); return x.api.pixDue('Ana Maria', MES).total === 0 && x.api.pixButton('Ana Maria', MES, 'row') === ''; })() && makeEnv({ st: { players: [{ name: 'Ana Maria', active: true }] } }).api.pixDue('Ana Maria', MES).total === 50 && makeEnv({ st: { players: [{ name: 'Ana Maria' }] } }).api.pixDue('Ana Maria', MES).total === 50);
+check('elenco ainda carregando (lista vazia ou ausente): nada a cobrar, sem erro', makeEnv({ st: { players: [] } }).api.pixDue('Ana Maria', MES).total === 0 && makeEnv({ st: { players: undefined } }).api.pixDue('Ana Maria', MES).total === 0);
 
 // ── a chave pronta para uso ─────────────────────────────────────────────────────────────────────
 check('sem chave, com chave inválida ou com 11 números ambíguos sem escolha: sem PIX (null)', [

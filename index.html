@@ -2878,7 +2878,9 @@ function pixSetup() {
 function pixDue(nome, mes) {
   const cfg = st.finCfg || {};
   const pags = st.finMens?.[mes]?.pagamentos || {};
-  const soChurrasco = !!st.players?.find(p => p.name === nome)?.somenteChurrasco;
+  const jogador = st.players?.find(p => p.name === nome);
+  if (!jogador || jogador.active === false) return { itens: [], total: 0 }; // fora do elenco ativo: não há o que cobrar
+  const soChurrasco = !!jogador.somenteChurrasco;
   const churrascoSeparado = !!(st.appCfg?.hasChurrasco && st.appCfg?.churrascoSeparado);
   const itens = [];
   const valM = +cfg.valorMensalidade || 0;
