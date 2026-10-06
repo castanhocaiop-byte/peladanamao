@@ -123,7 +123,7 @@ jobs:
         working-directory: functions
         run: node test/pix-test.js
 
-      - name: Testes do app (PIX copia e cola: botão, janela, configuração e WhatsApp)
+      - name: Testes do app (PIX copia e cola - botão, janela, configuração e WhatsApp)
         working-directory: functions
         run: node test/client-pix-test.js
 
