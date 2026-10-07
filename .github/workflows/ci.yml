@@ -79,6 +79,10 @@ jobs:
         working-directory: functions
         run: node test/staging-secret-test.js
 
+      - name: Testes do atalho de segredos de produção (chave do Mercado Pago)
+        working-directory: functions
+        run: node test/production-secret-test.js
+
       - name: Testes da tradução dos erros do Mercado Pago
         working-directory: functions
         run: node test/mp-errors-test.js
