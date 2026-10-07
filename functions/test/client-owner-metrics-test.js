@@ -168,7 +168,7 @@ check('o painel só mostra números: nenhum campo de texto livre da resposta vai
   const opening = p.api.openOwnerMetrics();
   check('dono: a camada abre na hora com "Calculando…"', p.layerList.length === 1 && /Calculando/.test(p.layerList[0].innerHTML) && p.layerList[0].id === 'owner-metrics' && p.layerList[0].className === 'overlay');
   release(); await opening;
-  check('…e quando a resposta chega mostra as métricas (uma chamada só ao servidor: getFunnelMetrics)', /Métricas do sistema/.test(p.layerList[0].innerHTML) && /R\$ 49,80/.test(p.layerList[0].innerHTML) && JSON.stringify(p.calls.callFn) === JSON.stringify(['getFunnelMetrics']), p.calls);
+  check('…e quando a resposta chega mostra as métricas (duas chamadas ao servidor, juntas: o funil e os erros do app)', /Métricas do sistema/.test(p.layerList[0].innerHTML) && /R\$ 49,80/.test(p.layerList[0].innerHTML) && JSON.stringify(p.calls.callFn) === JSON.stringify(['getFunnelMetrics', 'getClientErrors']), p.calls);
   await p.api.openOwnerMetrics();
   check('abrir de novo não duplica a camada', p.layerList.length === 1);
 

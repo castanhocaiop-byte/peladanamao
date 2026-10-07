@@ -135,6 +135,18 @@ jobs:
         working-directory: functions
         run: node test/client-pix-test.js
 
+      - name: Testes do monitoramento de travamentos (regras e limpeza dos relatos)
+        working-directory: functions
+        run: node test/client-errors-test.js
+
+      - name: Testes do monitoramento de travamentos (funções do servidor)
+        working-directory: functions
+        run: node test/client-errors-functions-test.js
+
+      - name: Testes do app (monitor de travamentos - relatos, avisos dos erros e painel do dono)
+        working-directory: functions
+        run: node test/client-errors-app-test.js
+
       - name: Testes do app (encerrar liga)
         working-directory: functions
         run: node test/client-close-league-test.js

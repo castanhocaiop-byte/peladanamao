@@ -855,6 +855,76 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     check('…consultar de novo o mesmo pagamento não soma título em dobro', r.status === 200 && (await ti('lq', 'ana')).titles === 6);
   }
 
+  // ═════════════ MONITOR DE TRAVAMENTOS DO NAVEGADOR ═════════════
+  console.log('── monitor de travamentos: função HTTP, regras do banco e painel do dono (Firestore e funções de verdade)');
+  await seed();
+  {
+    const ce = require('../client-errors.js');
+    const SITE = 'https://peladanamao.com.br';
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    // POST como o navegador faz (text/plain, com Origin); o Node não deixa o fetch mexer no Origin, então usa http direto
+    const post = (body, { origin = SITE, method = 'POST', ip = '203.0.113.' + (1 + Math.floor(Math.random() * 250)) } = {}) => new Promise((resolve, reject) => {
+      const req = require('http').request(`${FN_URL}/reportClientError`, { method, headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'X-Forwarded-For': ip, 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) Chrome/118', ...(origin ? { Origin: origin } : {}) } }, res => {
+        let d = ''; res.on('data', c => { d += c; }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: d }));
+      });
+      req.on('error', reject);
+      if (body !== undefined) req.write(typeof body === 'string' ? body : JSON.stringify(body));
+      req.end();
+    });
+    const rep = { k: 'error', m: "TypeError: Cannot read properties of undefined (reading 'x')", s: "TypeError: x\n    at renderChamp (https://peladanamao.com.br/?invite=SEGREDO123&liga=la:1234:56)\n    at render (https://peladanamao.com.br/:99:5)", v: '20261006.2150', w: 'ranking', b: 'Chrome 118', o: 'Android 13', a: 0, i: 0, x: {} };
+    const fp = ce.parseReport(rep).report.fp;
+    const gPath = `client_errors/${fp}`, mPath = `client_errors_meta/${today}`;
+
+    let rr = await post(rep, { ip: '203.0.113.9' });
+    check('relato do próprio site → 204, com a permissão CORS só para o endereço do site', rr.status === 204 && rr.headers['access-control-allow-origin'] === SITE && !rr.body, { status: rr.status, h: rr.headers['access-control-allow-origin'] });
+    let g = docData(await db.get('owner', gPath));
+    check('…o grupo foi criado no banco: contagem 1, tipo, mensagem, função do código, versão e os contadores aninhados (dia, versão, navegador, sistema, tela)', g && g.count === 1 && g.kind === 'error' && g.message === rep.m && g.fn === 'renderChamp' && g.firstSeen === g.lastSeen && g.firstVersion === '20261006.2150' && g.days['d' + today.replace(/-/g, '')] === 1 && g.versions.v20261006_2150 === 1 && g.browsers['Chrome 118'] === 1 && g.oses['Android 13'] === 1 && g.views.ranking === 1, g);
+    check('…e o dia: total 1, grupos novos 1', JSON.stringify(docData(await db.get('owner', mPath))) === '{"total":1,"newGroups":1}', docData(await db.get('owner', mPath)));
+    await post({ ...rep, b: 'Safari 17', o: 'iOS 17', v: '20261008.1000', w: 'home', s: rep.s.replace(':1234:56', ':2000:9') }, { ip: '203.0.113.10' });
+    g = docData(await db.get('owner', gPath));
+    check('mesmo erro de outro aparelho: o MESMO grupo soma (contagem 2; navegadores, sistemas, versões e telas separados; primeira vez intacta)', g.count === 2 && g.browsers['Chrome 118'] === 1 && g.browsers['Safari 17'] === 1 && g.oses['iOS 17'] === 1 && g.versions.v20261008_1000 === 1 && g.views.home === 1 && g.lastVersion === '20261008.1000' && g.firstVersion === '20261006.2150' && docData(await db.get('owner', mPath)).total === 2 && docData(await db.get('owner', mPath)).newGroups === 1, g);
+    // relatos simultâneos de aparelhos diferentes: nenhum se perde (os contadores somam no próprio banco)
+    const par = await Promise.all(Array.from({ length: 12 }, (_, i) => post(rep, { ip: '198.51.100.' + (i + 1) })));
+    g = docData(await db.get('owner', gPath));
+    check('12 relatos ao mesmo tempo do mesmo erro: todos contam (2 + 12 = 14; nada se perde)', par.every(x => x.status === 204) && g.count === 14 && g.browsers['Chrome 118'] === 13 && docData(await db.get('owner', mPath)).total === 14, { count: g.count, total: docData(await db.get('owner', mPath)).total });
+    // quem pode falar com a função
+    rr = await post(rep, { origin: 'https://exemplo.com' });
+    const rr2 = await post(rep, { origin: null });
+    const rr3 = await post(undefined, { method: 'GET' });
+    const rr4 = await post(undefined, { method: 'OPTIONS' });
+    // (o pré-voo de outro site → 403 fica no teste das funções: o emulador responde pré-voos sozinho, de forma permissiva)
+    check('origem de outro site e pedido sem origem → 403; GET → 405; pré-voo do próprio site → 204 com permissão', rr.status === 403 && rr2.status === 403 && rr3.status === 405 && rr4.status === 204 && /POST/.test(rr4.headers['access-control-allow-methods'] || ''), [rr.status, rr2.status, rr3.status, rr4.status]);
+    check('…e nada disso gravou nada (o grupo continua com 14)', docData(await db.get('owner', gPath)).count === 14);
+    const bad1 = await post('isso não é json'), bad2 = await post({ k: 'hack', m: 'x' }), noise = await post({ k: 'error', m: 'ResizeObserver loop limit exceeded' });
+    check('corpo ilegível e tipo desconhecido → 400; ruído conhecido → 204 sem gravar', bad1.status === 400 && bad2.status === 400 && noise.status === 204 && (await db.list('owner', 'client_errors')).json.documents.length === 1, [bad1.status, bad2.status, noise.status]);
+    // limite por endereço: 10 por minuto
+    const same = [];
+    for (let i = 0; i < 12; i++) same.push((await post({ ...rep, m: 'erro do mesmo aparelho ' + i }, { ip: '192.0.2.77' })).status);
+    check('limite por endereço: 10 por minuto, o 11º e o 12º levam 429', same.slice(0, 10).every(s => s === 204) && same[10] === 429 && same[11] === 429, same);
+    // privacidade: o que ficou no banco
+    const all = JSON.stringify([(await db.list('owner', 'client_errors')).json, (await db.list('owner', 'client_errors_meta')).json]);
+    check('privacidade: nada de IP, navegador completo, convite nem nome da liga no que ficou gravado', !/203\.0\.113|198\.51\.100|192\.0\.2|Mozilla|SEGREDO123|invite=|liga=/.test(all), all.slice(0, 300));
+    // regras: coleções fechadas
+    for (const [quem, tok] of [['dono', U.owner.token], ['admin de liga', U.admA.token], ['jogador', U.pl1.token], ['quem é de fora', U.outsider.token]]) {
+      check(`regras: ${quem} não lê nem grava os erros do app direto no banco → recusado`, no(await db.get(tok, gPath)) && no(await db.get(tok, mPath)) && no(await db.set(tok, gPath, { count: 999 })) && no(await db.set(tok, mPath, { total: 999 })) && no(await db.del(tok, gPath)), quem);
+    }
+    check('…e os dados continuam intactos', docData(await db.get('owner', gPath)).count === 14);
+    // painel do dono
+    rr = await callFn('getClientErrors', null, {});
+    check('painel dos erros sem login → não autenticado', rr.status === 401, rr.raw);
+    for (const [quem, tok] of [['jogador', U.pl1.token], ['admin de liga', U.admA.token], ['quem é de fora', U.outsider.token]]) {
+      rr = await callFn('getClientErrors', tok, {});
+      check(`painel dos erros: ${quem} → permissão negada`, rr.status === 403 && rr.error.status === 'PERMISSION_DENIED', rr.raw);
+    }
+    rr = await callFn('getClientErrors', U.owner.token, {});
+    const R = rr.result;
+    const top = R && R.groups && R.groups.find(x => x.fp === fp);
+    check('painel dos erros: o dono (e-mail verificado) recebe o resumo, com o grupo, as contagens de hoje e de 7 dias e 14 dias de totais', rr.status === 200 && R.ok === true && top && top.count === 14 && top.today === 14 && top.last7 === 14 && top.kind === 'error' && top.versions.length === 2 && top.browsers[0].name === 'Chrome 118' && R.days.length === 14 && R.days[13].total === 14 + 10, rr.raw && JSON.stringify(rr.raw).slice(0, 400));
+    check('…sem nenhum dado pessoal (e-mails, ids de conta, endereço IP)', !/@teste\.invalid|castanho|203\.0\.113|198\.51\.100|192\.0\.2|SEGREDO123/.test(JSON.stringify(R)) && !JSON.stringify(R).includes(U.pl1.uid), JSON.stringify(R).slice(0, 200));
+    check('…e o grupo novo aparece como novo', top.isNew === true && R.totals.newGroups48h >= 1);
+    await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
+  }
+
   console.log(`\n${passes} verificações ok, ${fails} falha(s)`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERRO NO TESTE', e); process.exit(1); });

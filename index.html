@@ -10,6 +10,214 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script defer src="/_vercel/insights/script.js"></script>
+<script>
+/* Monitor de travamentos. ES5 de propósito (sem seta, let, const nem template): precisa rodar até no navegador velho, que é
+   onde o app mais quebra, e antes de qualquer outro script. Quando algo quebra, manda um relato curto e SEM dado de pessoa:
+   a mensagem do erro, o trecho do código, a versão do app, a tela e o tipo de navegador. Nunca vai nome, e-mail, WhatsApp,
+   liga, conta, o que a pessoa digitou nem o endereço da página com convite ou código de login (tudo depois de "?" ou "#"
+   sai). O servidor limpa o texto de novo (functions/client-errors.js) e não guarda o IP. Só fala no site de verdade
+   (produção e teste); em localhost e nas prévias fica quieto. Falha em silêncio: monitorar nunca atrapalha o app. */
+(function () {
+  window.pnmReport = function () {};
+  var PROJECTS = { 'peladanamao.com.br': 'seriebaceoma', 'www.peladanamao.com.br': 'seriebaceoma', 'seriebaceoma-staging.web.app': 'seriebaceoma-staging', 'seriebaceoma-staging.firebaseapp.com': 'seriebaceoma-staging' };
+  var project = Object.prototype.hasOwnProperty.call(PROJECTS, location.hostname) ? PROJECTS[location.hostname] : '';
+  if (!project) return;
+  var ENDPOINT = 'https://us-east1-' + project + '.cloudfunctions.net/reportClientError';
+  var MAX_PER_PAGE = 5, MAX_PER_TAB = 15, BOOT_MS = 20000;
+  var sentCount = 0, seen = {};
+
+  // ── limpeza do texto (a mesma do servidor; um teste confere que dão o mesmo resultado) ──
+  var SITE = { 'peladanamao.com.br': 1, 'www.peladanamao.com.br': 1, 'seriebaceoma-staging.web.app': 1, 'seriebaceoma-staging.firebaseapp.com': 1, 'localhost': 1, '127.0.0.1': 1 };
+  var CONTROL = new RegExp('[\\x00-\\x1f\\x7f-\\x9f' + String.fromCharCode(8232, 8233) + ']+', 'g');
+  var DATA_URI = /\bdata:[^\s)'"<>]{12,}/gi;
+  var URL_RE = /\b[a-z][a-z0-9+.-]*:\/\/[^\s)'"<>\]]+/gi;
+  var EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+  var DOC_PATH = /\bdocuments\/[^\s)'"]+/gi;
+  var PATH_IDS = /\b(leagues|users)\/[^/\s)'"]+/gi;
+  var PROP_V8 = /\b(reading|setting) '([^']*)'/g;
+  var PROP_FF = /\b(access|assign to|delete) property "([^"]*)"/g;
+  var KEEP_KEY = /^(?:[a-z_$][A-Za-z0-9_$]{0,39}|\d{1,3})$/;
+  function propV8(m, verb, key) { return verb + " '" + (KEEP_KEY.test(key) ? key : '<prop>') + "'"; }
+  function propFF(m, verb, key) { return verb + ' property "' + (KEEP_KEY.test(key) ? key : '<prop>') + '"'; }
+  var QUOTED = [/'([^']{25,})'/g, /"([^"]{25,})"/g, /`([^`]{25,})`/g];
+  var ID_LIKE = /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{20,}\b/g;
+  var NUMBER_LIKE = /\+?\d[\d\s().-]{7,}\d/g;
+  function cleanUrl(raw) {
+    var tailM = /(?::\d+){1,2}$/.exec(raw), tail = tailM ? tailM[0] : '';
+    var base = (tail ? raw.slice(0, raw.length - tail.length) : raw).replace(/[?#].*$/, '');
+    var m = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)?$/i.exec(base);
+    if (!m) return '<url>' + tail;
+    var scheme = m[1].toLowerCase(), host = m[2].toLowerCase().replace(/^.*@/, ''), path = m[3] || '/';
+    if (scheme !== 'http' && scheme !== 'https') return scheme + '://…' + tail;
+    if (SITE[host.replace(/:\d+$/, '')] === 1) return (path === '/' || path === '/index.html' ? '(página)' : path.slice(0, 80)) + tail;
+    return host + path.slice(0, 100) + tail;
+  }
+  function quote(m) { return m.charAt(0) + '<texto>' + m.charAt(0); }
+  function clean(input, max) {
+    var s = typeof input === 'string' ? input : (input == null ? '' : String(input));
+    s = s.slice(0, max * 8);
+    s = s.replace(CONTROL, ' ').replace(DATA_URI, '<data>').replace(URL_RE, cleanUrl).replace(EMAIL, '<email>').replace(DOC_PATH, 'documents/<caminho>').replace(PATH_IDS, '$1/<id>').replace(PROP_V8, propV8).replace(PROP_FF, propFF);
+    for (var i = 0; i < QUOTED.length; i++) s = s.replace(QUOTED[i], quote);
+    s = s.replace(ID_LIKE, '<id>').replace(NUMBER_LIKE, '<n>').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  }
+  // Tira do texto os nomes que o app conhece (jogadores, convidados, a própria pessoa e as ligas): um nome pode aparecer na
+  // mensagem de um erro ("reading 'João'"). Só palavra inteira, sem diferenciar maiúscula; nome de menos de 3 letras não entra.
+  var WORD_CHARS = 'A-Za-z0-9_' + String.fromCharCode(192) + '-' + String.fromCharCode(591);
+  function escapeRe(s) { return s.replace(/[.*+?^$\{\}()|\[\]\\]/g, '\\$&'); }
+  function scrubNames(text, names) {
+    if (!names || !names.length || !text) return text;
+    var list = [], seenName = {}, i;
+    for (i = 0; i < names.length; i++) {
+      var n = textOf(names[i]).replace(/^\s+|\s+$/g, ''), k = n.toLowerCase();
+      if (n.length >= 3 && n.length <= 80 && !seenName[k]) { seenName[k] = 1; list.push(n); }
+    }
+    list.sort(function (a, b) { return b.length - a.length; });
+    for (i = 0; i < list.length && i < 400; i++) {
+      text = text.replace(new RegExp('(^|[^' + WORD_CHARS + '])' + escapeRe(list[i]) + '(?![' + WORD_CHARS + '])', 'gi'), '$1<nome>');
+    }
+    return text;
+  }
+  function cleanStack(raw) {
+    if (typeof raw !== 'string') return '';
+    var lines = [], all = raw.slice(0, 20000).split(/\r?\n/);
+    for (var i = 0; i < all.length && lines.length < 8; i++) {
+      if (/extension:\/\//i.test(all[i])) continue;
+      var c = clean(all[i], 180);
+      if (c) lines.push(c);
+    }
+    var out = lines.join('\n');
+    return out.length > 1200 ? out.slice(0, 1199) + '…' : out;
+  }
+
+  // ── o que não é defeito do app ──
+  var NOISE = [/ResizeObserver loop/i, /^script error\.?$/i, /popup-closed-by-user|cancelled-popup-request|user-cancelled/i, /\bAbortError\b|The (?:user|operation) (?:aborted|was aborted)/i];
+  var NETWORK = /failed to fetch|load failed|networkerror|network request failed|network-request-failed|err_internet_disconnected|err_network|network connection was lost|fetch failed/i;
+  function ignorable(msg, rawStack) {
+    for (var i = 0; i < NOISE.length; i++) if (NOISE[i].test(msg)) return true;
+    if (/extension:\/\//i.test(msg)) return true;
+    var top = rawStack.split('\n').slice(0, 6), seenLines = 0;
+    for (var j = 0; j < top.length && seenLines < 3; j++) { var t = top[j].replace(/^\s+|\s+$/g, ''); if (!t) continue; seenLines++; if (/extension:\/\//i.test(t)) return true; }
+    if (navigator.onLine === false && NETWORK.test(msg)) return true; // sem internet não é defeito
+    return false;
+  }
+
+  // ── navegador, sistema e versão do app (nada que identifique a pessoa) ──
+  function major(re, ua) { var m = re.exec(ua); return m ? m[1] : ''; }
+  function browser(ua) {
+    var n = 'Outro', v = '';
+    if (/Instagram/.test(ua)) { n = 'Instagram'; v = major(/Instagram (\d+)/, ua); }
+    else if (/FBAN|FBAV|FB_IAB/.test(ua)) { n = 'Facebook'; v = major(/FBAV\/(\d+)/, ua); }
+    else if (/musical_ly|TikTok|BytedanceWebview/.test(ua)) { n = 'TikTok'; }
+    else if (/EdgA?\/|Edg\//.test(ua)) { n = 'Edge'; v = major(/Edg[A]?\/(\d+)/, ua); }
+    else if (/OPR\/|Opera/.test(ua)) { n = 'Opera'; v = major(/OPR\/(\d+)/, ua); }
+    else if (/SamsungBrowser\//.test(ua)) { n = 'Samsung'; v = major(/SamsungBrowser\/(\d+)/, ua); }
+    else if (/Firefox\/|FxiOS\//.test(ua)) { n = 'Firefox'; v = major(/(?:Firefox|FxiOS)\/(\d+)/, ua); }
+    else if (/; wv\)/.test(ua)) { n = 'WebView'; v = major(/Chrome\/(\d+)/, ua); }
+    else if (/CriOS\/|Chrome\//.test(ua)) { n = 'Chrome'; v = major(/(?:CriOS|Chrome)\/(\d+)/, ua); }
+    else if (/Safari\//.test(ua) && /Version\//.test(ua)) { n = 'Safari'; v = major(/Version\/(\d+)/, ua); }
+    return v ? n + ' ' + v : n;
+  }
+  function os(ua) {
+    var m = /Android (\d+)/.exec(ua);
+    if (m) return 'Android ' + m[1];
+    m = /(?:iPhone|CPU) OS (\d+)/.exec(ua) || /iPad.*OS (\d+)/.exec(ua);
+    if (m) return 'iOS ' + m[1];
+    if (/Windows/.test(ua)) return 'Windows';
+    if (/CrOS/.test(ua)) return 'ChromeOS';
+    if (/Mac OS X/.test(ua)) return 'macOS';
+    if (/Linux/.test(ua)) return 'Linux';
+    return 'Outro';
+  }
+  function inapp(ua) { return /Instagram|FBAN|FBAV|FB_IAB|musical_ly|TikTok|BytedanceWebview|Line\/|; wv\)/.test(ua); }
+  function standalone() {
+    try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true); } catch (e) { return false; }
+  }
+  function pad(n, len) { var s = String(n); while (s.length < len) s = '0' + s; return s; }
+  // Versão do app = hora em que o arquivo foi publicado (cabeçalho Last-Modified do servidor): sem precisar lembrar de trocar
+  // número nenhum a cada publicação. Se o servidor não mandar o cabeçalho, o navegador devolve "agora": vira "x" (desconhecida).
+  function version() {
+    try {
+      var d = new Date(document.lastModified), t = d.getTime();
+      if (!isFinite(t) || Math.abs(new Date().getTime() - t) < 120000) return 'x';
+      return pad(d.getUTCFullYear(), 4) + pad(d.getUTCMonth() + 1, 2) + pad(d.getUTCDate(), 2) + '.' + pad(d.getUTCHours(), 2) + pad(d.getUTCMinutes(), 2);
+    } catch (e) { return 'x'; }
+  }
+
+  // ── envio ──
+  function tabCount() { try { return parseInt(window.sessionStorage.getItem('pnm_err_n') || '0', 10) || 0; } catch (e) { return 0; } }
+  function bumpTab() { try { window.sessionStorage.setItem('pnm_err_n', String(tabCount() + 1)); } catch (e) {} }
+  function send(payload) {
+    var body = JSON.stringify(payload);
+    try { if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return; } catch (e) {}
+    try { var x = new XMLHttpRequest(); x.open('POST', ENDPOINT, true); x.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8'); x.send(body); } catch (e) {}
+  }
+  function textOf(v) { try { return typeof v === 'string' ? v : (v == null ? '' : String(v)); } catch (e) { return ''; } }
+  function messageOf(err) {
+    if (err && typeof err === 'object' && err.message) return textOf(err.name || 'Error') + ': ' + textOf(err.message);
+    return textOf(err);
+  }
+  // kind: error, rejection, resource, boot, listener, auth, callable. err: Error, texto ou objeto do Firebase.
+  // extra: { code, fn, col, step } (só estes campos, curtos). stack: opcional.
+  function report(kind, err, extra, stack) {
+    try {
+      if (err && typeof err === 'object' && err.pnmReported) return;       // o app já avisou deste erro
+      var names = [];
+      try { names = (window.pnmNames && window.pnmNames()) || []; } catch (e) {}
+      var msg = clean(scrubNames(messageOf(err), names), 300);
+      if (!msg) return;
+      var rawStack = typeof stack === 'string' ? stack : (err && typeof err === 'object' && typeof err.stack === 'string' ? err.stack : '');
+      rawStack = scrubNames(rawStack, names);
+      if (ignorable(msg, rawStack)) return;
+      var x = {}, keys = ['code', 'fn', 'col', 'step'];
+      for (var i = 0; i < keys.length; i++) if (extra && typeof extra[keys[i]] === 'string' && extra[keys[i]]) x[keys[i]] = extra[keys[i]].slice(0, 40);
+      var key = kind + '|' + msg.slice(0, 120) + '|' + (x.code || '') + (x.fn || '') + (x.col || '') + (x.step || '');
+      if (seen[key]) return;                                                // o mesmo erro só vai uma vez por abertura do app
+      seen[key] = 1;
+      if (sentCount >= MAX_PER_PAGE || tabCount() >= MAX_PER_TAB) return;
+      sentCount++; bumpTab();
+      var ctx = {};
+      try { ctx = (window.pnmCtx && window.pnmCtx()) || {}; } catch (e) {}
+      var ua = navigator.userAgent || '';
+      send({ k: kind, m: msg, s: cleanStack(rawStack), v: version(), w: textOf(ctx.w), b: browser(ua), o: os(ua), a: standalone() ? 1 : 0, i: inapp(ua) ? 1 : 0, x: x });
+    } catch (e) {}
+  }
+  window.pnmReport = function (kind, err, extra) { report(kind, err, extra); };
+
+  // ── o que o navegador entrega sozinho ──
+  window.addEventListener('error', function (ev) {
+    try {
+      var t = ev && ev.target;
+      if (t && t !== window && t.tagName) {
+        // arquivo que não carregou: só importa o que o app precisa para abrir (Firebase e os do próprio site; o contador da
+        // Vercel e as fontes são bloqueados por muita gente e não são defeito)
+        var src = t.tagName === 'SCRIPT' ? textOf(t.src) : '';
+        if (src && (src.indexOf('/firebasejs/') >= 0 || (src.indexOf(location.protocol + '//' + location.host + '/') === 0 && src.indexOf('/_vercel/') < 0))) report('resource', 'Falha ao carregar ' + src, null, '');
+        return;
+      }
+      var err = ev && ev.error;
+      var stack = err && typeof err === 'object' && typeof err.stack === 'string' ? err.stack : 'at ' + textOf(ev && ev.filename) + ':' + ((ev && ev.lineno) || 0) + ':' + ((ev && ev.colno) || 0);
+      report('error', err && typeof err === 'object' ? err : textOf(ev && ev.message), null, stack);
+    } catch (e) {}
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) {
+    try {
+      var r = ev && ev.reason, x = null;
+      if (r && typeof r === 'object' && typeof r.code === 'string') x = { code: r.code.replace(/^(?:functions|firestore)\//, '') };
+      report('rejection', r, x);
+    } catch (e) {}
+  });
+
+  // ── a abertura travou? Se em 20 s o app não ficou pronto, conta até onde ele chegou ──
+  setTimeout(function () {
+    try {
+      if (window.__pnmBooted || document.visibilityState === 'hidden') return;
+      var step = window.__pnmStage || (typeof firebase === 'undefined' ? 'sem-firebase' : 'inicio');
+      report('boot', 'Carregamento não terminou em 20 s', { step: step }, '');
+    } catch (e) {}
+  }, BOOT_MS);
+})();
+</script>
 <meta name="theme-color" content="#0d1117">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -680,6 +888,7 @@ async function cloudinaryUpload(file) {
 
 <script>
 'use strict';
+window.__pnmStage = 'main'; // monitor de travamentos: até onde a abertura do app chegou
 
 /* ── Ambientes ────────────────────────────────────────────────
    A produção é o padrão: qualquer endereço que não seja o do site de TESTE (inclusive localhost e as
@@ -1054,8 +1263,26 @@ async function callFn(name, data) {
     const err = new Error(shown.includes(code) && e.message ? e.message : 'Não foi possível concluir agora. Confira a conexão e tente de novo.');
     err.code = code;
     err.reason = e?.details?.reason || ''; // motivo estável enviado pelo servidor (ex.: 'recent-login')
+    if (CALL_BUG_CODES.includes(code)) { pnmErr('callable', e, { code, fn: name }); err.pnmReported = true; } // o app só diz "tente de novo"; o monitor fica sabendo do defeito
     throw err;
   }
+}
+
+/* ── Monitor de travamentos (lado do app) ─────────────────────────────────────────────────────────────
+   O relato em si (captura, limpeza de dados pessoais, envio) fica no <head> (window.pnmReport), para valer também
+   quando este script nem chega a rodar. Aqui só se avisa dos erros que o app TRATA e esconde da pessoa (lista de
+   dados que não carregou, função do servidor que quebrou, entrada que falhou) e até onde a abertura chegou. */
+window.pnmCtx = () => ({ w: st.view });
+// Nomes que o monitor tira do texto dos relatos antes de enviar (jogadores, convidados avulsos, a própria pessoa e as ligas): um nome pode
+// aparecer numa mensagem de erro, por exemplo "reading 'João'".
+window.pnmNames = () => [...(st.players || []).map(p => p.name), ...(st.ranks || []).map(r => r.name), ...(st.finAvulsos || []).map(a => a.nome), ...(st.availableLeagues || []).map(l => l.name), st.authUser?.displayName, st.userDoc?.displayName, st.userDoc?.name].filter(n => typeof n === 'string');
+const CALL_BUG_CODES = ['internal', 'unknown', 'data-loss', 'deadline-exceeded']; // defeito do servidor (os outros códigos são "tente de novo" normais)
+function pnmErr(kind, err, extra) { try { if (window.pnmReport) window.pnmReport(kind, err, extra); } catch(_) {} }
+// Erro de uma lista de dados em tempo real. "permission-denied" é normal (a pessoa saiu da liga ou a liga foi encerrada:
+// checkLeagueStillMine cuida) e "cancelled" é a lista sendo fechada; o resto é dado que não carregou.
+function listenerFailed(colName, err) {
+  const code = String(err?.code || '').replace('firestore/', '');
+  if (code !== 'permission-denied' && code !== 'cancelled') pnmErr('listener', err, { code, col: colName });
 }
 
 // Multi-tenant helpers — usa st.leagueId (setado no auth flow)
@@ -1094,6 +1321,7 @@ function isBadgeImpossible(b) {
 function showHalfTitles() { return !!(st.appCfg?.hasFinais && (st.appCfg?.halfTitleEnabled ?? true)); }
 
 function startListeners() {
+  window.__pnmStage = 'listeners';
   _unsubListeners.forEach(u=>u());
   _unsubListeners = [];
   st.photos = {};
@@ -1107,21 +1335,21 @@ function startListeners() {
     st.ready = true;
     if (!wasReady && st.view === 'meuJogador' && activeChamp()) st.view = 'home';
     render();
-  }, () => { st.ready = true; render(); checkLeagueStillMine(); });
+  }, err => { listenerFailed('championships', err); st.ready = true; render(); checkLeagueStillMine(); });
 
   const u2 = col('player_titles').onSnapshot(snap => {
     st.ranks = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=> b.titles!==a.titles ? b.titles-a.titles : (a.last_date||'').localeCompare(b.last_date||''));
     st.ranksReady = true;
     render();
-  }, ()=>{ st.ranksReady = true; render(); });
+  }, err=>{ listenerFailed('player_titles', err); st.ranksReady = true; render(); });
 
   const u3 = col('player_registry').onSnapshot(snap => {
     st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
     st.playersReady = true;
     render();
-  }, ()=>{ st.playersReady = true; render(); });
+  }, err=>{ listenerFailed('player_registry', err); st.playersReady = true; render(); });
 
   const u4 = col('financeiro_config').onSnapshot(snap => {
     const doc = snap.docs.find(d=>d.id==='main');
@@ -1138,24 +1366,24 @@ function startListeners() {
       chavePixTipo: data.chavePixTipo ?? '',
     };
     if(st.view==='financeiro'||st.view==='meuJogador') render();
-  }, ()=>{});
+  }, err=>{ listenerFailed('financeiro_config', err); });
 
   const u5 = col('financeiro_mensalidades').onSnapshot(snap => {
     st.finMens = {};
     snap.docs.forEach(d=>{ st.finMens[d.id]=d.data(); });
     if(st.view==='financeiro'||st.view==='meuJogador') render();
-  }, ()=>{});
+  }, err=>{ listenerFailed('financeiro_mensalidades', err); });
 
   const u6 = col('financeiro_despesas').onSnapshot(snap => {
     st.finDesp = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
     if(st.view==='financeiro') render();
-  }, ()=>{});
+  }, err=>{ listenerFailed('financeiro_despesas', err); });
 
   const u7 = col('financeiro_avulsos').onSnapshot(snap => {
     st.finAvulsos = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));
     if(st.view==='financeiro') render();
-  }, ()=>{});
+  }, err=>{ listenerFailed('financeiro_avulsos', err); });
 
   const u8 = col('app_config').onSnapshot(snap => {
     const doc = snap.docs.find(d=>d.id==='main');
@@ -1179,7 +1407,7 @@ function startListeners() {
     };
     st.cfgReady = true;
     render();
-  }, ()=>{ st.cfgReady = true; render(); });
+  }, err=>{ listenerFailed('app_config', err); st.cfgReady = true; render(); });
 
   const uPh = col('player_photos').onSnapshot(snap => {
     const next = {};
@@ -1187,7 +1415,7 @@ function startListeners() {
     const changed = JSON.stringify(next) !== JSON.stringify(st.photos);
     st.photos = next;
     if (changed) render();
-  }, ()=>{});
+  }, err=>{ listenerFailed('player_photos', err); });
 
   _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8,uPh];
 
@@ -1198,7 +1426,7 @@ function startListeners() {
       const next = {};
       snap.docs.forEach(d => { const w = d.data()?.whatsapp; if (w) next[d.id] = w; });
       if (JSON.stringify(next) !== JSON.stringify(st.contacts)) { st.contacts = next; render(); }
-    }, () => {}));
+    }, err => { listenerFailed('contacts', err); }));
     migrateContactsOnce();
   }
 }
@@ -1245,6 +1473,7 @@ document.addEventListener('visibilitychange', () => {
 
 function initFirebase() {
   try {
+    window.__pnmStage = 'init';
     firebase.initializeApp(firebaseConfig);
     // App Check: por enquanto só em modo de observação (sem enforcement no
     // servidor ainda) — ver seção do manual sobre segurança de acessos.
@@ -1274,6 +1503,7 @@ function initFirebase() {
     }
 
     AUTH.onAuthStateChanged(async user => {
+      window.__pnmStage = 'auth';
       st.authUser = user;
       if (!user) {
         _unsubListeners.forEach(u=>u()); _unsubListeners = [];
@@ -1367,9 +1597,12 @@ function initFirebase() {
           st.leagueId = targetLeague; // null → mostra onboarding se não veio via invite
         }
       } catch(e) {
+        const authCode = String(e?.code || '').replace('firestore/', '');
+        if (authCode !== 'unavailable' && authCode !== 'cancelled') pnmErr('auth', e, { code: authCode }); // a conta não carregou e o app caiu no padrão: o monitor precisa saber
         st.leagueId = LEAGUE_ID;
         st.userRole = user.email === 'castanho.caiop@gmail.com' ? 'admin' : 'pending';
       }
+      window.__pnmStage = 'user';
       if (!st.leagueId) {
         // sem liga definida: onboarding (nova conta) ou seleção (múltiplas ligas)
         st.ready = true; render();
@@ -1389,6 +1622,7 @@ function initFirebase() {
       }
     });
   } catch(e) {
+    pnmErr('boot', e, { step: 'init' });
     st.ready = true; render();
     toast('Erro ao conectar: ' + (e?.message || e));
   }
@@ -1999,6 +2233,86 @@ function ownerMetricsHtml(m) {
       : '<div style="font-size:12px;color:var(--text3);padding:8px 0">O retrato do dia é gravado de madrugada (3h30). A evolução aparece a partir do segundo dia.</div>'}`;
 }
 
+/* ── Painel do dono: erros do app (monitor de travamentos) ─────────────────────────────────────────────
+   Vem de getClientErrors (só o dono). Só texto já limpo e números: nenhum dado de pessoa. */
+let _ownerErrors = null; // null = carregando; { r } = resposta do servidor; { e } = falhou
+const ERR_KINDS = {
+  error: ['💥', 'Erro no código'], rejection: ['⚠️', 'Falha não tratada'], resource: ['📦', 'Arquivo não carregou'], boot: ['⏳', 'App travado na abertura'],
+  listener: ['🔌', 'Dados não carregaram'], auth: ['🔑', 'Falha ao entrar'], callable: ['🖥️', 'Falha no servidor'], network: ['📶', 'Rede'],
+};
+const errKind = k => ERR_KINDS[k] || ['❓', String(k || 'erro')];
+const errTops = list => (list || []).map(t => `${t.name} (${t.count})`).join(', ') || '—';
+const errWhere = g => [g.fn ? 'função ' + g.fn : '', g.loc, g.extra?.fn ? 'função do servidor ' + g.extra.fn : '', g.extra?.col ? 'lista ' + g.extra.col : '', g.extra?.step ? 'parou em ' + g.extra.step : ''].filter(Boolean).join(' · ');
+const errDay = iso => (iso && Number.isFinite(Date.parse(iso)) ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—');
+const errTime = iso => (iso && Number.isFinite(Date.parse(iso)) ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+
+function clientErrorsHtml(state) {
+  const head = `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin:20px 0 4px">Erros do app (14 dias)</div>`;
+  const note = t => `<div style="font-size:12px;color:var(--text3);padding:8px 0;line-height:1.5">${t}</div>`;
+  if (!state) return head + note('Carregando…');
+  if (state.e) return head + note(`<span style="color:var(--danger)">${esc(state.e.message || 'Não foi possível carregar agora.')}</span>`);
+  const r = state.r || {}, t = r.totals || {}, groups = r.groups || [];
+  const num = n => Number(n || 0).toLocaleString('pt-BR');
+  const row = (label, value) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border2);font-size:13px"><span style="color:var(--text2)">${label}</span><b style="white-space:nowrap">${value}</b></div>`;
+  const bars = vals => { const max = Math.max(1, ...vals); return `<span style="display:inline-flex;align-items:flex-end;gap:1px;height:16px;vertical-align:middle">${vals.map(v => `<i style="display:block;width:4px;height:${Math.max(2, Math.round(v / max * 16))}px;background:${v ? 'var(--danger)' : 'var(--border)'};border-radius:1px"></i>`).join('')}</span>`; };
+  if (!groups.length) return head + note('Nenhum erro registrado nos últimos 14 dias. 🎉 O monitor só conta a partir da versão que passou a registrar; quem estava sem internet ou usando uma extensão do navegador não entra.');
+  const item = g => {
+    const [icon, label] = errKind(g.kind);
+    const where = errWhere(g);
+    return `<details style="border-bottom:1px solid var(--border2);padding:9px 0">
+      <summary style="cursor:pointer;list-style:none;display:flex;gap:8px;align-items:flex-start;font-size:13px">
+        <span>${g.isNew ? '🆕' : icon}</span>
+        <span style="flex:1;min-width:0;color:var(--text2)"><b style="color:var(--text)">${esc(label)}</b><span style="display:block;font-size:12px;word-break:break-word">${esc(g.message)}</span></span>
+        <b style="white-space:nowrap">${num(g.last7)}<span style="color:var(--text3);font-weight:500"> /7 dias</span></b>
+      </summary>
+      <div style="font-size:12px;color:var(--text2);line-height:1.65;padding:8px 0 2px 24px;word-break:break-word">
+        <div>${bars(g.spark || [])} <span style="color:var(--text3)">14 dias, hoje à direita</span></div>
+        <div>Hoje: <b>${num(g.today)}</b> · ontem: <b>${num(g.yesterday)}</b> · total: <b>${num(g.count)}</b></div>
+        <div>Primeira vez: ${esc(errDay(g.firstSeen))} · última: ${esc(errTime(g.lastSeen))}</div>
+        <div>Telas: ${esc(errTops(g.views))}</div>
+        <div>Navegadores: ${esc(errTops(g.browsers))}</div>
+        <div>Sistemas: ${esc(errTops(g.oses))}</div>
+        <div>Versões do app: ${esc(errTops(g.versions))}</div>
+        ${g.codes?.length ? `<div>Códigos: ${esc(errTops(g.codes))}</div>` : ''}
+        ${g.standalone || g.inapp ? `<div>${g.standalone ? `Com o app instalado: ${num(g.standalone)}` : ''}${g.standalone && g.inapp ? ' · ' : ''}${g.inapp ? `Em navegador embutido (Instagram, Facebook…): ${num(g.inapp)}` : ''}</div>` : ''}
+        ${where ? `<div>Onde: ${esc(where)}</div>` : ''}
+        ${g.stack ? `<pre style="margin:6px 0 0;padding:8px;background:var(--s2);border-radius:8px;white-space:pre-wrap;font-size:11px;color:var(--text2)">${esc(g.stack)}</pre>` : ''}
+      </div></details>`;
+  };
+  return head
+    + row('Relatos hoje', num(t.today))
+    + row('Relatos em 7 dias', `${num(t.reports7d)} <span style="color:var(--text3);font-weight:500">(${num(t.crashes7d)} defeitos · ${num((t.reports7d || 0) - (t.crashes7d || 0))} de rede)</span>`)
+    + row('Tipos de erro em 7 dias', num(t.groups7d))
+    + row('Tipos novos nas últimas 48 h', num(t.newGroups48h))
+    + `<div style="display:flex;justify-content:flex-end;padding:8px 0"><button onclick="copyErrorReport()" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 Copiar relatório</button></div>`
+    + groups.map(item).join('')
+    + (r.omitted ? note(`E mais ${num(r.omitted)} tipo(s) de erro menos frequentes.`) : '');
+}
+
+// Texto simples do que o painel mostra, para colar na conversa com o Claude (já vem sem dado de pessoa).
+function errorReportText(r) {
+  const t = r?.totals || {};
+  const out = [`Relatório de erros do app (14 dias), gerado em ${errTime(r?.generatedAt)}`,
+    `Relatos: hoje ${t.today || 0} · 7 dias ${t.reports7d || 0} (${t.crashes7d || 0} defeitos) · tipos em 7 dias ${t.groups7d || 0} · novos em 48 h ${t.newGroups48h || 0}`, ''];
+  (r?.groups || []).forEach((g, i) => {
+    const where = errWhere(g);
+    out.push(`${i + 1}. [${errKind(g.kind)[1]}] ${g.message}${g.isNew ? '  (NOVO)' : ''}`,
+      `   7 dias: ${g.last7} · hoje: ${g.today} · ontem: ${g.yesterday} · total: ${g.count} · primeira vez ${errDay(g.firstSeen)} · última ${errTime(g.lastSeen)}`,
+      `   Telas: ${errTops(g.views)} · Navegadores: ${errTops(g.browsers)} · Sistemas: ${errTops(g.oses)} · Versões: ${errTops(g.versions)}${g.codes?.length ? ' · Códigos: ' + errTops(g.codes) : ''}`);
+    if (where) out.push(`   Onde: ${where}`);
+    if (g.stack) out.push('   Pilha:', ...g.stack.split('\n').map(l => '     ' + l));
+    out.push('');
+  });
+  if (r?.omitted) out.push(`(mais ${r.omitted} tipo(s) de erro menos frequentes não listados)`);
+  return out.join('\n').trim();
+}
+
+async function copyErrorReport() {
+  if (!_ownerErrors?.r) return;
+  const ok = await pixCopyText(errorReportText(_ownerErrors.r));
+  toast(ok ? 'Relatório copiado. É só colar na conversa com o Claude.' : 'Não foi possível copiar aqui.', ok ? 'ok' : undefined);
+}
+
 async function openOwnerMetrics() {
   if (!isSystemOwner()) return;
   document.getElementById('owner-metrics')?.remove();
@@ -2015,12 +2329,19 @@ async function openOwnerMetrics() {
     <div style="overflow-y:auto;flex:1;padding-right:10px">${body}</div></div>`;
   root.innerHTML = sheet('<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">Calculando…</div>');
   document.body.appendChild(root);
-  try {
-    const m = await callFn('getFunnelMetrics');
-    if (document.getElementById('owner-metrics') === root) root.innerHTML = sheet(ownerMetricsHtml(m));
-  } catch(e) {
-    if (document.getElementById('owner-metrics') === root) root.innerHTML = sheet(`<div style="padding:24px 4px;color:var(--danger);font-size:13px">${esc(e.message || 'Não foi possível carregar agora.')}</div>`);
-  }
+  _ownerErrors = null;
+  const funnelCall = callFn('getFunnelMetrics');
+  const errorsCall = callFn('getClientErrors').then(r => ({ r }), e => ({ e })); // os erros do navegador carregam junto, sem atrasar nem derrubar o funil
+  let body;
+  try { body = ownerMetricsHtml(await funnelCall); }
+  catch(e) { body = `<div style="padding:24px 4px;color:var(--danger);font-size:13px">${esc(e.message || 'Não foi possível carregar agora.')}</div>`; }
+  if (document.getElementById('owner-metrics') !== root) return;
+  root.innerHTML = sheet(body + `<div id="owner-errors">${clientErrorsHtml(null)}</div>`);
+  const result = await errorsCall;
+  if (document.getElementById('owner-metrics') !== root) return; // fechou ou abriu outro painel enquanto os erros vinham: nem o painel novo nem a cópia do relatório recebem dado velho
+  _ownerErrors = result;
+  const box = document.getElementById('owner-errors');
+  if (box) box.innerHTML = clientErrorsHtml(_ownerErrors);
 }
 
 /* ── Excluir a própria conta (direito de eliminação, LGPD) ───────────────────────────────
@@ -2102,6 +2423,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto e estatísticas), e só sai dele se você tocar em Compartilhar. Nunca leva e-mail nem WhatsApp.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista), sem identificar quem foi. Servem para melhorar o produto.')}
+        ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
 
       ${h3('Quem vê o quê')}
@@ -7089,6 +7411,7 @@ function lpBack() {
 
 /* ── render ──────────────────────────────────────────────────── */
 function render() {
+  if (st.ready) window.__pnmBooted = true; // monitor de travamentos: a abertura terminou
   const app=document.getElementById('app'); if(!app) return;
   if (lpSync()) return; // visitante novo: fica a apresentação (HTML no começo do <body>), o app espera
 

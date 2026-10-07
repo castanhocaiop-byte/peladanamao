@@ -85,7 +85,7 @@ L.api.lpSync();
 check('…e a apresentação volta a aparecer', L.classes.has('lp-show'));
 
 // ── ligação com o resto do app ──────────────────────────────────────────────────────────────────
-check('render(): a apresentação é decidida ANTES do login e do app (return antecipado)', /function render\(\) \{\s*const app=document\.getElementById\('app'\); if\(!app\) return;\s*if \(lpSync\(\)\) return;[^\n]*\n\s*if \(!st\.authUser\) \{/.test(html), html.match(/function render\(\) \{[\s\S]{0,260}/)?.[0]);
+check('render(): a apresentação é decidida ANTES do login e do app (return antecipado)', /function render\(\) \{\s*(?:if \(st\.ready\) window\.__pnmBooted = true;[^\n]*\n\s*)?const app=document\.getElementById\('app'\); if\(!app\) return;\s*if \(lpSync\(\)\) return;[^\n]*\n\s*if \(!st\.authUser\) \{/.test(html), html.match(/function render\(\) \{[\s\S]{0,260}/)?.[0]);
 check('quem entra (login confirmado pelo Firebase) ganha a marca aceoma_returning; quem sai (usuário nulo) NÃO ganha', /if \(!user\) \{[\s\S]*?render\(\); return;\s*\}\s*try \{ localStorage\.setItem\('aceoma_returning', '1'\); \} catch\(_\) \{\}/.test(html), html.match(/if \(!user\) \{[\s\S]{0,700}/)?.[0]);
 check('o estado guarda a intenção de login e a dispensa da apresentação', /_loginIntent: '',/.test(html) && /_lpDismissed: false,/.test(html));
 check('o app (#app) vem logo depois da apresentação no <body>, e a apresentação é escondida por padrão (só aparece com a classe lp-show)', /<div id="landing" class="lp">[\s\S]*<div id="app"><\/div>/.test(html) && /#landing \{ display: none; \}/.test(html) && /html\.lp-show #landing \{ display: block; \}/.test(html) && /html\.lp-show #app \{ display: none; \}/.test(html));

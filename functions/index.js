@@ -9,6 +9,7 @@ const { v1: firestoreAdminV1 } = require("@google-cloud/firestore");
 const { MercadoPagoConfig, PreApproval, Preference, Payment, WebhookSignatureValidator } = require("mercadopago");
 const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
+const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
@@ -72,6 +73,7 @@ const PRODUCTION_ENV = {
   webhookUrl: "https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook",
   emailSubjectPrefix: "",
   backups: true,
+  siteOrigins: ["https://peladanamao.com.br", "https://www.peladanamao.com.br"], // de onde o app pode mandar relatos de erro (reportClientError)
 };
 const ENVIRONMENTS = {
   "seriebaceoma-staging": {
@@ -81,6 +83,7 @@ const ENVIRONMENTS = {
     webhookUrl: "https://us-east1-seriebaceoma-staging.cloudfunctions.net/mercadoPagoWebhook",
     emailSubjectPrefix: "[TESTE] ",
     backups: false,
+    siteOrigins: ["https://seriebaceoma-staging.web.app", "https://seriebaceoma-staging.firebaseapp.com"],
   },
 };
 const ENV = ENVIRONMENTS[PROJECT_ID] || PRODUCTION_ENV;
@@ -2127,4 +2130,109 @@ exports.snapshotFunnelMetrics = onSchedule(
     await db.doc(`metrics_daily/${day}`).set({ ...funnel.snapshotOf(current), savedAt: new Date(now).toISOString() });
     logger.info("Retrato diário do funil gravado", { dia: day, ligas: current.leagues.total, contas: current.accounts.total });
   }
+);
+
+// ── Monitoramento de travamentos do navegador ───────────────────────────────────────────────────────────────────
+// O app manda um relato curto quando algo quebra (client-errors.js tem as regras: limpeza do texto, agrupamento e
+// limites). A função HTTP fica aberta à internet porque a pessoa pode estar na tela de entrada, sem login; por isso só
+// aceita o endereço do próprio site, só POST pequeno, limita por endereço (só na memória da instância: o IP nunca é
+// gravado nem registrado) e por dia, e qualquer problema vira resposta vazia: relatar erro nunca pode gerar mais erro.
+// As coleções client_errors e client_errors_meta são fechadas ao navegador (firestore.rules): só o servidor lê e grava.
+const errorLimiter = clientErrors.makeLimiter();
+
+// Grava um relato: soma nos contadores do grupo (sem ler o grupo inteiro, então relatos simultâneos não se perdem) e
+// nos do dia. Passou de 3000 relatos no dia, só entram grupos NOVOS (até 150 por dia): um defeito que se repete não
+// esconde outro. Devolve "created", "updated" ou "dropped".
+async function recordClientError(report, now) {
+  const metaRef = db.doc(`client_errors_meta/${funnel.dayKeySP(now)}`);
+  const groupRef = db.doc(`client_errors/${report.fp}`);
+  const [metaSnap, groupSnap] = await db.getAll(metaRef, groupRef);
+  const meta = metaSnap.exists ? metaSnap.data() : {};
+  const exists = groupSnap.exists;
+  const full = exists ? (meta.total || 0) >= clientErrors.MAX_REPORTS_PER_DAY : (meta.newGroups || 0) >= clientErrors.MAX_NEW_GROUPS_PER_DAY;
+  if (full) { await metaRef.set({ dropped: FieldValue.increment(1) }, { merge: true }); return "dropped"; }
+  await groupRef.set(clientErrors.groupWrite(report, { now, exists, increment: n => FieldValue.increment(n) }), { merge: true });
+  await metaRef.set({ total: FieldValue.increment(1), ...(exists ? {} : { newGroups: FieldValue.increment(1) }) }, { merge: true });
+  return exists ? "updated" : "created";
+}
+
+exports.reportClientError = onRequest(
+  { region: "us-east1", maxInstances: 5, memory: "256MiB", timeoutSeconds: 15 },
+  async (req, res) => {
+    const origin = String(req.headers?.origin || "");
+    const originOk = ENV.siteOrigins.includes(origin);
+    if (originOk) { res.set("Access-Control-Allow-Origin", origin); res.set("Vary", "Origin"); }
+    if (req.method === "OPTIONS") {
+      if (!originOk) { res.status(403).end(); return; }
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.set("Access-Control-Allow-Headers", "Content-Type");
+      res.set("Access-Control-Max-Age", "86400");
+      res.status(204).end();
+      return;
+    }
+    if (req.method !== "POST") { res.set("Allow", "POST, OPTIONS"); res.status(405).end(); return; }
+    if (!originOk) { res.status(403).end(); return; }
+    if (Number(req.headers["content-length"] || 0) > clientErrors.MAX_BODY_BYTES) { res.status(413).end(); return; }
+    const now = Date.now();
+    if (!errorLimiter.allow(clientErrors.clientIp(req), now)) { res.status(429).end(); return; }
+    const parsed = clientErrors.parseReport(clientErrors.bodyOf(req));
+    if (!parsed.ok) { res.status(parsed.reason === "ignored" ? 204 : 400).end(); return; }
+    try {
+      const result = await recordClientError(parsed.report, now);
+      if (result === "created") {
+        logger.warn("Novo tipo de erro no navegador", { fp: parsed.report.fp, tipo: parsed.report.kind, mensagem: parsed.report.message, tela: parsed.report.view, versao: parsed.report.version });
+      }
+    } catch (e) {
+      logger.warn("Não foi possível registrar um relato de erro do navegador", { erro: e?.message });
+    }
+    res.status(204).end();
+  }
+);
+
+// Painel do dono: os erros do app nos últimos 14 dias (grupos, contagens por dia, versões, navegadores, telas). Só o
+// dono do sistema (e-mail verificado) vê. A resposta só tem texto já limpo e números: nada de pessoa.
+exports.getClientErrors = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  if (!isOwner(auth)) throw fail("permission-denied", "Só o dono do sistema vê os erros do app.");
+  await checkRateLimit(auth.uid, "getClientErrors", 20);
+  const now = Date.now();
+  const since = new Date(now - 14 * DAY_MS).toISOString();
+  const keys = funnel.lastDayKeys(14, now);
+  const [groups, metaDocs] = await Promise.all([
+    db.collection("client_errors").where("lastSeen", ">=", since).orderBy("lastSeen", "desc").limit(300).get(),
+    Promise.all(keys.map(k => db.doc(`client_errors_meta/${k}`).get())),
+  ]);
+  const meta = Object.fromEntries(keys.map((k, i) => [k, metaDocs[i].exists ? metaDocs[i].data() : null]).filter(([, v]) => v));
+  return { ok: true, generatedAt: new Date(now).toISOString(), ...clientErrors.summarize(groups.docs.map(d => ({ id: d.id, ...d.data() })), meta, now) };
+});
+
+// Apaga o que ficou velho: grupos sem relato novo há 45 dias e os contadores diários de mais de 60 dias.
+async function pruneClientErrors(now) {
+  const cutoff = new Date(now - clientErrors.KEEP_GROUP_DAYS * DAY_MS).toISOString();
+  const old = await db.collection("client_errors").where("lastSeen", "<", cutoff).limit(400).get();
+  await Promise.all(old.docs.map(d => d.ref.delete()));
+  const metaCutoff = funnel.dayKeySP(now - clientErrors.KEEP_META_DAYS * DAY_MS);
+  const oldMeta = await db.collection("client_errors_meta").where(FieldPath.documentId(), "<", metaCutoff).limit(400).get();
+  await Promise.all(oldMeta.docs.map(d => d.ref.delete()));
+  return { gruposApagados: old.size, diasApagados: oldMeta.size };
+}
+
+// Resumo diário por e-mail para o dono: só quando há erro NOVO ou uma alta repentina (nada de e-mail em dia calmo).
+async function sendClientErrorDigest(now = Date.now()) {
+  const since = new Date(now - 3 * DAY_MS).toISOString();
+  const snap = await db.collection("client_errors").where("lastSeen", ">=", since).get();
+  const groups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const picks = clientErrors.digestPicks(groups, now);
+  let sent = false;
+  if (picks.length) {
+    const { subject, html, text } = clientErrors.digestEmail(picks, { appUrl: APP_URL, escape: escapeHtml, now });
+    sent = await sendResendEmail({ to: [OWNER_EMAIL], subject, html, text });
+  }
+  const pruned = await pruneClientErrors(now);
+  logger.info("notifyClientErrors concluída", { grupos: groups.length, avisados: picks.length, emailEnviado: sent, ...pruned });
+}
+
+exports.notifyClientErrors = onSchedule(
+  { schedule: "20 9 * * *", timeZone: "America/Sao_Paulo", region: "us-east1", secrets: [RESEND_API_KEY], timeoutSeconds: 300 },
+  async () => { await sendClientErrorDigest(); }
 );

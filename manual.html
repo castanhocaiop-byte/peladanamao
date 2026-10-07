@@ -465,6 +465,7 @@ p strong {
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
+      <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
     </ul>
   </nav>
 
@@ -502,6 +503,7 @@ p strong {
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
+      <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
     </ul>
   </nav>
 
@@ -2308,14 +2310,14 @@ p strong {
     <!-- 23. Privacidade e Termos de Uso -->
     <section class="section" id="politica">
       <h2 class="section-title"><span class="sn">23</span> Privacidade e Termos de Uso</h2>
-      <p>O botão <strong>🔒 Privacidade</strong> abre, dentro do próprio app, um resumo em linguagem simples do que é guardado, quem vê cada dado e como usar os direitos de anonimizar o nome e excluir a conta. Fica disponível na tela de <strong>login</strong> (antes mesmo de criar conta) e no fim da aba <strong>EU</strong>.</p>
+      <p>O botão <strong>🔒 Privacidade</strong> abre, dentro do próprio app, um resumo em linguagem simples do que é guardado, quem vê cada dado e como usar os direitos de anonimizar o nome e excluir a conta. Fica disponível na tela de <strong>login</strong> (antes mesmo de criar conta) e no fim da aba <strong>EU</strong>. O texto também cita os contadores anônimos de uso (seção 28), o cartão do jogador (seção 29) e os relatos de erro do navegador (seção 31).</p>
       <div class="callout">
         <div class="callout-label">Não é parecer jurídico</div>
         O texto descreve como o Pelada na Mão funciona hoje, para o próprio jogador entender o que acontece com seus dados. Ele não substitui uma avaliação jurídica; o responsável por cada liga é o seu admin, e o dono do sistema deve revisar o texto periodicamente conforme o app muda.
       </div>
 
       <h3>Termos de Uso</h3>
-      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.3, vigente desde 05/10/2026.</p>
+      <p>O link <strong>📄 Termos de Uso</strong>, ao lado do de Privacidade (tela de login e fim da aba EU), abre um documento completo e separado (<code>termos.html</code>, servido pelo próprio domínio) com as 20 cláusulas que regem o uso da plataforma: o que é o Pelada na Mão, responsabilidades do admin, controle financeiro, <strong>planos e pagamento (cláusula 10, incluindo a ausência de reembolso e o que faz parte do plano gratuito)</strong>, propriedade intelectual, limitação de responsabilidade, foro e contato. A versão atual é a 1.4, vigente desde 06/10/2026.</p>
       <div class="callout gold">
         <div class="callout-label gold">Responsável e foro</div>
         O documento identifica <strong>Caio da Mata Pires Castanho (CPF 391.795.148-71)</strong> como responsável pela plataforma, operando como pessoa física — decisão deliberada para não abrir CNPJ antes de haver monetização. O foro eleito é a comarca de São Paulo/SP, e o contato é <code>contato@peladanamao.com.br</code>.
@@ -2625,12 +2627,15 @@ p strong {
         <li>Se o aviso falhar (sem internet, por exemplo), nada acontece e o app segue normal. Um problema ao contar também nunca atrapalha um pagamento.</li>
       </ul>
 
+      <h3>Erros do app</h3>
+      <p>No fim do painel há a seção <strong>Erros do app (14 dias)</strong>, com os travamentos e erros que o app relatou: quantos hoje e em 7 dias, os tipos de erro, onde acontecem e em quais versões, navegadores e telas. Ela é carregada junto com o funil, mas sem atrasá-lo: se uma das duas falhar, a outra continua na tela. Veja a seção 31.</p>
+
       <h3>Evolução</h3>
       <p>Todo dia, às 3h30 (horário de São Paulo), o servidor guarda um <strong>retrato do funil</strong>: contas, ligas, planos e receita estimada. O painel desenha a evolução dos últimos 60 dias a partir deles. O estado de um dia passado não dá para recalcular depois (um plano que venceu hoje já não diz que estava ativo ontem), por isso o retrato é gravado todo dia; a evolução aparece a partir do segundo dia.</p>
 
       <div class="callout gold">
         <div class="callout-label gold">Privacidade (LGPD)</div>
-        O painel e os contadores usam <strong>só números agregados</strong>: nenhum e-mail, nome, identificador de conta ou nome de liga entra na resposta do painel nem nos contadores, e o servidor não guarda quem viu ou tocou em cada coisa. A política de privacidade do app informa isso ("Uso do app: contadores anônimos"). Vale o advogado saber desse recurso ao revisar os Termos.
+        O painel e os contadores usam <strong>só números agregados</strong>: nenhum e-mail, nome, identificador de conta ou nome de liga entra na resposta do painel nem nos contadores, e o servidor não guarda quem viu ou tocou em cada coisa. A política de privacidade do app informa isso ("Uso do app: contadores anônimos"). A única parte em texto é a seção <strong>Erros do app</strong> (seção 31): mensagens de erro já limpas de qualquer dado de pessoa. Vale o advogado saber desse recurso ao revisar os Termos.
       </div>
 
       <div class="callout warn">
@@ -2723,6 +2728,52 @@ p strong {
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
         A página é HTML fixo (o Google e as prévias de link leem o texto sem precisar rodar JavaScript; sem JavaScript ela aparece mesmo assim, por um <code>&lt;noscript&gt;</code>). Um pequeno script no <code>&lt;head&gt;</code> calcula <code>LP_ALLOWED</code> (endereço sem parâmetros de convite, aparelho sem a marca <code>aceoma_returning</code>, fora do modo instalado; na dúvida, não mostra). Quem decide é o <code>render()</code>, por <code>lpSync()</code>: só mostra com o app pronto e ninguém logado, e trocando a classe <code>lp-show</code> do <code>&lt;html&gt;</code> (a apresentação é escondida por padrão). A marca <code>aceoma_returning</code> é gravada quando o Firebase confirma um login. A apresentação não usa as tags <code>header</code>, <code>main</code> e <code>nav</code>, porque o app tem regras de CSS próprias para elas. Os arquivos das duas imagens de cartão (<code>landing-cartao-campeao.webp</code> e <code>landing-cartao-estreante.webp</code>) estão na lista de permitidos do <code>.vercelignore</code>: sem isso o site publicado dá 404 nelas.
+      </div>
+    </section>
+
+    <!-- 31. Erros do App -->
+    <section class="section" id="monitor-erros">
+      <h2 class="section-title"><span class="sn">31</span> Erros do App (monitor de travamentos)</h2>
+      <p>Quando o app trava ou quebra no celular de alguém, o dono precisa ficar sabendo antes de a pessoa reclamar. Nesse momento o app manda um <strong>relato técnico curto</strong> para o servidor do Pelada na Mão, que junta os relatos parecidos e mostra tudo na seção <strong>Erros do app</strong> do painel 📊 (seção 28) e num <strong>resumo por e-mail</strong>. Não usa nenhuma ferramenta de terceiros (nada de Sentry nem Google Analytics): os relatos ficam no próprio banco do projeto.</p>
+
+      <h3>O que é relatado</h3>
+      <table class="data-table">
+        <thead><tr><th>Tipo</th><th>Quando acontece</th></tr></thead>
+        <tbody>
+          <tr><td>💥 Erro no código</td><td>Algo quebrou na tela (um erro de programação). É o mais comum e o que mais precisa de conserto.</td></tr>
+          <tr><td>⚠️ Falha não tratada</td><td>Uma operação falhou e nada no app tratou o erro.</td></tr>
+          <tr><td>📦 Arquivo não carregou</td><td>Um arquivo de que o app precisa para abrir (o Firebase, ou um arquivo do próprio site) não chegou. O contador da Vercel, as fontes e as imagens ficam de fora: muita gente bloqueia.</td></tr>
+          <tr><td>⏳ App travado na abertura</td><td>Em 20 segundos o app não ficou pronto. O relato diz até onde chegou: <em>sem-firebase</em> (o Firebase nem carregou), <em>inicio</em>, <em>main</em>, <em>init</em>, <em>auth</em> (entrada), <em>user</em> (dados da conta) ou <em>listeners</em> (dados da liga).</td></tr>
+          <tr><td>🔌 Dados não carregaram</td><td>Uma das listas em tempo real (campeonatos, ranking, elenco, financeiro, configurações, fotos, contatos) deu erro, por exemplo índice faltando ou cota do banco estourada. Sair da liga ("permissão negada") é normal e não conta.</td></tr>
+          <tr><td>🔑 Falha ao entrar</td><td>A conta não carregou ao abrir o app e ele caiu na liga padrão.</td></tr>
+          <tr><td>🖥️ Falha no servidor</td><td>Uma função do servidor respondeu com erro interno ou demorou demais (a pessoa só viu "tente de novo").</td></tr>
+          <tr><td>📶 Rede</td><td>Falha de conexão ("Failed to fetch"). Aparece no painel, mas não conta como defeito nem entra no e-mail.</td></tr>
+        </tbody>
+      </table>
+      <p>Não são relatados: o aviso inofensivo do navegador sobre redimensionamento, erros de extensões do navegador, a janela de login fechada pela própria pessoa, o cancelamento da janela de compartilhar e as falhas de rede de quem está sem internet.</p>
+
+      <h3>Onde ver</h3>
+      <ul>
+        <li><strong>Painel 📊</strong> (só o dono): a seção <em>Erros do app (14 dias)</em> mostra os relatos de hoje e de 7 dias e os tipos de erro. Cada tipo abre com um gráfico de 14 dias, telas, navegadores, sistemas, versões do app, códigos, onde aconteceu e o trecho do código. O botão <strong>📋 Copiar relatório</strong> copia tudo em texto simples: é só colar na conversa com o Claude para investigar.</li>
+        <li><strong>E-mail diário</strong> (9h20, só para o dono): só quando há erro <strong>novo</strong> (primeiro relato nas últimas 36 horas) ou uma <strong>alta repentina</strong> (5 ou mais relatos entre ontem e hoje, e pelo menos 3 vezes a média diária dos 7 dias antes). Em dia calmo, nenhum e-mail. Falha de rede nunca entra.</li>
+      </ul>
+
+      <h3>Como os erros são agrupados</h3>
+      <p>Erros do mesmo tipo, com a mesma mensagem e no mesmo trecho do código, viram <strong>um grupo só</strong>, mesmo vindo de aparelhos, versões e linhas diferentes (números e códigos mudam de um relato para outro e são ignorados na comparação). O painel mostra a <strong>versão do app</strong>, que é a hora em que o arquivo foi publicado (sem precisar lembrar de trocar número nenhum): assim dá para ver se um erro começou numa publicação específica.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Privacidade (LGPD)</div>
+        O relato <strong>não leva</strong> nome, e-mail, WhatsApp, nome da liga, conta, o que a pessoa digitou nem o endereço da página (convite e códigos de login ficam depois do "?" e são cortados). O próprio app limpa o texto antes de enviar e o servidor limpa de novo. O app ainda tira do texto os <strong>nomes que conhece</strong> (jogadores, convidados avulsos, a própria pessoa e as ligas) e, em mensagens do tipo "Cannot read properties of undefined (reading …)", o nome do campo, a menos que pareça nome de código (minúsculas, sem espaço nem acento). Ficam de fora e viram marcadores: e-mails, telefones, CPF, endereços IP, identificadores compridos, caminhos do banco e textos longos entre aspas viram marcadores como <code>&lt;email&gt;</code> e <code>&lt;id&gt;</code>. O endereço de IP é visto só na memória, para limitar abuso (10 relatos por minuto por endereço), e o app nunca o grava nem o registra (como em qualquer site, os registros de acesso da própria infraestrutura do Google podem guardar o endereço por um tempo, fora do controle do app). Os grupos ficam <strong>45 dias</strong> e depois são apagados. A política de privacidade do app informa tudo isso ("Relatos de erro"). Vale o advogado saber desse recurso ao revisar os Termos, assim como dos contadores anônimos.
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Limites que protegem o custo</div>
+        No máximo 5 relatos por abertura do app e 15 por aba, e o mesmo erro vai uma vez só. No servidor: 3000 relatos por dia e 150 tipos novos por dia (passou de 3000, só entram tipos novos, para um defeito que se repete não esconder outro); pedidos de outros sites ou maiores que 6 KB são recusados. Falhar ao relatar nunca gera outro relato nem atrapalha o app.
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
+        O monitor é um pequeno bloco no <code>&lt;head&gt;</code> do <code>index.html</code>, escrito em ES5 de propósito (precisa rodar até em navegador velho, onde o app mais quebra, e antes de qualquer outro script). Só fala nos endereços de verdade (produção e teste); em <code>localhost</code> e nas prévias da Vercel fica quieto. Envia por <code>sendBeacon</code> (texto simples, sem pré-voo do CORS), com <code>XMLHttpRequest</code> de reserva, para a função HTTP <code>reportClientError</code> (só <code>POST</code> vindo do próprio site). O servidor (<code>functions/client-errors.js</code>) valida o formato, limpa o texto, calcula o grupo e soma contadores em <code>client_errors/{grupo}</code> e <code>client_errors_meta/AAAA-MM-DD</code> (fechadas ao navegador pelas regras do banco). Funções: <code>getClientErrors</code> (só o dono, 20 por minuto) e <code>notifyClientErrors</code> (diária, 9h20 de São Paulo; também apaga o que passou do prazo). O app avisa sozinho os erros que ele esconde da pessoa (listas que não carregaram, função do servidor com defeito, entrada que falhou) e marca até onde a abertura chegou (<code>__pnmStage</code> e <code>__pnmBooted</code>). Testes: <code>client-errors-test.js</code> (regras), <code>client-errors-functions-test.js</code> (servidor), <code>client-errors-app-test.js</code> (app e painel, com uma comparação de 400 textos sorteados que mostra que a limpeza do app e a do servidor dão o mesmo resultado) e os emuladores.
       </div>
     </section>
 

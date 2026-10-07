@@ -216,6 +216,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Monitoramento de travamentos do navegador: grupos de erro e contadores por dia. Texto já limpo (sem dado de
+    // pessoa); só o servidor (Admin SDK) lê e escreve. O painel do dono lê pela função getClientErrors.
+    match /client_errors/{fp} {
+      allow read, write: if false;
+    }
+    match /client_errors_meta/{day} {
+      allow read, write: if false;
+    }
+
     // Contadores internos de limite de chamadas (rate limiting) das Cloud Functions.
     // Só o servidor (Admin SDK, que ignora estas regras) lê e escreve aqui.
     match /rate_limits/{docId} {

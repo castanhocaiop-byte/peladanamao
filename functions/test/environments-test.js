@@ -225,6 +225,19 @@ const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'htt
   check('servidor: o endereço das notificações da PRODUÇÃO é o mesmo do app', tables.includes(`pushUrl: "${APP_ENVS.production.pushUrl}"`), APP_ENVS.production.pushUrl);
   check('servidor: o webhook de cada ambiente fica no projeto certo', tables.includes(`us-east1-${APP_ENVS.production.firebaseConfig.projectId}.cloudfunctions.net/mercadoPagoWebhook`) && tables.includes(`us-east1-${APP_ENVS.staging.firebaseConfig.projectId}.cloudfunctions.net/mercadoPagoWebhook`));
 
+  // Monitor de travamentos: o bloco do <head> do app diz para qual projeto mandar os relatos (pelo endereço do site) e o servidor só
+  // aceita relatos vindos dos endereços do próprio ambiente. As duas listas (e o projeto do app) têm de bater.
+  const monitor = (html.match(/<script>\s*\/\* Monitor de travamentos\.[\s\S]*?<\/script>/) || [''])[0];
+  const monitorTable = Object.fromEntries([...(monitor.match(/var PROJECTS = \{([^}]*)\}/) || ['', ''])[1].matchAll(/'([^']+)': '([^']+)'/g)].map(m => [m[1], m[2]]));
+  const prodHosts = Object.keys(monitorTable).filter(h => monitorTable[h] === APP_ENVS.production.firebaseConfig.projectId).sort();
+  const stagHosts = Object.keys(monitorTable).filter(h => monitorTable[h] === APP_ENVS.staging.firebaseConfig.projectId).sort();
+  check('monitor: só dois projetos (produção e teste), cada um com seus endereços', Object.keys(monitorTable).length === prodHosts.length + stagHosts.length && prodHosts.length >= 2 && stagHosts.length >= 2, monitorTable);
+  const originsOf = block => ((block.match(/siteOrigins: \[([^\]]*)\]/) || ['', ''])[1].match(/"https:\/\/([^"]+)"/g) || []).map(s => s.replace(/"|https:\/\//g, '')).sort();
+  check('servidor: os endereços aceitos em relatos de erro são exatamente os do monitor do app, em cada ambiente', JSON.stringify(originsOf(tables.slice(0, tables.indexOf('const ENVIRONMENTS')))) === JSON.stringify(prodHosts) && JSON.stringify(originsOf(serverStaging)) === JSON.stringify(stagHosts), { prod: originsOf(tables.slice(0, tables.indexOf('const ENVIRONMENTS'))), prodHosts, staging: originsOf(serverStaging), stagHosts });
+  check('monitor: o endereço do site de cada ambiente (appUrl) está na lista dele', prodHosts.includes(new URL(APP_ENVS.production.pushUrl).host) && stagHosts.includes(new URL(APP_ENVS.staging.pushUrl).host), { prodHosts, stagHosts });
+  check('monitor: o endereço de envio é a função reportClientError do projeto certo (mesma região do webhook)', /'https:\/\/us-east1-' \+ project \+ '\.cloudfunctions\.net\/reportClientError'/.test(monitor), monitor.match(/ENDPOINT = [^;]*;/)?.[0]);
+  check('monitor: os endereços de teste (localhost, prévias da Vercel) NÃO estão na lista (ficam quietos)', !/localhost|127\.0\.0\.1|vercel\.app/.test(monitor.match(/var PROJECTS = \{[^}]*\}/)?.[0] || 'x'));
+
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
   if (fails) process.exitCode = 1;
 })().catch(e => { console.error('ERRO NO TESTE', e); process.exitCode = 1; });
