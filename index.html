@@ -1471,6 +1471,34 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Date.now() - _adminBadgeAt > 60000) refreshAdminBadge();
 });
 
+/* ── App que não abre ──────────────────────────────────────────────────────────────────────
+   Se os arquivos do Firebase não carregam (a conexão caiu, um bloqueador de anúncios ou o filtro da rede da empresa ou
+   da escola barrou o endereço do Google), login e dados não funcionam. Em vez de uma tela de entrada que não entra e de um
+   aviso técnico ("firebase is not defined"), mostra por cima de tudo um aviso em português com o botão Recarregar. É uma
+   camada solta no <body>, com estilo próprio (não depende do CSS nem do estado do app), e o render() não a apaga. */
+function showBootFailure(err) {
+  try {
+    if (document.getElementById('boot-fail')) return;
+    const raw = typeof err === 'string' ? err : err?.message;
+    const detail = (typeof raw === 'string' ? raw : '').replace(/[<>&"'`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140); // só texto, nunca marcação
+    const root = document.createElement('div');
+    root.id = 'boot-fail';
+    root.setAttribute('role', 'alert');
+    root.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:24px;background:#0d1117;color:#e6edf3;font-family:Inter,system-ui,sans-serif;text-align:center;overflow:auto';
+    root.innerHTML = `<div style="max-width:340px">
+      <div style="font-size:44px;line-height:1;margin-bottom:14px">📡</div>
+      <div style="font-size:20px;font-weight:800;margin-bottom:10px">Não consegui abrir o app</div>
+      <div style="font-size:14px;line-height:1.6;color:#8b949e;margin-bottom:20px">Um arquivo de que o app precisa não carregou. Costuma ser a conexão com a internet ou um bloqueador de conteúdo (anúncios, filtro da rede da empresa ou da escola).</div>
+      <button onclick="location.reload()" style="width:100%;padding:14px;border:none;border-radius:10px;background:#00C97A;color:#000;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">Recarregar</button>
+      <div style="font-size:12px;line-height:1.5;color:#8b949e;margin-top:14px">Se continuar assim, tente outra rede (Wi-Fi ou dados do celular) ou desligue o bloqueador para este site.</div>
+      ${detail ? `<div style="font-size:11px;line-height:1.4;color:#6e7681;margin-top:16px;word-break:break-word">Detalhe técnico: ${detail}</div>` : ''}
+    </div>`;
+    document.body.appendChild(root);
+  } catch(_) {
+    try { toast('Erro ao conectar: ' + (err?.message || err)); } catch(__) {} // último recurso: o aviso antigo
+  }
+}
+
 function initFirebase() {
   try {
     window.__pnmStage = 'init';
@@ -1623,8 +1651,8 @@ function initFirebase() {
     });
   } catch(e) {
     pnmErr('boot', e, { step: 'init' });
+    showBootFailure(e); // antes do render(): se ele também quebrar, o aviso já está na tela
     st.ready = true; render();
-    toast('Erro ao conectar: ' + (e?.message || e));
   }
 }
 

@@ -155,6 +155,10 @@ jobs:
         working-directory: functions
         run: node test/client-close-league-test.js
 
+      - name: Testes do app (tela de aviso quando o app não abre)
+        working-directory: functions
+        run: node test/client-boot-fail-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
