@@ -1752,7 +1752,11 @@ function trackSeen(root) {
    beforeinstallprompt) e o botão abre a janela nativa de instalar; onde isso não existe (iPhone, ou antes
    de o Chrome liberar a instalação) o botão mostra o passo a passo. Só em celular/tablet, só logado, some
    sozinho com o app instalado, e o × esconde por 7 dias. Não aparece na tela de login: instalar no meio de
-   um convite faria o app instalado abrir sem o convite. */
+   um convite faria o app instalado abrir sem o convite.
+   Samsung Internet: ele monta por conta própria o pacote do app, com a versão antiga do Android dele, e o Android
+   barra esse pacote com "App de risco bloqueado… criado para uma versão mais antiga do Android" (o pacote que o
+   Chrome monta passa limpo, e nada no site nem no manifesto muda isso). Ali o "Instalar" não abre a janela do
+   Samsung: leva a pessoa para o Chrome, e instalar pelo Samsung Internet mesmo assim fica como segunda opção. */
 const INSTALL_SNOOZE_MS = 7 * 24 * 3600000;
 const INSTALL_SNOOZE_KEY = 'aceoma_install_snooze';
 const INSTALLED_KEY = 'aceoma_installed';
@@ -1774,6 +1778,21 @@ function installOsOf(ua, platform, touchPoints) {
   return null; // computador: o navegador já oferece instalar na barra de endereço
 }
 
+// Samsung Internet no Android (o Chrome de um celular Samsung não traz "SamsungBrowser/" na identificação).
+const isSamsungInternet = ua => /Android/i.test(ua || '') && /SamsungBrowser\//i.test(ua || '');
+
+// Só o endereço do site (https://nome.com.br ou http://localhost:3000): qualquer outra coisa dá null e nada é montado.
+function parseSiteOrigin(origin) {
+  const m = /^(https?):\/\/([a-z0-9.-]+(?::\d{1,5})?)$/i.exec(origin || '');
+  return m ? { scheme: m[1].toLowerCase(), host: m[2].toLowerCase() } : null;
+}
+
+// Link que o Android entende como "abrir no Chrome"; se não houver Chrome, ele volta para o mesmo endereço.
+function chromeIntentUrl(origin) {
+  const s = parseSiteOrigin(origin);
+  return s ? `intent://${s.host}/#Intent;scheme=${s.scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(`${s.scheme}://${s.host}/`)};end` : '';
+}
+
 // Decide se mostra o convite e para qual aparelho. Pura: recebe tudo o que precisa.
 function installBannerInfo({ ua = '', platform = '', touchPoints = 0, standalone = false, installed = false, snoozeUntil = 0, now = Date.now() } = {}) {
   if (standalone || installed || snoozeUntil > now) return null;
@@ -1781,7 +1800,7 @@ function installBannerInfo({ ua = '', platform = '', touchPoints = 0, standalone
   if (!os) return null;
   // Navegadores embutidos (Instagram, Facebook, WebView) não instalam nada.
   if (/FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(ua)) return null;
-  return { os };
+  return { os, samsung: isSamsungInternet(ua) };
 }
 
 function readInstallEnv() {
@@ -1798,6 +1817,8 @@ function installBanner() {
   if (!info) return '';
   const text = info.os === 'ios'
     ? '📲 Instale o app na Tela de Início: é assim que o iPhone recebe os avisos da liga.'
+    : info.samsung
+    ? '📲 Para instalar o app sem aviso do Android, abra o Pelada na Mão no Chrome.'
     : '📲 Instale o app no celular: abre em tela cheia, direto da tela inicial.';
   return `<div data-ev="installBannerSeen" style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:#00C97A15;border:1px solid #00C97A40;border-radius:10px;font-size:13px">
     <span style="flex:1;color:var(--text2);line-height:1.45">${text}</span>
@@ -1813,6 +1834,14 @@ function dismissInstallBanner() {
 
 async function installApp() {
   trackEvent('installClick', false);
+  // Samsung Internet: o pacote que ele monta é barrado pelo Android, então o caminho é o Chrome (a janela do Samsung
+  // fica como segunda opção, dentro do passo a passo).
+  if (isSamsungInternet(navigator.userAgent)) { openInstallHelp(); return; }
+  await installNative();
+}
+
+// A janela nativa de instalar do navegador (ou o passo a passo, se ela não existir ou falhar).
+async function installNative() {
   const ev = _installPrompt;
   if (!ev) { openInstallHelp(); return; }
   _installPrompt = null; // o navegador só deixa usar o pedido uma vez
@@ -1829,25 +1858,44 @@ function openInstallHelp() {
   document.getElementById('install-help')?.remove();
   const env = readInstallEnv();
   const os = installOsOf(env.ua, env.platform, env.touchPoints) || 'android';
+  const samsung = isSamsungInternet(env.ua);
+  const chromeUrl = samsung ? chromeIntentUrl(location.origin) : '';
+  const siteName = samsung ? (parseSiteOrigin(location.origin)?.host || 'peladanamao.com.br') : '';
   const steps = os === 'ios'
     ? ['Toque em <b>Compartilhar</b> (o quadrado com uma seta para cima, na barra do Safari).',
        'Role a lista e toque em <b>Adicionar à Tela de Início</b>.',
        'Toque em <b>Adicionar</b>. O ícone do Pelada na Mão aparece na tela inicial.']
+    : samsung
+    ? [chromeUrl ? 'Toque em <b>Abrir no Chrome</b>, logo abaixo.' : `Abra o <b>Chrome</b> e digite <b>${siteName}</b>.`,
+       'No Chrome, entre com a mesma conta do Google.',
+       'Toque em <b>Instalar</b> na faixa verde do topo do app e confirme. O ícone do Pelada na Mão aparece na tela inicial.']
     : ['Toque no menu <b>⋮</b> do navegador (canto superior direito).',
        'Toque em <b>Instalar app</b> (em alguns celulares aparece como <b>Adicionar à tela inicial</b>).',
        'Confirme em <b>Instalar</b>. O ícone do Pelada na Mão aparece na tela inicial.'];
   const note = os === 'ios'
     ? 'No iPhone isso precisa ser feito no <b>Safari</b>. Depois, abra sempre pelo ícone para receber as notificações.'
+    : samsung
+    ? 'O Samsung Internet monta o pacote do app com uma versão antiga do Android, e o Android avisa <b>"App de risco bloqueado"</b>. O aviso é sobre esse pacote, não sobre o Pelada na Mão: o pacote que o Chrome monta não tem o aviso.'
     : 'Depois, abra pelo ícone para o app ocupar a tela toda.';
+  // Samsung Internet: botão que abre o Chrome (link do Android) e, só se o navegador entregou o pedido de instalação, a segunda opção
+  const chromeBtn = chromeUrl
+    ? `<a href="${chromeUrl}" style="display:block;text-align:center;text-decoration:none;background:#00C97A;color:#000;border-radius:10px;padding:12px;font-size:14px;font-weight:800;margin-bottom:8px">Abrir no Chrome</a>
+    <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:14px">Se o Chrome não abrir, abra-o por conta própria e digite <b>${siteName}</b>.</div>`
+    : '';
+  const anyway = samsung && _installPrompt
+    ? `<button onclick="document.getElementById('install-help')?.remove();installNative()" style="width:100%;padding:8px;border:none;background:none;color:var(--text3);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-bottom:8px">Prefiro instalar por este navegador mesmo assim</button>`
+    : '';
   const root = document.createElement('div');
   root.id = 'install-help';
   root.className = 'overlay';
   root.onclick = () => root.remove();
   root.innerHTML = `<div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
-    <div style="font-size:17px;font-weight:800;margin-bottom:12px">📲 Instalar o app</div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:12px">${samsung ? '📲 Instalar o app pelo Chrome' : '📲 Instalar o app'}</div>
     <ol style="margin:0 0 12px;padding-left:20px;font-size:14px;color:var(--text2);line-height:1.7">${steps.map(s => `<li style="margin-bottom:6px">${s}</li>`).join('')}</ol>
+    ${chromeBtn}
     <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:16px">${note}</div>
+    ${anyway}
     <button onclick="document.getElementById('install-help')?.remove()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--s2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Entendi</button>
   </div>`;
   document.body.appendChild(root);

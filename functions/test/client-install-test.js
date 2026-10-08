@@ -1,6 +1,7 @@
 // Botão "Instalar o app" (index.html), isolado: extrai as funções reais e as executa num ambiente simulado,
 // sem navegador. O botão só aparece em celular/tablet, logado, com o app ainda não instalado e sem ter sido
 // dispensado; abre a janela nativa quando o navegador entregou o pedido de instalação e, senão, o passo a passo.
+// No Samsung Internet (que monta um pacote do app barrado pelo Android: "App de risco bloqueado") o botão leva ao Chrome.
 const fs = require('fs');
 const path = require('path');
 
@@ -30,9 +31,12 @@ const UA = {
   instagram: 'Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Instagram 330.0.0.0',
   facebook: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/450.0]',
   webview: 'Mozilla/5.0 (Linux; Android 14; SM-S911B; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36',
+  samsung: 'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36',
+  chromeNoSamsung: 'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', // só a marca do aparelho, sem o navegador da Samsung
+  samsungSite: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Safari/537.36', // "site para computador"
 };
 
-function makeEnv({ ua = UA.android, platform = 'Linux armv81', touchPoints = 5, standalone = false, navStandalone = undefined, authUser = { uid: 'u' }, storage = {}, storageThrows = false } = {}) {
+function makeEnv({ ua = UA.android, platform = 'Linux armv81', touchPoints = 5, standalone = false, navStandalone = undefined, authUser = { uid: 'u' }, storage = {}, storageThrows = false, origin = 'https://peladanamao.com.br' } = {}) {
   const calls = { render: 0, toasts: [], events: [] };
   const store = { ...storage };
   const listeners = {};
@@ -55,12 +59,13 @@ function makeEnv({ ua = UA.android, platform = 'Linux armv81', touchPoints = 5, 
       ? { getItem() { throw new Error('indisponível'); }, setItem() { throw new Error('indisponível'); } }
       : { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
     document: doc,
+    location: { origin },
     render: () => { calls.render++; },
     toast: (m, t) => { calls.toasts.push([m, t]); },
     trackEvent: (n, once = true) => { calls.events.push([n, once]); }, // contador de uso (anônimo)
   };
   const names = Object.keys(env);
-  const api = new Function(...names, code + '\nreturn { installOsOf, installBannerInfo, readInstallEnv, installBanner, dismissInstallBanner, installApp, openInstallHelp, getPrompt: () => _installPrompt };')(...names.map(n => env[n]));
+  const api = new Function(...names, code + '\nreturn { installOsOf, installBannerInfo, readInstallEnv, installBanner, dismissInstallBanner, installApp, installNative, openInstallHelp, isSamsungInternet, parseSiteOrigin, chromeIntentUrl, getPrompt: () => _installPrompt };')(...names.map(n => env[n]));
   return { api, env, calls, store, listeners, layers };
 }
 const info = (over = {}) => makeEnv().api.installBannerInfo({ ua: UA.android, now: NOW, ...over });
@@ -163,6 +168,80 @@ function fakePrompt(outcome) {
   e.listeners.appinstalled();
   check('instalou (evento appinstalled): guarda a marca, fecha o passo a passo, avisa e redesenha', e.store.aceoma_installed === '1' && !e.layers.has('install-help') && e.calls.toasts.some(([m]) => /App instalado/.test(m)) && e.calls.render === 1, { store: e.store, layers: [...e.layers.keys()], toasts: e.calls.toasts });
   check('…e a faixa não volta mais', e.api.installBanner() === '');
+
+  // ── Samsung Internet: o pacote que ele monta é barrado pelo Android; "Instalar" leva ao Chrome ───────
+  const api0 = makeEnv().api;
+  check('Samsung Internet: reconhecido pela identificação do navegador', api0.isSamsungInternet(UA.samsung) === true);
+  check('Chrome num celular Samsung NÃO é Samsung Internet (a identificação dele não traz SamsungBrowser/)', api0.isSamsungInternet(UA.android) === false);
+  check('Chrome com "SAMSUNG" só como marca do aparelho: não é Samsung Internet', api0.isSamsungInternet(UA.chromeNoSamsung) === false);
+  check('Samsung Internet no modo "site para computador" (sem Android na identificação): não conta', api0.isSamsungInternet(UA.samsungSite) === false);
+  check('identificação vazia ou ausente: não conta e não quebra', api0.isSamsungInternet('') === false && api0.isSamsungInternet(undefined) === false && api0.isSamsungInternet(null) === false);
+  check('a decisão do convite diz que é Samsung Internet, e só nele', info({ ua: UA.samsung })?.samsung === true && info()?.samsung === false && info({ ua: UA.iphone })?.samsung === false, [info({ ua: UA.samsung }), info()]);
+  check('Samsung Internet continua vendo o convite como Android', info({ ua: UA.samsung })?.os === 'android');
+
+  e = makeEnv({ ua: UA.samsung });
+  b = e.api.installBanner();
+  check('Samsung Internet: a faixa manda abrir no Chrome, mantém o botão "Instalar" e o ×, e não fala em tela cheia', /Chrome/.test(b) && />Instalar</.test(b) && /installApp\(\)/.test(b) && /dismissInstallBanner\(\)/.test(b) && !/tela cheia/.test(b) && /data-ev="installBannerSeen"/.test(b), b);
+  const bChrome = makeEnv().api.installBanner();
+  check('Chrome (inclusive num celular Samsung): a faixa continua a de sempre, sem falar em Chrome', /tela cheia/.test(bChrome) && !/Chrome/.test(bChrome), bChrome);
+
+  const evS = fakePrompt('accepted');
+  e.listeners.beforeinstallprompt(evS);
+  await e.api.installApp();
+  check('Samsung Internet: "Instalar" NÃO abre a janela do Samsung (é ela que cria o pacote barrado), abre o passo a passo', evS.prompts === 0 && e.layers.has('install-help'), { prompts: evS.prompts, layers: [...e.layers.keys()] });
+  check('…e conta um clique em Instalar, uma vez só', JSON.stringify(e.calls.events) === JSON.stringify([['installClick', false]]), e.calls.events);
+  const sheetS = e.layers.get('install-help')?.innerHTML || '';
+  const hrefS = (/<a href="([^"]*)"/.exec(sheetS) || [])[1];
+  check('…o passo a passo tem o botão "Abrir no Chrome", com o link do Android que abre o Chrome (e volta ao mesmo endereço se não houver Chrome)', hrefS === 'intent://peladanamao.com.br/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fpeladanamao.com.br%2F;end' && />Abrir no Chrome<\/a>/.test(sheetS), hrefS);
+  check('…avisa o que fazer se o Chrome não abrir (digitar o endereço)', /Se o Chrome não abrir, abra-o por conta própria e digite <b>peladanamao\.com\.br<\/b>/.test(sheetS), sheetS);
+  check('…explica o aviso "App de risco bloqueado" e que ele não é do Pelada na Mão', /App de risco bloqueado/.test(sheetS) && /não sobre o Pelada na Mão/.test(sheetS), sheetS);
+  check('…tem 3 passos (Chrome, mesma conta do Google, Instalar), não manda procurar o menu ⋮, tem título próprio e o botão para fechar', (sheetS.match(/<li /g) || []).length === 3 && /Toque em <b>Abrir no Chrome<\/b>/.test(sheetS) && /mesma conta do Google/.test(sheetS) && /Toque em <b>Instalar<\/b> na faixa verde/.test(sheetS) && !/⋮/.test(sheetS) && /Instalar o app pelo Chrome/.test(sheetS) && /Entendi/.test(sheetS), sheetS);
+  check('…e oferece instalar por este navegador mesmo assim, porque o navegador entregou o pedido de instalação', /Prefiro instalar por este navegador mesmo assim/.test(sheetS), sheetS);
+  const anywayClick = (/<button onclick="([^"]*installNative\(\)[^"]*)"/.exec(sheetS) || [])[1] || '';
+  check('…esse botão fecha o passo a passo e chama installNative()', anywayClick === "document.getElementById('install-help')?.remove();installNative()", anywayClick);
+  e.layers.get('install-help').remove();
+  await e.api.installNative();
+  check('…installNative() abre a janela nativa (uma vez) e avisa que está instalando', evS.prompts === 1 && e.calls.toasts.some(([m, t]) => /Instalando/.test(m) && t === 'ok') && !e.layers.has('install-help'), { prompts: evS.prompts, toasts: e.calls.toasts });
+  check('…sem contar um segundo clique em Instalar (o clique foi um só)', JSON.stringify(e.calls.events) === JSON.stringify([['installClick', false]]), e.calls.events);
+  await e.api.installNative();
+  check('…sem pedido guardado, installNative() cai no passo a passo em vez de ficar parado', e.layers.has('install-help'));
+
+  e = makeEnv({ ua: UA.samsung });
+  await e.api.installApp();
+  const sheetS2 = e.layers.get('install-help')?.innerHTML || '';
+  check('Samsung Internet sem pedido do navegador: o passo a passo do Chrome aparece igual, sem a segunda opção', />Abrir no Chrome<\/a>/.test(sheetS2) && !/mesmo assim/.test(sheetS2), sheetS2);
+
+  for (const [rotulo, origin] of [['"null" (página sem endereço)', 'null'], ['endereço com HTML', 'https://a.com"><img src=x onerror=alert(1)>'], ['vazio', '']]) {
+    e = makeEnv({ ua: UA.samsung, origin });
+    await e.api.installApp();
+    const s3 = e.layers.get('install-help')?.innerHTML || '';
+    check(`Samsung Internet, endereço do site ${rotulo}: sem botão nem link, e o passo 1 manda abrir o Chrome e digitar peladanamao.com.br`, !/<a /.test(s3) && !/intent:/.test(s3) && !/onerror|<img/.test(s3) && /Abra o <b>Chrome<\/b> e digite <b>peladanamao\.com\.br<\/b>/.test(s3) && (s3.match(/<li /g) || []).length === 3, s3);
+  }
+  e = makeEnv({ ua: UA.samsung, origin: 'http://localhost:3000' });
+  await e.api.installApp();
+  check('Samsung Internet num servidor local (http + porta): o link e o endereço levam a porta', /intent:\/\/localhost:3000\/#Intent;scheme=http;/.test(e.layers.get('install-help')?.innerHTML || '') && /digite <b>localhost:3000<\/b>/.test(e.layers.get('install-help')?.innerHTML || ''), e.layers.get('install-help')?.innerHTML);
+
+  const cu = api0.chromeIntentUrl;
+  check('link do Chrome: https com domínio', cu('https://peladanamao.com.br') === 'intent://peladanamao.com.br/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fpeladanamao.com.br%2F;end', cu('https://peladanamao.com.br'));
+  check('link do Chrome: maiúsculas viram minúsculas e a porta fica', cu('HTTP://Localhost:3000') === 'intent://localhost:3000/#Intent;scheme=http;package=com.android.chrome;S.browser_fallback_url=http%3A%2F%2Flocalhost%3A3000%2F;end', cu('HTTP://Localhost:3000'));
+  for (const ruim of ['', null, undefined, 'null', 'javascript:alert(1)', 'https://a.com/caminho', 'https://a.com?x=1', 'https://a.com#x', 'https://a.com"><script>', 'https://user@a.com', 'ftp://a.com', 'a.com', 'https://', 'https://a.com:']) {
+    check(`link do Chrome: endereço inválido (${JSON.stringify(ruim)}) não gera link`, cu(ruim) === '' && api0.parseSiteOrigin(ruim) === null, cu(ruim));
+  }
+  check('o endereço do site é lido em partes (esquema e domínio com porta)', JSON.stringify(api0.parseSiteOrigin('https://Peladanamao.com.br')) === JSON.stringify({ scheme: 'https', host: 'peladanamao.com.br' }) && api0.parseSiteOrigin('http://localhost:8080').host === 'localhost:8080');
+
+  // quem não é Samsung Internet não muda nada
+  e = makeEnv();
+  await e.api.installApp();
+  const helpChrome = e.layers.get('install-help')?.innerHTML || '';
+  check('Chrome: o passo a passo continua o de sempre (menu ⋮), sem botão do Chrome nem segunda opção', /⋮/.test(helpChrome) && !/Abrir no Chrome/.test(helpChrome) && !/intent:/.test(helpChrome) && !/mesmo assim/.test(helpChrome) && /<div[^>]*>📲 Instalar o app<\/div>/.test(helpChrome), helpChrome);
+  e = makeEnv();
+  e.listeners.beforeinstallprompt(fakePrompt('accepted'));
+  e.api.openInstallHelp();
+  check('Chrome com o pedido de instalação guardado: o passo a passo não oferece a segunda opção do Samsung', !/mesmo assim/.test(e.layers.get('install-help')?.innerHTML || ''));
+  e = makeEnv({ ua: UA.iphone, platform: 'iPhone', touchPoints: 5 });
+  await e.api.installApp();
+  const helpIos2 = e.layers.get('install-help')?.innerHTML || '';
+  check('iPhone: o passo a passo continua o do Safari, sem nada do Chrome', /Safari/.test(helpIos2) && !/Chrome/.test(helpIos2) && !/intent:/.test(helpIos2), helpIos2);
 
   // ── contadores de uso (anônimos) ──────────────────────────────────────────────────────────
   e = makeEnv();
