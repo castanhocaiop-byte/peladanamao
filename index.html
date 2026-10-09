@@ -8442,6 +8442,13 @@ function mVote() {
   </div>`;
 }
 
+// Primeira linha do resumo do campeonato para o grupo: o NOME DA LIGA (em maiúsculas), nunca um nome fixo. Tira os asteriscos (no
+// WhatsApp o *…* é o negrito, e um asterisco no nome quebraria a formatação do título); sem nome, "Pelada na Mão".
+function resumoLeagueName() {
+  const nome = String(st.availableLeagues?.find(l => l.id === st.leagueId)?.name || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+  return (nome || 'Pelada na Mão').toUpperCase();
+}
+
 function gerarResumoChamp(champId) {
   const champ = (st.champs||[]).find(c=>c.id===champId);
   if (!champ) return '';
@@ -8482,7 +8489,7 @@ function gerarResumoChamp(champId) {
   }
   newBadgeItems.sort((a,b)=>a.holders.length-b.holders.length);
 
-  let msg = `🏆 *ACEOMA — ${fdt(champ.date)}*\n\n`;
+  let msg = `🏆 *${resumoLeagueName()} — ${fdt(champ.date)}*\n\n`;
   msg += `🥇 *Campeão: ${champTeam.l}*\n`;
   if (roster.length) msg += `👥 ${roster.join(', ')}\n`;
   if (halfTitles.length) msg += `½ *Meio título: ${halfTitles.join(', ')}*\n`;
