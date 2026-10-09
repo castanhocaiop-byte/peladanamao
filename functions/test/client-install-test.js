@@ -252,7 +252,7 @@ function fakePrompt(outcome) {
   check('instalar o app conta uma instalação', e.calls.events.some(([n, once]) => n === 'appInstalled' && once === false), e.calls.events);
   check('nenhum contador carrega dado da pessoa (só o nome do evento)', e.calls.events.every(ev => ev.length === 2 && typeof ev[0] === 'string'));
   // ── onde a faixa aparece na página ────────────────────────────────────────────────────────
-  check('a faixa está no topo da liga, depois do aviso de plano e do de notificações', /main\.innerHTML=planBanner\(\)\+notifBanner\(\)\+installBanner\(\)\+content/.test(html));
+  check('a faixa está no topo da liga, depois do aviso de plano e do de notificações', /main\.innerHTML=termsNotice\(\)\+planBanner\(\)\+notifBanner\(\)\+installBanner\(\)\+content/.test(html));
   const picker = html.slice(html.indexOf('function vSelectLeague()'), html.indexOf('function vPending()'));
   check('a faixa também aparece na tela "Escolha a liga"', picker.includes('${installBanner()}'));
   const login = html.slice(html.indexOf('function vLogin()'), html.indexOf('function slugify('));

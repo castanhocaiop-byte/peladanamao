@@ -824,7 +824,7 @@ html.lp-show #app { display: none; }
           <p>Sem fidelidade: cancele quando quiser, pelo próprio app.</p>
         </div>
       </div>
-      <p class="lp-note lp-center">Pagamento pelo Mercado Pago. Os valores não são reembolsáveis: veja os <a href="/termos.html#c10">Termos de Uso</a>.</p>
+      <p class="lp-note lp-center">Pagamento pelo Mercado Pago. Você pode desistir em até 7 dias depois de pagar e receber o valor de volta; depois disso, não há reembolso. Veja os <a href="/termos.html#c10">Termos de Uso</a>.</p>
       <div class="lp-free">
         <h3>E depois do teste, se eu não assinar?</h3>
         <p>A sua liga não é bloqueada. Ela segue no plano gratuito: convocar, sortear os times e registrar os placares continuam funcionando, e todo o histórico fica guardado. O registro de gols, o ranking e as conquistas novas ficam pausados até a liga assinar.</p>
@@ -1763,6 +1763,37 @@ function notifBanner() {
   </div>`;
 }
 
+/* ── Aviso de Termos de Uso novos ───────────────────────────────────────────────────────────
+   A cláusula 18 dos Termos promete avisar, dentro do aplicativo, as mudanças relevantes. Quando a versão muda, quem já tinha
+   conta antes da vigência vê UMA vez por aparelho uma faixa com o que mudou e o link dos Termos (o botão guarda que já viu).
+   Quem criou a conta depois já aceitou o texto novo ao se cadastrar e não vê a faixa. Nada vai ao servidor. */
+const TERMS_VERSION = '1.5';
+const TERMS_EFFECTIVE_MS = Date.parse('2026-10-09T00:00:00-03:00');
+const TERMS_NEWS = 'agora está escrito o seu direito de desistir da compra de um plano em até 7 dias depois de pagar e receber o valor de volta';
+const TERMS_SEEN_KEY = 'aceoma_termos_visto';
+let _termsDismissed = false; // reserva: sem armazenamento no navegador (modo privado) a faixa some só nesta abertura do app
+function termsNoticeInfo({ createdMs, seen }) {
+  if (seen === TERMS_VERSION) return null; // já viu esta versão neste aparelho
+  if (Number.isFinite(createdMs) && createdMs >= TERMS_EFFECTIVE_MS) return null; // conta nova: já aceitou o texto novo ao se cadastrar
+  return { version: TERMS_VERSION, news: TERMS_NEWS };
+}
+function termsNotice() {
+  if (!st.authUser) return '';
+  let seen = null;
+  try { seen = localStorage.getItem(TERMS_SEEN_KEY); } catch (_) {}
+  const info = termsNoticeInfo({ createdMs: Date.parse(st.authUser.metadata?.creationTime), seen: _termsDismissed ? TERMS_VERSION : seen });
+  if (!info) return '';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:#4DB8FF15;border:1px solid #4DB8FF40;border-radius:10px;font-size:13px">
+    <span style="flex:1;color:var(--text2);line-height:1.45">📄 Atualizamos os <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text);text-decoration:underline">Termos de Uso</a> (versão ${info.version}): ${info.news}.</span>
+    <button onclick="dismissTermsNotice()" style="background:#4DB8FF;color:#000;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Entendi</button>
+  </div>`;
+}
+function dismissTermsNotice() {
+  _termsDismissed = true;
+  try { localStorage.setItem(TERMS_SEEN_KEY, TERMS_VERSION); } catch (_) {}
+  render();
+}
+
 /* ── Contadores de uso (anônimos) ──────────────────────────────────────────────────────
    O app avisa o servidor que uma pessoa viu ou tocou em algo (faixa do plano, botão Instalar…). O servidor
    só soma 1 ao contador do dia: não guarda quem foi. Cada aviso vai uma vez por sessão (aba), para o número
@@ -2694,7 +2725,7 @@ function openCloseLeague() {
         <li>fotos, contatos (WhatsApp), convites e pedidos de vinculação;</li>
         <li>o vínculo de todos os membros: todos perdem o acesso na hora.</li>
       </ul>
-      ${paid ? `<p style="margin:0 0 8px"><strong>Plano pago:</strong> a assinatura desta liga é cancelada junto, sem novas cobranças. Não há reembolso do valor já pago.</p>` : ''}
+      ${paid ? `<p style="margin:0 0 8px"><strong>Plano pago:</strong> a assinatura desta liga é cancelada junto, sem novas cobranças. Não há reembolso do valor já pago, exceto dentro dos 7 dias para desistir da compra (Termos de Uso, cláusula 10).</p>` : ''}
       <p style="margin:0 0 14px"><strong>Não tem volta.</strong> As contas das pessoas continuam existindo; só a liga some.</p>
     </div>
     <label style="display:block;margin-bottom:12px">
@@ -6053,7 +6084,7 @@ function vSelectLeague() {
           ＋ Criar nova liga
         </button>
       </div>
-      <div style="margin-top:22px;text-align:left">${installBanner()}</div>
+      <div style="margin-top:22px;text-align:left">${termsNotice()}${installBanner()}</div>
       ${isSystemOwner() ? `<div style="text-align:center;margin-top:6px"><button onclick="openOwnerMetrics()" style="background:none;border:1px solid var(--border);border-radius:10px;padding:8px 16px;color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit">📊 Métricas do sistema</button></div>` : ''}
       ${deleteAccountLink()}
     </div>
@@ -7026,7 +7057,7 @@ function mSubscription() {
   }
 
   const busy = !!st._subBusy;
-  const terms = what => `<div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Não há reembolso. Ao ${what}, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>`;
+  const terms = what => `<div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Você pode desistir em até 7 dias depois de pagar e receber o valor de volta (escreva para contato@peladanamao.com.br); depois disso, não há reembolso. Ao ${what}, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>`;
   const planBtn = `position:relative;z-index:1;padding:14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}`;
 
   let actionsHtml;
@@ -7035,7 +7066,7 @@ function mSubscription() {
     const monthlyRunning = !annual && !cancelled; // há assinatura mensal cobrando todo mês
     const cancelBox = `<div style="background:var(--s2);border-radius:10px;padding:14px">
           <div style="font-size:13px;font-weight:700;margin-bottom:6px">Cancelar a assinatura mensal?</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Você não será cobrado de novo. Sua liga continua com o plano até ${fmt(renewsAt)} e depois volta ao plano gratuito. Não há reembolso do período já pago.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Você não será cobrado de novo. Sua liga continua com o plano até ${fmt(renewsAt)} e depois volta ao plano gratuito. Não há reembolso do período já pago, exceto dentro dos 7 dias para desistir da compra.</div>
           <div style="display:flex;gap:8px">
             <button ${busy?'disabled':''} onclick="st.modal={type:'subscription'};render()"
               style="position:relative;z-index:1;flex:1;padding:11px;border-radius:10px;border:none;background:var(--s1);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Voltar</button>
@@ -7581,7 +7612,7 @@ function render() {
     case 'stats':   content=vStats(); break;
     case 'financeiro': content=vFinanceiro(); break;
   }
-  if(main) main.innerHTML=planBanner()+notifBanner()+installBanner()+content;
+  if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
   if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');

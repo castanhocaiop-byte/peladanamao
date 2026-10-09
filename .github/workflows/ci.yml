@@ -163,6 +163,10 @@ jobs:
         working-directory: functions
         run: node test/client-login-domain-test.js
 
+      - name: Testes dos Termos 1.5 e do aviso de Termos novos no app
+        working-directory: functions
+        run: node test/client-terms-notice-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.

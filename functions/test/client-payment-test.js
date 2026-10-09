@@ -183,8 +183,8 @@ function makeEnv({ storageThrows = false, leagues = { L: { role: 'admin' } } } =
   h = modal({ league: { trialEndsAt: iso(Date.now() + 10 * DAY) } });
   check('em teste: mostra o período de teste e os dois planos', /Período de teste/.test(h) && /startSubscription\('monthly'\)/.test(h) && /startSubscription\('annual'\)/.test(h));
   check('em teste: também sem botão manual de verificação', !/Verificar|Já pagou|checkSubscriptionNow/.test(h));
-  check('antes de pagar: avisa que não há reembolso e linka a cláusula de planos dos Termos de Uso', /Não há reembolso/.test(h) && /href="\/termos\.html#c10"/.test(h));
-  check('durante a confirmação do pagamento o aviso não aparece (a escolha já foi feita)', !/Não há reembolso/.test(modal({ league: { trialEndsAt: iso(Date.now() + 10 * DAY) }, checking: true })));
+  check('antes de pagar: avisa que dá para desistir em 7 dias (e como pedir), que depois não há reembolso, e linka a cláusula de planos dos Termos de Uso', /Você pode desistir em até 7 dias depois de pagar e receber o valor de volta \(escreva para contato@peladanamao\.com\.br\); depois disso, não há reembolso\./.test(h) && /href="\/termos\.html#c10"/.test(h));
+  check('durante a confirmação do pagamento o aviso não aparece (a escolha já foi feita)', !/desistir em até 7 dias/.test(modal({ league: { trialEndsAt: iso(Date.now() + 10 * DAY) }, checking: true })));
 
   h = modal({ league: { subscriptionPlan: 'monthly', subscriptionRenewsAt: iso(renews), subscriptionActiveUntil: iso(until) } });
   check('mensal ativa: mostra a data real da próxima cobrança', h.includes('Próxima cobrança em ' + fmt(renews)));
@@ -217,7 +217,7 @@ function makeEnv({ storageThrows = false, leagues = { L: { role: 'admin' } } } =
   check('mensal ativa: avisa que ao estender a assinatura mensal é cancelada sozinha', /Ao estender, a assinatura mensal é cancelada sozinha: você não será cobrado de novo/.test(h));
   check('mensal ativa: dá para cancelar a assinatura mensal aqui mesmo', /askCancelSubscription\(\)/.test(h) && />Cancelar assinatura mensal</.test(h));
   check('mensal ativa: a confirmação de cancelamento só aparece depois de pedir', !/confirmCancelSubscription/.test(h));
-  check('mensal ativa: continua avisando que não há reembolso e linka os Termos', /Não há reembolso. Ao estender o plano/.test(h) && /href="\/termos\.html#c10"/.test(h));
+  check('mensal ativa: continua avisando do prazo de desistência e linka os Termos', /depois disso, não há reembolso\. Ao estender o plano/.test(h) && /desistir em até 7 dias/.test(h) && /href="\/termos\.html#c10"/.test(h));
   check('mensal ativa: a previsão não usa a margem técnica de 1 dia', !h.includes('até ' + fmt(plus12(until))) || fmt(plus12(until)) === fmt(plus12(renews)));
 
   h = modal({ league: annualLg });
@@ -234,7 +234,7 @@ function makeEnv({ storageThrows = false, leagues = { L: { role: 'admin' } } } =
   check('anual com marca de cancelada esquecida no banco: continua aparecendo como ativa (anual não se cancela)', /Assinatura <strong>anual<\/strong> ativa/.test(h) && !/cancelada/.test(h.replace(/Ao estender, a assinatura mensal é cancelada sozinha/g, '')));
 
   h = modal({ league: monthlyLg, cancelAsk: true });
-  check('cancelar: pede confirmação na própria tela, dizendo até quando a liga segue e que não há reembolso', /Cancelar a assinatura mensal\?/.test(h) && h.includes('continua com o plano até ' + fmt(renews)) && /Não há reembolso do período já pago/.test(h));
+  check('cancelar: pede confirmação na própria tela, dizendo até quando a liga segue e que não há reembolso', /Cancelar a assinatura mensal\?/.test(h) && h.includes('continua com o plano até ' + fmt(renews)) && /Não há reembolso do período já pago, exceto dentro dos 7 dias para desistir da compra/.test(h));
   check('cancelar: a confirmação tem "Voltar" e "Cancelar assinatura"', /confirmCancelSubscription\(\)/.test(h) && />Voltar</.test(h) && />Cancelar assinatura</.test(h));
   check('cancelar: com a confirmação aberta some o botão de pedir cancelamento', !/askCancelSubscription/.test(h));
   h = modal({ league: monthlyLg, cancelAsk: true, busy: true });

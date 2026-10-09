@@ -97,7 +97,7 @@ function makeEnv({ role = 'admin', uid = 'u1', ownerId = 'u1', authExtra = {}, u
   const future = new Date(Date.now() + 40 * 86400000).toISOString();
   t = makeEnv({ role: 'admin', uid: 'u1', leagues: [{ id: 'L', name: 'Liga L', role: 'admin', ownerId: 'u1', subscriptionActiveUntil: future }] });
   t.api.openCloseLeague();
-  check('liga com plano pago ativo: avisa que a assinatura é cancelada e que não há reembolso', /Plano pago/.test(t.dom['closelg-root'].innerHTML) && /cancelada junto/.test(t.dom['closelg-root'].innerHTML) && /Não há reembolso/.test(t.dom['closelg-root'].innerHTML));
+  check('liga com plano pago ativo: avisa que a assinatura é cancelada e que não há reembolso', /Plano pago/.test(t.dom['closelg-root'].innerHTML) && /cancelada junto/.test(t.dom['closelg-root'].innerHTML) && /Não há reembolso do valor já pago, exceto dentro dos 7 dias para desistir da compra/.test(t.dom['closelg-root'].innerHTML));
   t = makeEnv({ role: 'admin', uid: 'u1', leagues: [{ id: 'L', name: 'Liga L', role: 'admin', ownerId: 'u1', subscriptionActiveUntil: new Date(Date.now() - 86400000).toISOString() }] });
   t.api.openCloseLeague();
   check('plano pago já vencido: não mostra o aviso', !/Plano pago/.test(t.dom['closelg-root'].innerHTML));
