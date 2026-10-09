@@ -900,7 +900,7 @@ const APP_ENVS = {
     name: 'production',
     firebaseConfig: {
       apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
-      authDomain: "seriebaceoma.firebaseapp.com",
+      authDomain: "peladanamao.com.br", // login com o Google no endereço do próprio site (o site repassa /__/auth/ ao Firebase: vercel.json)
       projectId: "seriebaceoma",
       storageBucket: "seriebaceoma.firebasestorage.app",
       messagingSenderId: "354275671624",
@@ -930,22 +930,23 @@ const APP_ENV = APP_ENVS[STAGING_HOSTS.includes(location.hostname) ? 'staging' :
 const firebaseConfig = APP_ENV.firebaseConfig;
 
 /* ── Endereço da janela de login do Google ──────────────────────────────────────────────────
-   A janela de login mostra o "authDomain" do Firebase, que por padrão é o nome do projeto (seriebaceoma.firebaseapp.com;
-   o Google não deixa trocar esse nome). Com o endereço do próprio site, a janela mostra peladanamao.com.br: o site repassa
-   /__/auth/ ao Firebase (rewrites do vercel.json) e o Google Cloud precisa ter https://peladanamao.com.br/__/auth/handler
-   entre os endereços de retorno autorizados do login (sem isso o Google recusa o login).
-   Enquanto isso não é conferido ao vivo, é opcional e só na produção: abrir o site com ?login=proprio liga o endereço novo
-   neste aparelho (fica guardado) e ?login=google volta ao padrão. O ambiente de teste não muda. */
-const OWN_AUTH_DOMAIN = 'peladanamao.com.br';
-function ownLoginDomainOn() {
+   A janela de login mostra o "authDomain" do Firebase. O padrão do Firebase seria o nome do projeto
+   (seriebaceoma.firebaseapp.com; o Google não deixa trocar esse nome); aqui é o endereço do próprio site,
+   peladanamao.com.br, e a janela mostra "Prosseguir para peladanamao.com.br". Para isso o site repassa /__/auth/ ao
+   Firebase (rewrites do vercel.json) e o Google Cloud tem https://peladanamao.com.br/__/auth/handler entre os endereços
+   de retorno autorizados do login (sem isso o Google recusa o login).
+   Saída de emergência, só na produção: abrir o site com ?login=google volta ao endereço antigo do Firebase neste aparelho
+   (fica guardado) e ?login=proprio desfaz. O ambiente de teste não muda. */
+const LEGACY_AUTH_DOMAIN = 'seriebaceoma.firebaseapp.com';
+function legacyLoginDomainOn() {
   try {
     const q = new URLSearchParams(location.search).get('login');
-    if (q === 'proprio') localStorage.setItem('aceoma_login_proprio', '1');
-    else if (q === 'google') localStorage.removeItem('aceoma_login_proprio');
-    return localStorage.getItem('aceoma_login_proprio') === '1';
+    if (q === 'google') localStorage.setItem('aceoma_login_google', '1');
+    else if (q === 'proprio') localStorage.removeItem('aceoma_login_google');
+    return localStorage.getItem('aceoma_login_google') === '1';
   } catch (_) { return false; }
 }
-if (APP_ENV.name === 'production' && ownLoginDomainOn()) firebaseConfig.authDomain = OWN_AUTH_DOMAIN;
+if (APP_ENV.name === 'production' && legacyLoginDomainOn()) firebaseConfig.authDomain = LEGACY_AUTH_DOMAIN;
 
 // No ambiente de teste fica sempre visível que ali nada é real (a faixa não recebe cliques).
 if (APP_ENV.name === 'staging') {

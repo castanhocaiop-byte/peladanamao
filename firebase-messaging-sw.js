@@ -16,7 +16,7 @@ firebase.initializeApp(IS_STAGING ? {
   appId: "1:378210094171:web:b2173e3a1d1a751884037e"
 } : {
   apiKey: "AIzaSyAp8LdT0n6Sg3cipCeZZPVZdCwoa7eOogg",
-  authDomain: "seriebaceoma.firebaseapp.com",
+  authDomain: "peladanamao.com.br",
   projectId: "seriebaceoma",
   storageBucket: "seriebaceoma.firebasestorage.app",
   messagingSenderId: "354275671624",
