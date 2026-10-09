@@ -2004,6 +2004,13 @@ p strong {
         O aviso de "e-mail enviado" aparece <strong>mesmo que aquele e-mail não tenha conta</strong> no sistema. É assim de propósito: se a mensagem mudasse conforme o e-mail existe ou não, qualquer pessoa poderia descobrir quais e-mails têm cadastro só testando um por um.
       </div>
 
+      <h3 id="endereco-login-google">Endereço que aparece na janela de login do Google</h3>
+      <p>Ao entrar com o Google, a janela mostra o <strong>endereço do login</strong>. Por padrão ele é o nome interno do projeto no Firebase, <code>seriebaceoma.firebaseapp.com</code>: o Google não deixa trocar esse nome, criado quando o sistema era só da liga "Série B Aceoma". Com o endereço do próprio site, a janela mostra <strong>peladanamao.com.br</strong>.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">Como funciona e como testar <span class="tag">Técnico</span></div>
+        O site repassa, de forma transparente (não é um redirecionamento), os pedidos de <code>/__/auth/</code> ao Firebase (<code>rewrites</code> do <code>vercel.json</code>), e o login passa a usar <code>peladanamao.com.br</code> como <code>authDomain</code>. No Google Cloud, o cliente OAuth do login precisa ter <code>https://peladanamao.com.br/__/auth/handler</code> entre os <em>URIs de redirecionamento autorizados</em>; sem isso o Google recusa o login (<em>redirect_uri_mismatch</em>). Por isso a mudança é <strong>opcional até ser testada ao vivo</strong>: abrindo o site com <code>?login=proprio</code> no fim do endereço, aquele aparelho passa a usar o endereço novo (fica guardado); com <code>?login=google</code> volta ao padrão. O site de teste não muda. Quem entra por e-mail e senha não é afetado. O texto "continuar para…" da janela do Google vem do nome do aplicativo na tela de consentimento OAuth do Google Cloud, que se ajusta lá, não no código.
+      </div>
+
       <h3>Quem pode fazer o quê</h3>
       <table class="data-table">
         <thead><tr><th>Ação</th><th>Função</th><th>Quem pode</th><th>O que o servidor confere</th></tr></thead>
@@ -2462,6 +2469,11 @@ p strong {
       <div class="callout">
         <div class="callout-label">Anual em destaque</div>
         Na tela <strong>💳 Assinatura</strong>, quando a liga não tem plano em vigor (teste grátis, plano gratuito ou plano vencido), o <strong>anual vem primeiro</strong>, com borda verde e o selo <strong>MELHOR VALOR · ECONOMIZE R$ 120,00</strong>. A conta aparece na própria tela: R$ 238,80 por ano equivale a <strong>R$ 19,90 por mês</strong>, contra <strong>R$ 358,80</strong> em 12 mensalidades de R$ 29,90. O mensal vem em seguida, com o aviso de que não tem fidelidade e se cancela no próprio app. Quem já paga mensal e toca em <strong>Estender plano</strong> vê a mesma conta ("No anual são R$ 238,80 por ano, contra R$ 358,80 em 12 mensalidades: você economiza R$ 120,00"); quem já está no anual (ou no mensal já cancelado) só estende, sem a conta. Os valores da tela, os da página de apresentação (seção 30) e os cobrados pelo servidor são conferidos juntos por um teste automático: se um preço mudar num lugar só, o teste acusa.
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Nome na fatura do cartão</div>
+        No <strong>plano anual</strong>, a fatura do cartão de quem paga mostra <strong>PELADANAMAO</strong> (o Mercado Pago aceita até 13 letras nesse campo, o <code>statement_descriptor</code>). Isso ajuda a pessoa a reconhecer a cobrança e reduz contestações. A <strong>assinatura mensal</strong> não leva o campo: não está confirmado que o Mercado Pago o aceite nesse tipo de cobrança, e um campo recusado derrubaria a assinatura; ali vale o padrão da conta do Mercado Pago, e o nome que aparece se confere no primeiro pagamento real. O comprovante do Mercado Pago mostra, além do título do plano (<em>Pelada na Mão — Assinatura anual</em>), o nome cadastrado na conta de vendedor, que o app não controla. Se o Mercado Pago recusar o nome na fatura, a cobrança sai mesmo assim, sem ele (a pessoa não fica sem conseguir pagar), e o servidor registra um aviso.
       </div>
 
       <h3 id="estender-plano">Estender plano</h3>

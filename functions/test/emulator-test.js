@@ -637,6 +637,7 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   check('liga sem plano: cria a assinatura mensal (link de pagamento, com a liga e o e-mail do admin)', r.status === 200 && /mp\.test\/preapproval/.test(r.result.initPoint) && mpGet().created.length === 1 && mpGet().created[0].external_reference === 'la' && mpGet().created[0].payer_email === U.admA.email, r.raw);
   r = await callFn('createAnnualPayment', U.admA.token, { liga: 'la' });
   check('liga sem plano: cria a cobrança anual com o título normal e o valor do plano', r.status === 200 && mpGet().preferences[0].items[0].title === 'Pelada na Mão — Assinatura anual' && mpGet().preferences[0].items[0].unit_price === 238.8, r.raw);
+  check('…e o pedido que chega ao Mercado Pago (pela rede, com o SDK de verdade) leva o nome na fatura PELADANAMAO', mpGet().preferences[0].statement_descriptor === 'PELADANAMAO', mpGet().preferences[0]);
 
   const approved1 = agoIso(5 * 60000);
   mpState({ payments: [pay(7001, { date_approved: approved1 })] });

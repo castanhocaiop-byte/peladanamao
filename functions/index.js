@@ -395,6 +395,11 @@ const MP_PLANS = {
   monthly: { amount: 29.9, label: "Assinatura mensal" },
   annual: { amount: 238.8, label: "Assinatura anual" },
 };
+// Nome que aparece na FATURA DO CARTÃO de quem paga o plano anual (campo statement_descriptor da preferência: até 13
+// caracteres; o Mercado Pago diz que ajuda o comprador a reconhecer a cobrança e reduz contestações). A assinatura
+// mensal (PreApproval) NÃO leva o campo: não achei na documentação que ela o aceite, e um campo recusado derrubaria a
+// assinatura. Sem o campo, vale o padrão da conta do Mercado Pago.
+const MP_STATEMENT_DESCRIPTOR = "PELADANAMAO";
 // Tolerância técnica a atraso de notificação/processamento do Mercado Pago — nunca
 // mostrada ao usuário (a UI exibe a data real da próxima cobrança, sem este acréscimo).
 const SUBSCRIPTION_GRACE_DAYS = 1;
@@ -1275,6 +1280,13 @@ async function callMp(action, factory) {
   }
 }
 
+// O erro devolvido pelo Mercado Pago (mensagem ou causas) cita esta palavra? (sem estourar com erro de formato estranho)
+function mpErrorMentions(e, word) {
+  let causes = "";
+  try { causes = JSON.stringify(e?.cause ?? ""); } catch (_) { /* causa que não vira texto */ }
+  return new RegExp(word, "i").test(`${e?.message ?? ""} ${causes}`);
+}
+
 // Liga com plano pago em vigor (dentro da validade, incluindo a tolerância técnica).
 const hasActivePlan = league => Date.parse(league?.subscriptionActiveUntil) > Date.now();
 
@@ -1322,26 +1334,36 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
   // aparece na tela de pagamento do Mercado Pago e no extrato de quem paga.
   const extending = hasActivePlan((await db.doc(`leagues/${liga}`).get()).data());
 
-  const result = await callMp("a criação da cobrança anual", () => new Preference(mpClient()).create({
-    body: {
-      items: [{
-        id: `annual-${liga}`,
-        title: extending ? "Pelada na Mão — Estender plano (+12 meses)" : `Pelada na Mão — ${MP_PLANS.annual.label}`,
-        quantity: 1,
-        unit_price: MP_PLANS.annual.amount,
-        currency_id: "BRL",
-      }],
-      external_reference: liga,
-      payer: { email: payerEmail },
-      back_urls: {
-        success: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
-        pending: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
-        failure: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
-      },
-      auto_return: "approved",
-      notification_url: MERCADOPAGO_WEBHOOK_URL,
+  const preferenceBody = {
+    items: [{
+      id: `annual-${liga}`,
+      title: extending ? "Pelada na Mão — Estender plano (+12 meses)" : `Pelada na Mão — ${MP_PLANS.annual.label}`,
+      quantity: 1,
+      unit_price: MP_PLANS.annual.amount,
+      currency_id: "BRL",
+    }],
+    external_reference: liga,
+    payer: { email: payerEmail },
+    back_urls: {
+      success: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
+      pending: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
+      failure: `${ENV.appUrl}?mpReturn=${encodeURIComponent(liga)}`,
     },
-  }));
+    auto_return: "approved",
+    notification_url: MERCADOPAGO_WEBHOOK_URL,
+  };
+  const result = await callMp("a criação da cobrança anual", async () => {
+    const preference = new Preference(mpClient());
+    try {
+      return await preference.create({ body: { ...preferenceBody, statement_descriptor: MP_STATEMENT_DESCRIPTOR } });
+    } catch (e) {
+      // O nome na fatura é enfeite: se o Mercado Pago recusar justamente ele, a cobrança sai sem ele em vez de deixar a
+      // pessoa sem conseguir pagar. Qualquer outra recusa segue o caminho normal (aviso em português).
+      if (!mpErrorMentions(e, "statement_descriptor")) throw e;
+      logger.warn("Mercado Pago recusou o nome na fatura; criando a cobrança anual sem ele", { erro: String(e?.message || e).slice(0, 300) });
+      return await preference.create({ body: preferenceBody });
+    }
+  });
   await recordCheckoutStart(liga, "annual");
   return { initPoint: result.init_point };
 });

@@ -6,5 +6,11 @@
       "destination": "https://peladanamao.com.br/$1",
       "permanent": false
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://seriebaceoma.firebaseapp.com/__/auth/:path*"
+    }
   ]
 }

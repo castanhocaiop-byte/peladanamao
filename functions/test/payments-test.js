@@ -89,6 +89,8 @@ let createShouldThrowStatus = 400; // status HTTP da recusa simulada (0 = falha 
 let createShouldThrowCode = null; // código de rede da falha simulada (ex.: ETIMEDOUT)
 const makeCreateError = () => { const e = new Error(createShouldThrowMessage); if (createShouldThrowStatus) e.status = createShouldThrowStatus; if (createShouldThrowCode) e.code = createShouldThrowCode; return e; };
 const logs = [];
+const attempts = []; // todas as tentativas de criar a cobrança anual (inclusive as recusadas), na ordem
+let descriptorRejection = null; // função que devolve o erro com que o Mercado Pago recusa o nome na fatura (null = aceita)
 
 class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
 class PreApproval {
@@ -108,7 +110,9 @@ class PreApproval {
 }
 class Preference {
   async create({ body }) {
+    attempts.push(body);
     if (createShouldThrowMessage !== null) throw makeCreateError();
+    if (descriptorRejection && 'statement_descriptor' in body) throw descriptorRejection();
     calls.preferenceCreate.push(body); return { init_point: 'https://mp.test/preference/xyz' };
   }
 }
@@ -179,6 +183,8 @@ const reset = () => {
   transactionShouldFail = false;
   calls.preApprovalCreate.length = 0;
   calls.preferenceCreate.length = 0;
+  attempts.length = 0;
+  descriptorRejection = null;
   calls.preApprovalSearch.length = 0;
   calls.paymentSearch.length = 0;
   calls.preApprovalUpdate.length = 0;
@@ -222,6 +228,8 @@ const reset = () => {
   // Regressão: o retorno ao site precisa identificar a liga para o fallback (checkSubscriptionStatus
   // no boot) saber qual assinatura conferir, caso o webhook atrase ou nunca chegue.
   check('mensal: back_url identifica a liga para o fallback no retorno', calls.preApprovalCreate[0].back_url === 'https://peladanamao.com.br/?mpReturn=L');
+  // Não achei na documentação que a assinatura aceite statement_descriptor; um campo recusado derrubaria a assinatura.
+  check('mensal: NÃO manda nome na fatura (campo não confirmado para assinatura)', !('statement_descriptor' in calls.preApprovalCreate[0]), Object.keys(calls.preApprovalCreate[0]));
 
   // ───────── createAnnualPayment ─────────
   reset();
@@ -239,6 +247,40 @@ const reset = () => {
   check('anual: informa a URL do webhook explicitamente', calls.preferenceCreate[0].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook');
   check('anual: manda o e-mail do admin', calls.preferenceCreate[0].payer.email === 'adm@x.com');
   check('anual: back_urls identificam a liga para o fallback no retorno', calls.preferenceCreate[0].back_urls.success === 'https://peladanamao.com.br/?mpReturn=L');
+  check('anual: manda o nome na fatura do cartão (statement_descriptor) PELADANAMAO: até 13 caracteres, só letras maiúsculas e números', calls.preferenceCreate[0].statement_descriptor === 'PELADANAMAO' && /^[A-Z0-9]{1,13}$/.test(calls.preferenceCreate[0].statement_descriptor), calls.preferenceCreate[0].statement_descriptor);
+  check('anual: uma tentativa só quando o Mercado Pago aceita o nome', attempts.length === 1);
+
+  // rede de segurança: o Mercado Pago recusa justamente o nome na fatura → a cobrança sai sem ele
+  for (const [rotulo, fazErro] of [
+    ['na mensagem', () => { const e = new Error('invalid parameter: statement_descriptor'); e.status = 400; return e; }],
+    ['na lista de causas (formato do SDK)', () => { const e = new Error('bad request'); e.status = 400; e.cause = [{ code: 3002, description: 'Statement_Descriptor muito longo' }]; return e; }],
+    ['na mensagem, com uma causa que não vira texto (referência circular)', () => { const e = new Error('statement_descriptor inválido'); e.status = 400; const ciclo = {}; ciclo.self = ciclo; e.cause = ciclo; return e; }],
+  ]) {
+    reset();
+    store.set('leagues/L', { name: 'Liga L' });
+    store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+    descriptorRejection = fazErro;
+    const rf = await call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm'));
+    check(`anual: Mercado Pago recusa o nome na fatura (${rotulo}): a cobrança sai sem ele e a pessoa recebe o link de pagamento`, rf.initPoint === 'https://mp.test/preference/xyz' && attempts.length === 2 && 'statement_descriptor' in attempts[0] && !('statement_descriptor' in attempts[1]) && calls.preferenceCreate.length === 1 && !('statement_descriptor' in calls.preferenceCreate[0]), { attempts: attempts.length, criadas: calls.preferenceCreate.length });
+    check(`…o resto da cobrança é o mesmo na segunda tentativa (item, valor, liga, e-mail, webhook, retorno)`, attempts[1].items[0].unit_price === 238.8 && attempts[1].items[0].title === 'Pelada na Mão — Assinatura anual' && attempts[1].external_reference === 'L' && attempts[1].payer.email === 'adm@x.com' && attempts[1].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook' && attempts[1].back_urls.success === 'https://peladanamao.com.br/?mpReturn=L' && attempts[1].auto_return === 'approved', attempts[1]);
+    check('…e fica um aviso (warn) no registro, para o dono saber que o nome na fatura foi recusado', logs.some(l => l.level === 'warn' && /nome na fatura/.test(l.m)) && !logs.some(l => l.level === 'error'), logs.map(l => l.m));
+  }
+  // outras recusas NÃO disparam a segunda tentativa
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  createShouldThrowMessage = 'invalid payer email';
+  const codeOutra = await codeOf(call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')));
+  check('anual: recusa por outro motivo (e-mail do pagador, por exemplo): uma tentativa só, erro normal em português, sem repetir', codeOutra === 'failed-precondition' && attempts.length === 1 && calls.preferenceCreate.length === 0, { codeOutra, tentativas: attempts.length });
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+  descriptorRejection = () => { const e = new Error('algo deu errado'); e.status = 500; const ciclo = { a: 1 }; ciclo.self = ciclo; e.cause = ciclo; return e; };
+  const codeCiclo = await codeOf(call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')));
+  check('anual: erro com causa que não vira texto (referência circular) e sem citar o nome na fatura: não estoura estranho, uma tentativa só e erro normal', codeCiclo === 'failed-precondition' && attempts.length === 1, { codeCiclo, tentativas: attempts.length });
+  reset();
+  store.set('leagues/L', { name: 'Liga L' });
+  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
 
   // ───────── checkSubscriptionStatus (fallback quando o webhook atrasa/falha) ─────────
   reset();
