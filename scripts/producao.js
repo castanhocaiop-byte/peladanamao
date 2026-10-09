@@ -46,6 +46,10 @@ async function inspectMpAccount(token, fetchImpl = fetch, timeoutMs = 10000) {
   return { verdict: /^TEST/i.test(nickname) ? 'test' : 'real', nickname, id: j.id != null ? String(j.id) : '', site: typeof j.site_id === 'string' ? j.site_id : '' };
 }
 
+// Parece uma chave colada no lugar de uma resposta? A chave NUNCA é digitada nem colada aqui: o comando lê o que foi copiado,
+// mais adiante. Cobre as chaves do Mercado Pago (começam com APP_USR- ou TEST-) e qualquer texto comprido sem espaço
+// (Client Secret, assinatura do webhook…).
+const looksLikeKey = a => { const t = String(a == null ? '' : a).trim(); return /^(APP_USR|TEST)-/i.test(t) || /^[A-Za-z0-9_\-]{32,}$/.test(t); };
 const saidSIM = a => String(a == null ? '' : a).trim().toUpperCase() === 'SIM';
 const saidYes = a => /^(s|sim)$/i.test(String(a == null ? '' : a).trim());
 const firebaseSetArgs = name => ['functions:secrets:set', name, '--data-file', '-', '--force', '--project', PROJECT]; // o valor vai pela entrada padrão, nunca por aqui
@@ -66,10 +70,23 @@ async function run(argv, io) {
   io.out(name === 'MERCADOPAGO_ACCESS_TOKEN'
     ? 'Com a chave de produção, o app passa a COBRAR DE VERDADE (depois de você publicar as funções).'
     : 'Esta assinatura confere os avisos que o Mercado Pago manda ao app: se estiver errada, os pagamentos deixam de ser confirmados.');
-  if (!saidSIM(await io.ask('\nPara continuar, digite SIM: '))) { io.out('Cancelado. Nada foi gravado.'); return 1; }
+  // Se uma chave foi colada numa resposta, ela ficou visível na tela: recusa, não mostra o que foi colado e manda renovar a chave.
+  let readClip = false;
+  const refuseKey = answer => {
+    if (!looksLikeKey(answer)) return false;
+    if (readClip) io.clearClipboard();
+    io.err('✗ Isso parece uma CHAVE. Não cole a chave aqui: este comando lê o que você copiou, mais adiante, e nunca a mostra. Como ela apareceu na tela, renove a chave no painel do Mercado Pago (Credenciais de produção → ⋮ → Renovar) e comece de novo. Nada foi gravado.');
+    return true;
+  };
 
-  await io.ask(`\n${HOW_TO_COPY[name]}.\nQuando tiver copiado, volte para esta tela e aperte Enter... `);
+  const sure = await io.ask('\nPara continuar, digite SIM (só estas 3 letras; a chave NÃO é digitada nem colada aqui): ');
+  if (refuseKey(sure)) return 1;
+  if (!saidSIM(sure)) { io.out('Cancelado. Nada foi gravado.'); return 1; }
+
+  const ready = await io.ask(`\n${HOW_TO_COPY[name]}.\nQuando tiver copiado, volte para esta tela e aperte só o Enter (sem colar nada aqui)... `);
+  if (refuseKey(ready)) return 1;
   const copied = io.readClipboard();
+  readClip = true;
   if (copied.error) { io.err('✗ ' + copied.error); return 1; }
   const checked = checkSecretValue(name, copied.text);
   if (checked.error) { io.err('✗ ' + checked.error); return 1; }
@@ -87,10 +104,14 @@ async function run(argv, io) {
       io.out(`⚠️  Chave de TESTE (${who.nickname}): o app voltará a funcionar só em modo de teste (ninguém é cobrado de verdade).`);
     } else if (who.verdict === 'real') {
       io.out(`Conta do Mercado Pago dona desta chave: ${who.nickname}${who.id ? ` (id ${who.id})` : ''}${who.site ? `, país ${who.site}` : ''}.`);
-      if (!saidYes(await io.ask('É a SUA conta de vendedor? (S/N) '))) { io.out('Cancelado. Nada foi gravado.'); return 1; }
+      const mine = await io.ask('É a SUA conta de vendedor? (S/N) ');
+      if (refuseKey(mine)) return 1;
+      if (!saidYes(mine)) { io.out('Cancelado. Nada foi gravado.'); return 1; }
     } else {
       io.out(`⚠️  Não consegui conferir de quem é a chave: ${who.why}.`);
-      if (!saidSIM(await io.ask('Gravar mesmo assim? Digite SIM: '))) { io.out('Cancelado. Nada foi gravado.'); return 1; }
+      const anyway = await io.ask('Gravar mesmo assim? Digite SIM: ');
+      if (refuseKey(anyway)) return 1;
+      if (!saidSIM(anyway)) { io.out('Cancelado. Nada foi gravado.'); return 1; }
     }
   }
 
@@ -136,4 +157,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
-module.exports = { run, inspectMpAccount, firebaseSetArgs, saidSIM, saidYes, SECRETS, PROJECT };
+module.exports = { run, inspectMpAccount, firebaseSetArgs, saidSIM, saidYes, looksLikeKey, SECRETS, PROJECT };

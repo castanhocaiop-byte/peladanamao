@@ -26,6 +26,8 @@ No terminal (o do app abre na pasta `Projetos`, por isso o caminho completo):
 node "C:\Users\caiop\Documents\Cursos\Claude Code\Projetos\aceoma\scripts\producao.js" secret MERCADOPAGO_ACCESS_TOKEN
 ```
 
+**A chave nunca é digitada nem colada no terminal**: você só digita `SIM` (3 letras) e aperta Enter; o comando lê o que você copiou na hora certa. Se a chave for colada por engano numa das perguntas, o comando recusa, não grava e avisa. Como ela fica visível na tela (e em qualquer conversa onde apareça), **renove-a no painel do Mercado Pago** antes de usar (Credenciais de produção → os três pontinhos ao lado da credencial → **Renovar** → **Renovar agora**) e comece de novo com a chave nova.
+
 O que o comando faz, em ordem:
 1. Avisa que vai gravar na **produção** e só continua se você digitar `SIM`.
 2. Pede para você copiar o Access Token de produção e apertar Enter (assim nada sobrescreve o que você copiou).

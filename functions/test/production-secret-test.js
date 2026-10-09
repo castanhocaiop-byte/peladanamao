@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const script = path.join(__dirname, '..', '..', 'scripts', 'producao.js');
-const { run, inspectMpAccount, firebaseSetArgs, saidSIM, saidYes, SECRETS, PROJECT } = require(script);
+const { run, inspectMpAccount, firebaseSetArgs, saidSIM, saidYes, looksLikeKey, SECRETS, PROJECT } = require(script);
 
 let fails = 0, oks = 0, finished = false;
 process.on('exit', () => { if (!finished) { console.error('ERRO NO TESTE: não chegou ao fim (algo ficou esperando para sempre)'); process.exitCode = 1; } });
@@ -97,6 +97,33 @@ function await_(p) { return p; } // (os testes abaixo rodam dentro do bloco ass�
     code = await run(['secret', AT], t.io);
     check(`confirmação de segurança com "${resposta}" (só SIM vale): cancela, não lê a área de transferência e não grava`, code === 1 && t.calls.reads === 0 && t.calls.set.length === 0 && t.calls.cleared === 0 && /Cancelado/.test(t.calls.out.join(' ')), t.calls);
   }
+  // ── chave colada onde não devia (aconteceu em 09/10/2026: a chave foi colada na pergunta do SIM e ficou na tela) ───
+  const KEY_SAMPLES = [['chave do Mercado Pago (APP_USR-…)', TOKEN], ['chave de teste (TEST-…)', 'TEST-1234567890123456-100116-abcdef0123456789abcdef0123456789-195165835'], ['Public Key', PUBLIC_KEY], ['Client Secret (32 letras e números sem espaço)', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'], ['assinatura do webhook', WEBHOOK_SECRET], ['chave com espaços e quebra de linha nas pontas', '  ' + TOKEN + ' \r\n'], ['começo de chave cortado (APP_USR-…)', 'APP_USR-1699'], ['começo de chave de teste cortado (TEST-…)', 'TEST-1699']];
+  for (const [rotulo, colado] of KEY_SAMPLES) {
+    t = makeIo({ answers: [colado] });
+    code = await run(['secret', AT], t.io);
+    const tudo = JSON.stringify([t.calls.out, t.calls.err, t.calls.asked]);
+    check(`${rotulo} colada na pergunta do SIM: recusa e manda renovar a chave, sem ler a área de transferência, sem gravar e sem repetir o que foi colado`, code === 1 && t.calls.reads === 0 && t.calls.set.length === 0 && t.calls.cleared === 0 && /parece uma CHAVE/.test(t.calls.err.join(' ')) && /Renovar/.test(t.calls.err.join(' ')) && !/Cancelado/.test(t.calls.out.join(' ')) && !tudo.includes(colado.trim()), t.calls);
+  }
+  for (const resposta of ['a'.repeat(31), 'sim claro pode continuar por favor sim sim sim', 'APP_USR', 'TEST', 'sim-pode', 'nao-sei']) {
+    t = makeIo({ answers: [resposta] });
+    code = await run(['secret', AT], t.io);
+    check(`resposta comum "${resposta.slice(0, 20)}…" (não parece chave: curta ou com espaços): continua sendo só "Cancelado", sem o aviso de chave`, code === 1 && /Cancelado/.test(t.calls.out.join(' ')) && t.calls.err.length === 0, t.calls);
+  }
+  t = makeIo({ answers: [SIM, TOKEN] });
+  code = await run(['secret', AT], t.io);
+  check('chave colada no lugar do Enter (na hora de copiar): recusa, não lê a área de transferência, não grava e não repete o valor', code === 1 && t.calls.reads === 0 && t.calls.set.length === 0 && t.calls.cleared === 0 && /parece uma CHAVE/.test(t.calls.err.join(' ')) && !leaked(t.calls), t.calls);
+  t = makeIo({ answers: [SIM, '', TOKEN] });
+  code = await run(['secret', AT], t.io);
+  check('chave colada na pergunta "é a sua conta?": recusa, não grava e LIMPA a área de transferência (a chave estava nela)', code === 1 && t.calls.set.length === 0 && t.calls.cleared === 1 && /parece uma CHAVE/.test(t.calls.err.join(' ')) && !leaked(t.calls), t.calls);
+  t = makeIo({ answers: [SIM, '', TOKEN], fetchImpl: async () => { throw new Error('sem rede'); } });
+  code = await run(['secret', AT], t.io);
+  check('chave colada na pergunta "gravar mesmo assim?" (quando não deu para conferir a conta): recusa, não grava e limpa a área de transferência', code === 1 && t.calls.set.length === 0 && t.calls.cleared === 1 && /Gravar mesmo assim/.test(t.calls.asked[2]) && /parece uma CHAVE/.test(t.calls.err.join(' ')) && !leaked(t.calls), t.calls);
+  t = makeIo({ answers: [SIM, '', 's'] });
+  await run(['secret', AT], t.io);
+  check('as perguntas avisam, em cada etapa, que a chave não é digitada nem colada no terminal (só SIM e Enter)', /só estas 3 letras/.test(t.calls.asked[0]) && /NÃO é digitada nem colada/.test(t.calls.asked[0]) && /só o Enter/.test(t.calls.asked[1]) && /sem colar nada/.test(t.calls.asked[1]), t.calls.asked);
+  check('looksLikeKey: sim para APP_USR-…, TEST-… e textos de 32+ letras/números sem espaço; não para SIM, S, vazio, nulo, frases e textos de 31', KEY_SAMPLES.every(([, v]) => looksLikeKey(v)) && ['SIM', 's', '', null, undefined, 'sim, claro', 'a'.repeat(31), 'duas palavras ' + 'a'.repeat(40)].every(v => !looksLikeKey(v)));
+
   t = makeIo({ answers: [SIM, ''], clip: { error: 'Não consegui acessar a área de transferência deste computador.' } });
   code = await run(['secret', AT], t.io);
   check('área de transferência inacessível: erro claro, nada gravado', code === 1 && t.calls.set.length === 0 && /área de transferência/.test(t.calls.err.join(' ')), t.calls);
