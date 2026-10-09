@@ -149,7 +149,7 @@ exports.onChampionshipChange = onDocumentWritten(
     // Convocação aberta
     if (statusBefore !== "preset" && statusAfter === "preset") {
       const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-      const leagueName = leagueSnap.data()?.name || "Aceoma";
+      const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
       const dateStr = after.date
         ? new Date(after.date + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })
         : "";
@@ -166,7 +166,7 @@ exports.onChampionshipChange = onDocumentWritten(
     // Campeonato finalizado
     if (statusBefore !== "completed" && statusAfter === "completed") {
       const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-      const leagueName = leagueSnap.data()?.name || "Aceoma";
+      const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
       const champion = after.champion || "";
       const teamColors = { azul: "Azul", amarelo: "Amarelo", vermelho: "Vermelho", verde: "Verde", laranja: "Laranja", preto: "Preto", roxo: "Roxo", cinza: "Cinza", rosa: "Rosa", branco: "Branco" };
       const champName = teamColors[champion] || champion;
@@ -192,7 +192,7 @@ exports.onChampionshipChange = onDocumentWritten(
       if (!tokens.length) return;
 
       const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-      const leagueName = leagueSnap.data()?.name || "Aceoma";
+      const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
       const cats = [after.voting.pos ? "na Bola Cheia" : "", after.voting.neg ? "na Bola Murcha" : ""]
         .filter(Boolean).join(" e ");
       const deadline = new Date(deadlineMs).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
@@ -263,7 +263,7 @@ exports.onAvulsoCreated = onDocumentWritten(
 
     if (!tokens.length) return;
     const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-    const leagueName = leagueSnap.data()?.name || "Aceoma";
+    const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
     const body = valor ? `Cobrança de ${valor} gerada.` : "Nova cobrança gerada.";
 
     await sendToTokens([...new Set(tokens)], { title: `💰 ${leagueName}`, body }, { leagueId, view: "financeiro" }, `avulso-${docId}`);
@@ -286,7 +286,7 @@ exports.onMensalidadeLembrete = onDocumentWritten(
     if (!players.length) return;
 
     const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-    const leagueName = leagueSnap.data()?.name || "Aceoma";
+    const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
     const valFmt = valor ? `R$${Number(valor).toFixed(2).replace(".", ",")}` : "";
     const pixLine = pixKey ? `\n🔑 Chave PIX: ${pixKey}` : "";
 
@@ -332,7 +332,7 @@ exports.onBadgeEarned = onDocumentWritten(
     if (!tokens.length) return;
 
     const leagueSnap = await db.doc(`leagues/${leagueId}`).get();
-    const leagueName = leagueSnap.data()?.name || "Aceoma";
+    const leagueName = leagueSnap.data()?.name || "Pelada na Mão";
 
     const label = newBadges.length === 1
       ? `"${newBadges[0].label}"`

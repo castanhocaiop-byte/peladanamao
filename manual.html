@@ -1554,7 +1554,7 @@ p strong {
       <p>Cada envio carrega uma <strong>etiqueta do evento</strong> (por exemplo, a votação de um campeonato). Se o mesmo aviso chegar mais de uma vez ao mesmo navegador, ele <strong>substitui</strong> o anterior em vez de empilhar. O aplicativo em segundo plano deixou de exibir uma segunda cópia por conta própria — o navegador já exibe a que vem do servidor. Aparelhos com a versão antiga do aplicativo passam a usar a nova assim que o app é aberto uma vez.</p>
       <div class="callout warn">
         <div class="callout-label warn">Ainda pode aparecer em dobro</div>
-        Um mesmo celular que use o site em <strong>dois navegadores</strong> (ex.: Chrome e o app instalado na tela inicial no iPhone) tem dois cadastros de notificação independentes e recebe um aviso em cada um. Para receber uma vez só, ative as notificações em apenas um deles.
+        Um mesmo celular que use o site em <strong>dois navegadores</strong> (ex.: Chrome e o app instalado na tela inicial no iPhone) tem dois cadastros de notificação independentes e recebe um aviso em cada um. Para receber uma vez só, ative as notificações em apenas um deles. O mesmo vale para quem ativou no endereço antigo (<code>aceoma.vercel.app</code>) e depois também no oficial (peladanamao.com.br): cada endereço é um cadastro à parte — veja <a href="#endereco-do-app" style="color: var(--accent)">Endereço do app</a>, na seção 27.
       </div>
 
       <h3>Churrasco retroativo no histórico <span class="tag">Visível apenas com churrasco ativado</span></h3>
@@ -2615,7 +2615,7 @@ p strong {
 
       <div class="callout" id="endereco-do-app">
         <div class="callout-label">Endereço do app</div>
-        O endereço oficial é <strong>peladanamao.com.br</strong>. O endereço antigo (<code>aceoma.vercel.app</code>) continua funcionando, mas <strong>redireciona</strong> para o oficial, mantendo o convite ou a página que a pessoa abriu: links antigos colados em grupos não quebram. Os dados (conta, ligas, jogadores, financeiro) são os mesmos nos dois; o que é guardado <em>por endereço</em>, em cada aparelho, é o login e a permissão de notificações — então quem usava o endereço antigo <strong>entra de novo uma vez</strong> e reativa as notificações no oficial. As notificações também abrem o endereço oficial.
+        O endereço oficial é <strong>peladanamao.com.br</strong>. O endereço antigo (<code>aceoma.vercel.app</code>) continua funcionando, mas <strong>redireciona</strong> para o oficial, mantendo o convite ou a página que a pessoa abriu: links antigos colados em grupos não quebram. Os dados (conta, ligas, jogadores, financeiro) são os mesmos nos dois; o que é guardado <em>por endereço</em>, em cada aparelho, é o login e a permissão de notificações — então quem usava o endereço antigo <strong>entra de novo uma vez</strong> e reativa as notificações no oficial. As notificações também abrem o endereço oficial. Enquanto um aparelho não reativar, as notificações <strong>continuam chegando pelo endereço antigo</strong> e o navegador escreve <code>aceoma.vercel.app</code> embaixo do aviso (o título é o nome da liga; o ícone e o link já são do endereço oficial). Para trocar esse rótulo, no Chrome abra <code>chrome://settings/content/notifications</code>, remova <code>aceoma.vercel.app</code> e ative de novo em peladanamao.com.br: ativar no oficial <em>sem</em> remover o antigo faz cada aviso chegar <strong>em dobro</strong> enquanto o antigo continuar cadastrado.
       </div>
 
       <h3>Compartilhar o link da liga</h3>

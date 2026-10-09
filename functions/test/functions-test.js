@@ -12,6 +12,7 @@ const users = {
   outra: { leagues: { OUTRA: { role: 'player', playerKey: 'ana' } }, fcmTokens: ['tO'] },         // outra liga
   dead:  { leagues: { L: { role: 'player', playerKey: 'duda' } }, fcmTokens: ['tDEAD', 'tD'] },
 };
+let leagueDoc = { name: 'Aceoma' }; // o documento da liga L (aqui "Aceoma" é o nome de uma liga, não do produto)
 const updates = [];
 const sent = [];
 const deadTokens = new Set(['tDEAD']);
@@ -40,7 +41,8 @@ const fakeDb = {
     });
     return build([]);
   },
-  doc: () => ({ get: async () => ({ data: () => ({ name: 'Aceoma' }) }) }),
+  // users/<uid> devolve o cadastro do usuário; qualquer outro caminho é o documento da liga (leagueDoc, que os testes do nome ausente trocam)
+  doc: docPath => ({ get: async () => ({ data: () => (String(docPath).startsWith('users/') ? users[String(docPath).slice(6)] : leagueDoc) }) }),
 };
 const fakeMessaging = {
   sendEachForMulticast: async msg => {
@@ -279,6 +281,54 @@ const check = (label, cond, extra) => {
   reset();
   await fns.onChampionshipChange(evt({ status: 'active', teamRosters: roster }, finalized));
   check('usuário de outra liga (mesma chave "ana") nunca recebe notificação', !sent.some(m => [...(m.tokens || [])].includes('tO')), sent);
+
+  // ───────── nome da liga: o título leva o nome da LIGA; sem nome, o texto reserva é "Pelada na Mão" (nunca o nome antigo) ─────────
+  // Em todas as notificações o título (ou, no lembrete de mensalidade, o texto) usa league.name. Só quando a liga está sem nome, ou o
+  // documento dela não existe mais (liga encerrada no meio do envio), entra um texto reserva, e ele tem de ser o nome do produto.
+  console.log('── nome da liga: o título leva o nome da liga; sem nome, "Pelada na Mão"');
+  const comLiga = async (doc, fn) => { leagueDoc = doc; reset(); try { await fn(); } finally { leagueDoc = { name: 'Aceoma' }; } return sent.map(m => m.notification); };
+  const avulsoEvt = { params: { leagueId: 'L', docId: 'avN' }, data: { before: { data: () => undefined }, after: { data: () => ({ nome: 'Ana', valor: 30 }) } } };
+  const lembreteEvt = { params: { leagueId: 'L', docId: 'lbN' }, data: { before: { data: () => undefined }, after: { data: () => ({ players: ['Ana'], mesLabel: 'Set/26', valor: 50 }), ref: { delete: async () => {} } } } };
+  const badgeEvt = { params: { uid: 'ana', pushId: 'pN' }, data: { after: { exists: true, data: () => ({ leagueId: 'L', newBadges: [{ id: 'b1', label: 'Pelo menos tinha churrasco' }] }), ref: { delete: async () => {} } } } };
+  // Cada aviso: como disparar e o texto EXATO esperado para um nome de liga (o título, ou o começo do texto no lembrete de mensalidade).
+  const seisAvisos = {
+    'convocação': { rodar: () => fns.onChampionshipChange(evt(undefined, { status: 'preset', date: '2026-09-29', churrasco: true })), certo: (n, nome) => n.title === `📋 Convocação — ${nome}` },
+    'resultado': { rodar: () => fns.onChampionshipChange(evt({ status: 'active', teamRosters: roster }, semVotacao)), certo: (n, nome) => n.title === `🏆 Resultado — ${nome}` },
+    'votação aberta': { rodar: () => fns.onChampionshipChange(evt(semVotacao, finalized)), certo: (n, nome) => n.title === `🗳️ Votação aberta — ${nome}` },
+    'cobrança avulsa': { rodar: () => fns.onAvulsoCreated(avulsoEvt), certo: (n, nome) => n.title === `💰 ${nome}` },
+    'lembrete de mensalidade': { rodar: () => fns.onMensalidadeLembrete(lembreteEvt), certo: (n, nome) => n.body.startsWith(`Sua mensalidade do Futebol ${nome} de Set/26 está em atraso.`) },
+    'conquista': { rodar: () => fns.onBadgeEarned(badgeEvt), certo: (n, nome) => n.title === `🏅 ${nome}` },
+  };
+  const textoDe = n => `${n.title}\n${n.body}`;
+  for (const [rotulo, { rodar, certo }] of Object.entries(seisAvisos)) {
+    const comNome = await comLiga({ name: 'FutQuarta' }, rodar);
+    check(`${rotulo}: leva o nome da liga (FutQuarta), sem o nome do produto nem o antigo`, comNome.length === 1 && certo(comNome[0], 'FutQuarta') && !/Pelada na Mão|Aceoma/.test(textoDe(comNome[0])), comNome);
+    for (const [caso, doc] of [['liga sem nome', {}], ['documento da liga inexistente', undefined]]) {
+      const semNome = await comLiga(doc, rodar);
+      check(`${rotulo}, ${caso}: usa exatamente "Pelada na Mão" como texto reserva, nunca o nome antigo`, semNome.length === 1 && certo(semNome[0], 'Pelada na Mão') && !/Aceoma/.test(textoDe(semNome[0])), semNome);
+    }
+  }
+
+  // ───────── firebase-messaging-sw.js: aviso só de dados (sem "notification"), sem título ─────────
+  console.log('── service worker: texto reserva do título');
+  const swSrc = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'firebase-messaging-sw.js'), 'utf8');
+  const swShown = []; let swHandler = null;
+  const swFirebase = { initializeApp() {}, messaging: () => ({ onBackgroundMessage: fn => { swHandler = fn; } }) };
+  const swSelf = { location: { hostname: 'peladanamao.com.br' }, addEventListener() {}, registration: { showNotification: (titulo, opcoes) => swShown.push({ titulo, opcoes }) } };
+  new Function('importScripts', 'firebase', 'self', 'clients', swSrc)(() => {}, swFirebase, swSelf, {});
+  check('service worker: registrou o tratador de mensagens em segundo plano', typeof swHandler === 'function');
+  swHandler({ data: { body: 'Olá' } });
+  check('service worker: aviso só de dados, sem título, usa "Pelada na Mão" (não o nome antigo)', swShown.length === 1 && swShown[0].titulo === 'Pelada na Mão' && swShown[0].opcoes.body === 'Olá', swShown);
+  swHandler({});
+  check('service worker: mensagem sem dado nenhum não quebra e usa o mesmo texto', swShown.length === 2 && swShown[1].titulo === 'Pelada na Mão', swShown);
+  swHandler({ data: { title: '🏅 FutQuarta', body: 'x' } });
+  check('service worker: com título, mostra o título recebido', swShown.length === 3 && swShown[2].titulo === '🏅 FutQuarta', swShown);
+  swHandler({ notification: { title: 'já mostrado pelo Firebase' }, data: { title: 'x' } });
+  check('service worker: aviso que já traz "notification" fica por conta do Firebase (não mostra de novo)', swShown.length === 3, swShown);
+
+  // O nome antigo não pode voltar como texto reserva em nenhum dos dois lugares.
+  const textoReservaAntigo = /\|\|\s*["']Aceoma["']/;
+  check('o servidor (functions/index.js) e o service worker não têm mais o nome antigo "Aceoma" como texto reserva', !textoReservaAntigo.test(require('fs').readFileSync(path, 'utf8')) && !textoReservaAntigo.test(swSrc));
 
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

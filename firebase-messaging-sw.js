@@ -35,7 +35,7 @@ self.addEventListener('activate', event => event.waitUntil(clients.claim()));
 messaging.onBackgroundMessage(payload => {
   if (payload.notification) return;
   const d = payload.data || {};
-  self.registration.showNotification(d.title || 'Aceoma', {
+  self.registration.showNotification(d.title || 'Pelada na Mão', {
     body: d.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
