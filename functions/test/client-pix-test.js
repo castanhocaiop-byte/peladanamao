@@ -66,7 +66,7 @@ function makeEnv({ clipboard = 'ok', execCommand = true, db = true, origin = 'ht
     playerKey: n => String(n).trim().toLowerCase(),
   };
   const names = Object.keys(env);
-  const api = new Function(...names, code + '\nreturn { pixSetup, pixDue, pixPayload, pixTestPayload, pixButton, pixCopyText, openPixPay, copyPixCode, mPixPay, pixKeyStatusHtml, pixKeyInput, pixPickType, copyPixTest, mFinConfig, saveFinConfig, waMensalidadeLink, pixBRL };')(...names.map(n => env[n]));
+  const api = new Function(...names, code + '\nreturn { pixSetup, pixDue, pixSelected, pixToggleItem, pixPayload, pixTestPayload, pixButton, pixCopyText, openPixPay, copyPixCode, mPixPay, pixKeyStatusHtml, pixKeyInput, pixPickType, copyPixTest, mFinConfig, saveFinConfig, waMensalidadeLink, pixBRL };')(...names.map(n => env[n]));
   return { api, st, calls, els, env };
 }
 const tick = () => new Promise(r => setTimeout(r, 10));
@@ -212,6 +212,97 @@ for (const [rot, mes, nome, over] of [['mês inválido', 'xx', 'Ana Maria', {}],
   e = makeEnv({ st: { finCfg: { valorMensalidade: 50, chavePix: 'jogador@exemplo.com' } } });
   e.st.modal = { type: 'pixPay', month: MES, name: 'Ana Maria' };
   check('chave de e-mail também sai escondida (j***@exemplo.com) e nunca inteira', /j\*\*\*@exemplo\.com/.test(e.api.mPixPay()) && !/jogador@exemplo/.test(e.api.mPixPay()));
+
+  // ── desmarcar o churrasco (quando é cobrado à parte) ───────────────────────────────────────────
+  const COM_CHURRASCO = { appCfg: { hasChurrasco: true, churrascoSeparado: true }, finCfg: { valorMensalidade: 50, valorChurrasco: 30, valorSomenteChurrasco: 25, vencimentoDia: 10, chavePix: CPF, chavePixTipo: '' } };
+  const novaJanela = (over = {}, modal = {}) => { const x = makeEnv({ st: { ...COM_CHURRASCO, ...over } }); x.st.modal = { type: 'pixPay', month: MES, name: 'Ana Maria', ...modal }; return x; };
+  const caixas = h => (h.match(/type="checkbox"/g) || []).length;
+  const texto = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const tipos = s => s.itens.map(i => i.tipo).join();
+
+  // o que entra na conta
+  e = novaJanela();
+  const due = e.api.pixDue('Ana Maria', MES);
+  check('sem desmarcar nada (ou com a lista vazia): tudo o que se deve entra, mensalidade + churrasco = R$ 80,00', tipos(e.api.pixSelected(due, undefined)) === 'mensalidade,churrasco' && e.api.pixSelected(due, undefined).total === 80 && e.api.pixSelected(due, []).total === 80);
+  check('desmarcando o churrasco: sobra só a mensalidade (R$ 50,00)', tipos(e.api.pixSelected(due, ['churrasco'])) === 'mensalidade' && e.api.pixSelected(due, ['churrasco']).total === 50);
+  check('a mensalidade NUNCA sai da conta, nem com um estado estranho (lista com "mensalidade" ou nomes que não existem)', e.api.pixSelected(due, ['mensalidade']).total === 80 && e.api.pixSelected(due, ['mensalidade', 'churrasco']).total === 50 && e.api.pixSelected(due, ['xyz']).total === 80);
+  check('lista inválida (nula, texto, número, objeto) vale como "nada desmarcado"', [null, 'churrasco', 5, {}].every(o => e.api.pixSelected(due, o).total === 80));
+  check('a conta continua em centavos exatos: 29,90 + 10,10 = 40,00 e, sem o churrasco, 29,90', (() => { const x = novaJanela({ finCfg: { valorMensalidade: 29.9, valorChurrasco: 10.1, chavePix: CPF } }); const d = x.api.pixDue('Ana Maria', MES); return x.api.pixSelected(d, []).total === 40 && x.api.pixSelected(d, ['churrasco']).total === 29.9; })());
+  check('…e com valores que quebram em ponto flutuante (0,10 + 0,20 e 1,10 + 2,20) a soma continua exata, com e sem o churrasco', [[0.1, 0.2, 0.3], [1.1, 2.2, 3.3]].every(([a, b, soma]) => { const x = novaJanela({ finCfg: { valorMensalidade: a, valorChurrasco: b, chavePix: CPF } }); const d = x.api.pixDue('Ana Maria', MES); return x.api.pixSelected(d, []).total === soma && x.api.pixSelected(d, ['churrasco']).total === a; }));
+  check('não mexe no que se deve: pixDue continua devolvendo os dois itens (o botão grande mostra o total cheio)', tipos(due) === 'mensalidade,churrasco' && due.total === 80 && /Pagar com PIX · R\$ 80,00/.test(e.api.pixButton('Ana Maria', MES, 'pill')));
+  const dBeto = e.api.pixDue('Beto', MES);
+  check('jogador "só churrasco" (R$ 25): o churrasco é o único item; desmarcado, não sobra nada (total 0)', tipos(dBeto) === 'churrasco' && e.api.pixSelected(dBeto, []).total === 25 && e.api.pixSelected(dBeto, ['churrasco']).total === 0 && e.api.pixSelected(dBeto, ['churrasco']).itens.length === 0);
+
+  // o código
+  const semChurrasco = e.api.pixPayload('Ana Maria', MES, ['churrasco']);
+  check('código sem o churrasco: valor R$ 50,00 e a mensagem diz só "Mensalidade 10/2026 Ana Maria"', campo(semChurrasco, '54') === '50.00' && mensagemDe(semChurrasco) === 'Mensalidade 10/2026 Ana Maria', { v: campo(semChurrasco, '54'), m: mensagemDe(semChurrasco) });
+  check('…sem desmarcar nada: o mesmo de antes, R$ 80,00 e "Mensalidade e Churrasco"', campo(e.api.pixPayload('Ana Maria', MES), '54') === '80.00' && campo(e.api.pixPayload('Ana Maria', MES, []), '54') === '80.00' && /^Mensalidade e Churrasco 10\/2026/.test(mensagemDe(e.api.pixPayload('Ana Maria', MES, [])) || ''));
+  check('…churrasco desmarcado de quem só paga churrasco: nenhum código ("" em vez de um código de R$ 0)', e.api.pixPayload('Beto', MES, ['churrasco']) === '' && e.api.pixPayload('Beto', MES) !== '');
+
+  // a janela
+  let wj;
+  e = novaJanela();
+  wj = e.api.mPixPay();
+  let tj = texto(wj);
+  check('churrasco cobrado à parte: o churrasco ganha uma caixa de marcar, já marcada, e a mensalidade não tem caixa (uma só)', caixas(wj) === 1 && /<input type="checkbox" checked onchange="pixToggleItem\('churrasco'\)"/.test(wj) && !/<label[^>]*>(?:(?!<\/label>)[\s\S])*Mensalidade/.test(wj), wj);
+  check('…total R$ 80,00, dica de desmarcar quem não vai ao churrasco e botão de copiar ligado', /Total R\$ 80,00/.test(tj) && /Não vai ao churrasco neste mês\? Desmarque o churrasco e pague só a mensalidade\./.test(tj) && /onclick="copyPixCode\(\)"/.test(wj) && !/disabled/.test(wj), tj);
+  check('…a linha do churrasco inteira é a caixa (tocar no nome ou no valor também marca): é um <label> com o nome e o valor dentro', /<label[^>]*>[^]*Churrasco · outubro de 2026<\/span><b[^>]*>R\$ 30,00<\/b><\/label>/.test(wj) && !/line-through/.test(wj));
+  e = novaJanela({}, { off: ['churrasco'] });
+  wj = e.api.mPixPay(); tj = texto(wj);
+  check('churrasco desmarcado: caixa sem "checked", nome e valor riscados (continuam escritos), total R$ 50,00 e mensalidade intacta', caixas(wj) === 1 && !/type="checkbox" checked/.test(wj) && (wj.match(/line-through/g) || []).length === 2 && /Total R\$ 50,00/.test(tj) && /Mensalidade · outubro de 2026 R\$ 50,00/.test(tj) && /Churrasco · outubro de 2026 R\$ 30,00/.test(tj), wj);
+  check('…o botão de copiar continua ligado (ainda há a mensalidade)', /onclick="copyPixCode\(\)"/.test(wj) && !/disabled/.test(wj));
+  e = makeEnv(); e.st.modal = { type: 'pixPay', month: MES, name: 'Ana Maria' };
+  wj = e.api.mPixPay();
+  check('churrasco incluído na mensalidade (ou liga sem churrasco): a janela não tem caixa nem dica nem a palavra churrasco', caixas(wj) === 0 && !/churrasco/i.test(texto(wj)), texto(wj));
+  e = novaJanela({}, { name: 'Beto' });
+  wj = e.api.mPixPay(); tj = texto(wj);
+  check('"só churrasco": o churrasco tem a caixa, mas sem a dica "pague só a mensalidade" (ele não paga mensalidade); total R$ 25,00', caixas(wj) === 1 && !/pague só a mensalidade/.test(tj) && /Total R\$ 25,00/.test(tj), tj);
+  e = novaJanela({}, { name: 'Beto', off: ['churrasco'] });
+  wj = e.api.mPixPay(); tj = texto(wj);
+  check('…desmarcado: total R$ 0,00 e o botão fica desligado, dizendo "Marque ao menos um item" (nada de código de R$ 0)', /Total R\$ 0,00/.test(tj) && /<button class="btn btn-primary" disabled[^>]*>📋 Marque ao menos um item<\/button>/.test(wj) && !/copyPixCode/.test(wj), wj);
+  e = novaJanela({}, { showCode: true, off: ['churrasco'] });
+  check('campo do código (quando a cópia falhou): mostra o código SEM o churrasco, igual ao que seria copiado', e.api.mPixPay().includes(e.api.pixPayload('Ana Maria', MES, ['churrasco'])) && !e.api.mPixPay().includes(e.api.pixPayload('Ana Maria', MES)));
+  e = novaJanela({}, { name: 'Beto', showCode: true, off: ['churrasco'] });
+  check('…sem nada marcado, o campo do código some', !/<textarea/.test(e.api.mPixPay()));
+
+  // marcar e desmarcar
+  e = novaJanela();
+  const r0b = e.calls.renders;
+  e.api.pixToggleItem('churrasco');
+  check('desmarcar o churrasco: guarda na janela (sem perder mês nem jogador) e redesenha', JSON.stringify(e.st.modal) === JSON.stringify({ type: 'pixPay', month: MES, name: 'Ana Maria', off: ['churrasco'] }) && e.calls.renders === r0b + 1, e.st.modal);
+  e.api.pixToggleItem('churrasco');
+  check('…marcar de novo: a lista volta a ficar vazia, redesenha e o código volta a ser o completo', JSON.stringify(e.st.modal.off) === '[]' && e.calls.renders === r0b + 2 && e.api.pixPayload('Ana Maria', MES, e.st.modal.off) === e.api.pixPayload('Ana Maria', MES));
+  e.api.pixToggleItem('mensalidade'); e.api.pixToggleItem('xyz'); e.api.pixToggleItem(undefined);
+  check('a mensalidade (ou qualquer outro nome) não pode ser desmarcada: nada muda e nada é redesenhado', JSON.stringify(e.st.modal.off) === '[]' && e.calls.renders === r0b + 2);
+  for (const ruim of ['churrasco', {}, 7, null]) {
+    const z = novaJanela({}, { off: ruim });
+    let estourou = false; try { z.api.pixToggleItem('churrasco'); } catch (_) { estourou = true; }
+    check(`lista de desmarcados corrompida na janela (${JSON.stringify(ruim)}): não estoura e o churrasco fica desmarcado só uma vez`, !estourou && JSON.stringify(z.st.modal.off) === '["churrasco"]', z.st.modal);
+  }
+  const e3 = makeEnv({ st: { modal: { type: 'finConfig' } } }); e3.api.pixToggleItem('churrasco');
+  const e4 = makeEnv(); e4.api.pixToggleItem('churrasco');
+  check('fora da janela de pagamento (outra janela ou nenhuma): ignora', e3.calls.renders === 0 && e4.calls.renders === 0 && JSON.stringify(e3.st.modal) === JSON.stringify({ type: 'finConfig' }) && e4.st.modal === null);
+  e = novaJanela({}, { showCode: true });
+  e.api.pixToggleItem('churrasco');
+  check('desmarcar com o campo do código aberto: o campo continua aberto e já mostra o código novo', e.st.modal.showCode === true && e.api.mPixPay().includes(e.api.pixPayload('Ana Maria', MES, ['churrasco'])));
+
+  // copiar
+  e = novaJanela(); e.api.openPixPay(MES, 'Ana Maria'); e.api.pixToggleItem('churrasco');
+  await e.api.copyPixCode();
+  check('copiar com o churrasco desmarcado: copia o código de R$ 50,00 (não o de R$ 80,00) e conta a cópia', e.calls.clips.length === 1 && campo(e.calls.clips[0], '54') === '50.00' && mensagemDe(e.calls.clips[0]) === 'Mensalidade 10/2026 Ana Maria' && e.calls.events.some(x => x[0] === 'pixCopy'), e.calls.clips);
+  e = novaJanela(); e.api.openPixPay(MES, 'Beto'); e.api.pixToggleItem('churrasco');
+  await e.api.copyPixCode();
+  check('copiar sem nada marcado: não copia, não conta e pede para marcar ao menos um item (não diz "nada pendente", que não é verdade)', e.calls.clips.length === 0 && !e.calls.events.some(x => x[0] === 'pixCopy') && e.calls.toasts.slice(-1)[0][0] === 'Marque ao menos um item para pagar.' && e.calls.toasts.slice(-1)[0][1] === 'err', e.calls.toasts);
+  e = novaJanela(); e.api.openPixPay(MES, 'Ana Maria'); e.api.pixToggleItem('churrasco'); e.st.modal = null; e.api.openPixPay(MES, 'Ana Maria');
+  check('fechar e abrir de novo: o churrasco volta marcado (a escolha vale só para aquela abertura)', e.st.modal.off === undefined && /type="checkbox" checked/.test(e.api.mPixPay()) && /Total R\$ 80,00/.test(texto(e.api.mPixPay())));
+  e = novaJanela(); e.api.openPixPay(MES, 'Ana Maria'); e.api.pixToggleItem('churrasco');
+  e.st.finMens[MES] = { pagamentos: { 'Ana Maria': { mensalidade: true, churrasco: true } } };
+  await e.api.copyPixCode();
+  check('tudo pago com a janela aberta (e o churrasco desmarcado): continua dizendo que não há nada pendente', /nada pendente/i.test(e.calls.toasts.slice(-1)[0][0]) && e.calls.clips.length === 0);
+
+  // como está escrito no código
+  check('só o churrasco pode ser desmarcado (lista fixa no código), e a caixa chama pixToggleItem com o tipo do item', /const PIX_OPCIONAIS = \['churrasco'\];/.test(pixCode) && /onchange="pixToggleItem\('\$\{i\.tipo\}'\)"/.test(pixCode));
+  check('o total da janela, o botão, o campo do código e a cópia usam o que ficou marcado (e não o total cheio)', /pixBRL\(sel\.total\)/.test(pixCode) && /sel\.total > 0/.test(pixCode) && (pixCode.match(/pixPayload\(m\.name, m\.month, m\.off\)/g) || []).length === 2 && !/pixPayload\(m\.name, m\.month\)/.test(pixCode));
 
   // ── janela do admin: reconhecimento da chave ───────────────────────────────────────────────────
   const S = (chavePix, chavePixTipo = '') => e2().api.pixKeyStatusHtml({ chavePix, chavePixTipo });

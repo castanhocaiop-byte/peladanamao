@@ -3528,9 +3528,20 @@ function pixDue(nome, mes) {
   return { itens, total: itens.reduce((s, i) => s + Math.round(i.valor * 100), 0) / 100 };
 }
 
-// O código de um jogador para um mês ('' se não há o que pagar ou a chave não está pronta).
-function pixPayload(nome, mes) {
-  const k = pixSetup(), due = pixDue(nome, mes);
+// Itens que a pessoa pode desmarcar na janela de pagamento: só o churrasco cobrado à parte (a mensalidade é sempre cobrada).
+const PIX_OPCIONAIS = ['churrasco'];
+
+// O que entra no código: o que o jogador deve, menos o que ele desmarcou na janela (`off`: lista dos tipos desmarcados).
+// Só os itens opcionais podem sair; qualquer outra coisa na lista é ignorada.
+function pixSelected(due, off) {
+  const fora = Array.isArray(off) ? off : [];
+  const itens = due.itens.filter(i => !(PIX_OPCIONAIS.includes(i.tipo) && fora.includes(i.tipo)));
+  return { itens, total: itens.reduce((s, i) => s + Math.round(i.valor * 100), 0) / 100 };
+}
+
+// O código de um jogador para um mês ('' se não há o que pagar ou a chave não está pronta). `off`: itens desmarcados na janela.
+function pixPayload(nome, mes, off) {
+  const k = pixSetup(), due = pixSelected(pixDue(nome, mes), off);
   if (!k || !(due.total > 0)) return '';
   const [a, m] = String(mes).split('-');
   return pixBrCode({ chave: k.chave, nome: pixLeagueName(), cidade: 'BRASIL', valor: due.total,
@@ -3572,8 +3583,8 @@ function openPixPay(mes, nome) {
 async function copyPixCode() {
   const m = st.modal;
   if (!m || m.type !== 'pixPay') return;
-  const code = pixPayload(m.name, m.month);
-  if (!code) { toast('Não há nada pendente para pagar.'); return; }
+  const code = pixPayload(m.name, m.month, m.off);
+  if (!code) { toast(pixSetup() && pixDue(m.name, m.month).total > 0 ? 'Marque ao menos um item para pagar.' : 'Não há nada pendente para pagar.'); return; }
   trackEvent('pixCopy', false);
   if (await pixCopyText(code)) { toast('Código copiado! Cole no Pix Copia e Cola do seu banco.', 'ok'); return; }
   st.modal = { ...m, showCode: true };
@@ -3581,11 +3592,21 @@ async function copyPixCode() {
   toast('Não consegui copiar sozinho. Toque no código e copie.');
 }
 
+// Marca ou desmarca um item opcional (o churrasco) na janela de pagamento. A escolha vale só enquanto a janela está aberta.
+function pixToggleItem(tipo) {
+  const m = st.modal;
+  if (!m || m.type !== 'pixPay' || !PIX_OPCIONAIS.includes(tipo)) return;
+  const off = Array.isArray(m.off) ? m.off : [];
+  st.modal = { ...m, off: off.includes(tipo) ? off.filter(t => t !== tipo) : [...off, tipo] };
+  render();
+}
+
 function mPixPay() {
   const m = st.modal;
   if (!m || m.type !== 'pixPay') return '';
   const k = pixSetup();
   const due = pixDue(m.name, m.month);
+  const sel = pixSelected(due, m.off);
   const mes = new Date(`${m.month}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const nota = t => `<p style="margin:10px 0 0;font-size:11px;line-height:1.5;color:var(--text3)">${t}</p>`;
   let corpo;
@@ -3593,13 +3614,23 @@ function mPixPay() {
   else if (!(due.total > 0)) corpo = `<div style="text-align:center;padding:18px 0;font-size:14px;font-weight:700;color:var(--accent)">✅ Nada pendente em ${mes}.</div>`;
   else {
     const linha = (txt, valor, forte) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border2);font-size:${forte ? 15 : 13}px;${forte ? 'font-weight:800' : 'color:var(--text2)'}"><span>${txt}</span><b>${valor}</b></div>`;
+    // item que dá para desmarcar (o churrasco cobrado à parte): caixa de marcar na própria linha; desmarcado, fica riscado
+    const linhaItem = i => {
+      if (!PIX_OPCIONAIS.includes(i.tipo)) return linha(`${i.label} · ${mes}`, pixBRL(i.valor));
+      const on = sel.itens.includes(i), risca = on ? '' : 'text-decoration:line-through;';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border2);font-size:13px;cursor:pointer;color:${on ? 'var(--text2)' : 'var(--text3)'}"><input type="checkbox" ${on ? 'checked ' : ''}onchange="pixToggleItem('${i.tipo}')" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent);cursor:pointer"><span style="flex:1;${risca}">${i.label} · ${mes}</span><b style="${risca}">${pixBRL(i.valor)}</b></label>`;
+    };
+    const podeDesmarcar = due.itens.some(i => PIX_OPCIONAIS.includes(i.tipo)) && due.itens.some(i => !PIX_OPCIONAIS.includes(i.tipo));
     corpo = `<div style="background:var(--s1);border:1px solid var(--border2);border-radius:10px;padding:2px 12px">
-        ${due.itens.map(i => linha(`${i.label} · ${mes}`, pixBRL(i.valor))).join('')}
-        ${linha('Total', pixBRL(due.total), true)}
+        ${due.itens.map(linhaItem).join('')}
+        ${linha('Total', pixBRL(sel.total), true)}
       </div>
+      ${podeDesmarcar ? nota('Não vai ao churrasco neste mês? Desmarque o churrasco e pague só a mensalidade.') : ''}
       <div style="margin:10px 0 14px;font-size:12px;color:var(--text3);line-height:1.5">Para: <strong style="color:var(--text2)">${esc(pixLeagueName())}</strong> · chave PIX (${PIX_TIPOS[k.tipo]}) ${esc(pixMaskKey(k.chave, k.tipo))}</div>
-      <button class="btn btn-primary" onclick="copyPixCode()">📋 Copiar PIX copia e cola</button>
-      ${m.showCode ? `<textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;margin-top:10px;min-height:96px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:12px;font-family:monospace;word-break:break-all">${esc(pixPayload(m.name, m.month))}</textarea>` : ''}
+      ${sel.total > 0
+        ? `<button class="btn btn-primary" onclick="copyPixCode()">📋 Copiar PIX copia e cola</button>`
+        : `<button class="btn btn-primary" disabled style="opacity:.45;cursor:not-allowed">📋 Marque ao menos um item</button>`}
+      ${m.showCode && sel.total > 0 ? `<textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;margin-top:10px;min-height:96px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:12px;font-family:monospace;word-break:break-all">${esc(pixPayload(m.name, m.month, m.off))}</textarea>` : ''}
       <ol style="margin:14px 0 0;padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
         <li>Toque em <strong>Copiar</strong>.</li>
         <li>No app do seu banco, abra o Pix e escolha <strong>Pix Copia e Cola</strong>. Cole o código: o valor já vem preenchido.</li>
