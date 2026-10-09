@@ -12,7 +12,7 @@ Nada disso passa pelo chat: a chave só trafega entre o painel do Mercado Pago, 
 
 ## 1. No painel do Mercado Pago (você faz)
 1. Entre em `mercadopago.com.br/developers/panel` → **Suas integrações** → a aplicação **Pelada na Mao**.
-2. Abra **Credenciais de produção** e ative (o painel pede o ramo de atuação, o site `https://peladanamao.com.br` e o aceite dos termos). A conta de vendedor precisa estar verificada (identidade e conta bancária para sacar); o Mercado Pago pode pedir mais uma validação e isso pode levar de horas a dias.
+2. No **menu da esquerda** da aplicação, role até a seção **PRODUÇÃO** (fica abaixo de TESTES e NOTIFICAÇÕES) e abra **Credenciais de produção**. A tela "Informações gerais", com o cartão "Estado · Etapa 1 de 5" e as contas de teste, é só o roteiro de testes do Mercado Pago: não é ali. Preencha **Indústria** (a mais próxima, como serviços/software ou esportes), **Website** (`https://peladanamao.com.br`, obrigatório), aceite a Declaração de Privacidade e os Termos, resolva o reCAPTCHA e clique em **Ativar credenciais de produção** (segundo a [documentação do Mercado Pago](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/credentials), não há etapa anterior obrigatória). A conta de vendedor precisa estar verificada (identidade e conta bancária para sacar); o Mercado Pago pode pedir mais uma validação e isso pode levar de horas a dias.
 3. Copie o **Access Token** de produção (o campo que fica escondido por pontinhos). **Não** é a Public Key. Ainda não cole em lugar nenhum: o passo 2 pede para copiar na hora certa.
 4. Em **Webhooks**, no **Modo produção**:
    - URL: `https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook`
