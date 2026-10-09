@@ -1280,13 +1280,6 @@ async function callMp(action, factory) {
   }
 }
 
-// O erro devolvido pelo Mercado Pago (mensagem ou causas) cita esta palavra? (sem estourar com erro de formato estranho)
-function mpErrorMentions(e, word) {
-  let causes = "";
-  try { causes = JSON.stringify(e?.cause ?? ""); } catch (_) { /* causa que não vira texto */ }
-  return new RegExp(word, "i").test(`${e?.message ?? ""} ${causes}`);
-}
-
 // Liga com plano pago em vigor (dentro da validade, incluindo a tolerância técnica).
 const hasActivePlan = league => Date.parse(league?.subscriptionActiveUntil) > Date.now();
 
@@ -1357,10 +1350,12 @@ exports.createAnnualPayment = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS
     try {
       return await preference.create({ body: { ...preferenceBody, statement_descriptor: MP_STATEMENT_DESCRIPTOR } });
     } catch (e) {
-      // O nome na fatura é enfeite: se o Mercado Pago recusar justamente ele, a cobrança sai sem ele em vez de deixar a
-      // pessoa sem conseguir pagar. Qualquer outra recusa segue o caminho normal (aviso em português).
-      if (!mpErrorMentions(e, "statement_descriptor")) throw e;
-      logger.warn("Mercado Pago recusou o nome na fatura; criando a cobrança anual sem ele", { erro: String(e?.message || e).slice(0, 300) });
+      // O nome na fatura é enfeite: se o Mercado Pago recusar o pedido por validação (400 ou 422, qualquer que seja a
+      // mensagem), tenta UMA vez de novo sem ele, em vez de deixar a pessoa sem conseguir pagar. Se a segunda tentativa
+      // também falhar, ou se for outro tipo de erro (token, limite, rede, servidor), segue o caminho normal (aviso em português).
+      const status = Number(e?.status);
+      if (status !== 400 && status !== 422) throw e;
+      logger.warn("Mercado Pago recusou a cobrança anual com o nome na fatura; tentando de novo sem ele", { status, erro: String(e?.message || e).slice(0, 300) });
       return await preference.create({ body: preferenceBody });
     }
   });

@@ -255,6 +255,9 @@ const reset = () => {
     ['na mensagem', () => { const e = new Error('invalid parameter: statement_descriptor'); e.status = 400; return e; }],
     ['na lista de causas (formato do SDK)', () => { const e = new Error('bad request'); e.status = 400; e.cause = [{ code: 3002, description: 'Statement_Descriptor muito longo' }]; return e; }],
     ['na mensagem, com uma causa que não vira texto (referência circular)', () => { const e = new Error('statement_descriptor inválido'); e.status = 400; const ciclo = {}; ciclo.self = ciclo; e.cause = ciclo; return e; }],
+    ['sem citar o campo (mensagem qualquer, status 400)', () => { const e = new Error('invalid parameter'); e.status = 400; return e; }],
+    ['com o código 422 (entidade não processável) e mensagem qualquer', () => { const e = new Error('unprocessable entity'); e.status = 422; return e; }],
+    ['com o status guardado como texto ("400")', () => { const e = new Error('invalid parameter'); e.status = '400'; return e; }],
   ]) {
     reset();
     store.set('leagues/L', { name: 'Liga L' });
@@ -264,20 +267,27 @@ const reset = () => {
     check(`anual: Mercado Pago recusa o nome na fatura (${rotulo}): a cobrança sai sem ele e a pessoa recebe o link de pagamento`, rf.initPoint === 'https://mp.test/preference/xyz' && attempts.length === 2 && 'statement_descriptor' in attempts[0] && !('statement_descriptor' in attempts[1]) && calls.preferenceCreate.length === 1 && !('statement_descriptor' in calls.preferenceCreate[0]), { attempts: attempts.length, criadas: calls.preferenceCreate.length });
     check(`…o resto da cobrança é o mesmo na segunda tentativa (item, valor, liga, e-mail, webhook, retorno)`, attempts[1].items[0].unit_price === 238.8 && attempts[1].items[0].title === 'Pelada na Mão — Assinatura anual' && attempts[1].external_reference === 'L' && attempts[1].payer.email === 'adm@x.com' && attempts[1].notification_url === 'https://us-east1-seriebaceoma.cloudfunctions.net/mercadoPagoWebhook' && attempts[1].back_urls.success === 'https://peladanamao.com.br/?mpReturn=L' && attempts[1].auto_return === 'approved', attempts[1]);
     check('…e fica um aviso (warn) no registro, para o dono saber que o nome na fatura foi recusado', logs.some(l => l.level === 'warn' && /nome na fatura/.test(l.m)) && !logs.some(l => l.level === 'error'), logs.map(l => l.m));
+    const avisoNome = logs.find(l => l.level === 'warn' && /nome na fatura/.test(l.m));
+    const erroEsperado = fazErro();
+    check('…o aviso leva o código e o motivo da recusa (para saber o que o Mercado Pago disse)', !!avisoNome && Number(avisoNome.d.status) === Number(erroEsperado.status) && String(avisoNome.d.erro).includes(erroEsperado.message), avisoNome && avisoNome.d);
   }
-  // outras recusas NÃO disparam a segunda tentativa
+  // a recusa é por outro motivo e a segunda tentativa (sem o nome na fatura) falha igual: erro normal em português, só 2 tentativas (sem laço)
   reset();
   store.set('leagues/L', { name: 'Liga L' });
   store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
   createShouldThrowMessage = 'invalid payer email';
   const codeOutra = await codeOf(call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')));
-  check('anual: recusa por outro motivo (e-mail do pagador, por exemplo): uma tentativa só, erro normal em português, sem repetir', codeOutra === 'failed-precondition' && attempts.length === 1 && calls.preferenceCreate.length === 0, { codeOutra, tentativas: attempts.length });
-  reset();
-  store.set('leagues/L', { name: 'Liga L' });
-  store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
-  descriptorRejection = () => { const e = new Error('algo deu errado'); e.status = 500; const ciclo = { a: 1 }; ciclo.self = ciclo; e.cause = ciclo; return e; };
-  const codeCiclo = await codeOf(call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')));
-  check('anual: erro com causa que não vira texto (referência circular) e sem citar o nome na fatura: não estoura estranho, uma tentativa só e erro normal', codeCiclo === 'failed-precondition' && attempts.length === 1, { codeCiclo, tentativas: attempts.length });
+  check('anual: recusa de validação por outro motivo (e-mail do pagador, por exemplo): tenta uma vez sem o nome na fatura, falha igual e devolve o erro normal em português (2 tentativas, sem laço)', codeOutra === 'failed-precondition' && attempts.length === 2 && 'statement_descriptor' in attempts[0] && !('statement_descriptor' in attempts[1]) && calls.preferenceCreate.length === 0, { codeOutra, tentativas: attempts.length });
+  check('…a primeira tentativa vira só um aviso sobre o nome na fatura e a recusa final é registrada pelo caminho normal (com o motivo)', logs.length === 2 && /nome na fatura/.test(logs[0].m) && /recusou a criação da cobrança anual/.test(logs[1].m) && /invalid payer email/.test(JSON.stringify(logs[1].d)), logs.map(l => l.level + ':' + l.m));
+  // erros que NÃO são de validação não repetem: token inválido, sem permissão, limite, servidor fora do ar e falha de rede
+  for (const [rotulo, status, code] of [['token inválido (401)', 401, null], ['sem permissão (403)', 403, null], ['limite de pedidos (429)', 429, null], ['erro do servidor (500)', 500, null], ['servidor indisponível (503)', 503, null], ['falha de rede (sem status)', 0, 'ETIMEDOUT'], ['recusa 404', 404, null]]) {
+    reset();
+    store.set('leagues/L', { name: 'Liga L' });
+    store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
+    descriptorRejection = () => { const e = new Error('algo deu errado'); if (status) e.status = status; if (code) e.code = code; const ciclo = { a: 1 }; ciclo.self = ciclo; e.cause = ciclo; return e; };
+    const codeSem = await codeOf(call(fns.createAnnualPayment, { liga: 'L' }, authOf('adm')));
+    check(`anual: ${rotulo}: uma tentativa só (repetir sem o nome na fatura não resolveria), erro normal em português, mesmo com causa que não vira texto`, codeSem === 'failed-precondition' && attempts.length === 1 && calls.preferenceCreate.length === 0, { codeSem, tentativas: attempts.length });
+  }
   reset();
   store.set('leagues/L', { name: 'Liga L' });
   store.set('users/adm', { email: 'adm@x.com', leagues: { L: { role: 'admin' } } });
