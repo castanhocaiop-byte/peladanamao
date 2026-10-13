@@ -3151,6 +3151,14 @@ async function removePresetAvulso(name) {
   try { await saveContact(avulsoContactId(name), ''); } catch(e) {}
 }
 
+// Título da liga aberta para as mensagens de WhatsApp (resumo do campeonato e convocação): o NOME DA LIGA em maiúsculas, nunca um nome
+// fixo. Tira os asteriscos (no WhatsApp o *…* é o negrito, e um asterisco no nome quebraria a formatação) e junta espaços repetidos;
+// sem nome, "Pelada na Mão".
+function waLeagueTitle() {
+  const nome = String(st.availableLeagues?.find(l => l.id === st.leagueId)?.name || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+  return (nome || 'Pelada na Mão').toUpperCase();
+}
+
 function convocacaoMsg(preset) {
   const isToday = preset.date === today();
   const d = new Date(preset.date + 'T12:00:00');
@@ -3160,7 +3168,7 @@ function convocacaoMsg(preset) {
   const evento = churr ? 'jogo e churrasco' : 'jogo';
   const emoji  = churr ? '⚽🍖' : '⚽';
   const intro  = isToday ? `Hoje tem ${evento}!` : `${dfCap} tem ${evento}!`;
-  return `${emoji} ${intro} Você está convocado.\n\nConfirme sua presença em:\n${location.origin}`;
+  return `${emoji} *${waLeagueTitle()}*\n${intro} Você está convocado.\n\nConfirme sua presença em:\n${location.origin}`;
 }
 
 function copyConvocacao() {
@@ -8442,13 +8450,6 @@ function mVote() {
   </div>`;
 }
 
-// Primeira linha do resumo do campeonato para o grupo: o NOME DA LIGA (em maiúsculas), nunca um nome fixo. Tira os asteriscos (no
-// WhatsApp o *…* é o negrito, e um asterisco no nome quebraria a formatação do título); sem nome, "Pelada na Mão".
-function resumoLeagueName() {
-  const nome = String(st.availableLeagues?.find(l => l.id === st.leagueId)?.name || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
-  return (nome || 'Pelada na Mão').toUpperCase();
-}
-
 function gerarResumoChamp(champId) {
   const champ = (st.champs||[]).find(c=>c.id===champId);
   if (!champ) return '';
@@ -8489,7 +8490,7 @@ function gerarResumoChamp(champId) {
   }
   newBadgeItems.sort((a,b)=>a.holders.length-b.holders.length);
 
-  let msg = `🏆 *${resumoLeagueName()} — ${fdt(champ.date)}*\n\n`;
+  let msg = `🏆 *${waLeagueTitle()} — ${fdt(champ.date)}*\n\n`;
   msg += `🥇 *Campeão: ${champTeam.l}*\n`;
   if (roster.length) msg += `👥 ${roster.join(', ')}\n`;
   if (halfTitles.length) msg += `½ *Meio título: ${halfTitles.join(', ')}*\n`;

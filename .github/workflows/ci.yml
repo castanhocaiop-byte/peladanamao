@@ -167,9 +167,9 @@ jobs:
         working-directory: functions
         run: node test/client-terms-notice-test.js
 
-      - name: Testes do app (resumo do campeonato para o WhatsApp - nome da liga no título)
+      - name: Testes do app (mensagens de WhatsApp com o nome da liga - resumo do campeonato e convocação)
         working-directory: functions
-        run: node test/client-summary-test.js
+        run: node test/client-wa-league-test.js
 
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
