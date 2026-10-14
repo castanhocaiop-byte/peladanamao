@@ -4,6 +4,7 @@ const path = require('path').join(__dirname, '..', 'index.js');
 // ── Firestore falso em memória (mesma base dos outros harnesses) ────────────
 const store = new Map();
 let updateCount = 0; // quantas gravações (update) o código fez — prova que repetir é idempotente
+let setShouldFailFor = null; // se for um texto, a gravação (set) de qualquer caminho que o contenha falha (simula o Firestore fora do ar)
 const clone = o => (o === undefined ? undefined : JSON.parse(JSON.stringify(o)));
 class FieldPath { constructor(...segments) { this.segments = segments; } }
 const FieldValue = { delete: () => ({ __delete: true }), increment: n => ({ __inc: n }) };
@@ -26,7 +27,10 @@ function refOf(p) {
   return {
     path: p,
     get: async () => snapOf(p),
-    set: async d => { store.set(p, clone(d)); },
+    set: async d => {
+      if (setShouldFailFor && p.includes(setShouldFailFor)) throw new Error('gravação falhou (simulada)');
+      store.set(p, clone(d));
+    },
     update: async patch => {
       if (!store.has(p)) throw new Error('NOT_FOUND ' + p);
       updateCount++;
@@ -76,7 +80,7 @@ const unfreezeClock = () => { global.Date = RealDate; };
 
 // ── mock do SDK mercadopago: captura os parâmetros enviados e deixa o teste
 // controlar o que cada chamada devolve ──────────────────────────────────────
-const calls = { preApprovalCreate: [], preferenceCreate: [], preApprovalSearch: [], paymentSearch: [], preApprovalUpdate: [] };
+const calls = { preApprovalCreate: [], preferenceCreate: [], preApprovalSearch: [], paymentSearch: [], preApprovalUpdate: [], preApprovalGet: [] };
 let preApprovalGetResult = null;
 let paymentGetResult = null;
 let preApprovalSearchResults = []; // usado pelo fallback checkSubscriptionStatus
@@ -96,9 +100,9 @@ class MercadoPagoConfig { constructor(opts) { this.opts = opts; } }
 class PreApproval {
   async create({ body }) {
     if (createShouldThrowMessage !== null) throw makeCreateError();
-    calls.preApprovalCreate.push(body); return { init_point: 'https://mp.test/preapproval/xyz' };
+    calls.preApprovalCreate.push(body); return { id: 'pre-' + calls.preApprovalCreate.length, init_point: 'https://mp.test/preapproval/xyz' };
   }
-  async get({ id }) { if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...preApprovalGetResult }; }
+  async get({ id }) { calls.preApprovalGet.push(id); if (getShouldThrow) throw new Error('falha de rede simulada'); return { id, ...preApprovalGetResult }; }
   async search({ options } = {}) {
     if (searchShouldThrow) throw new Error('falha de rede simulada');
     calls.preApprovalSearch.push(options); return { results: preApprovalSearchResults };
@@ -188,6 +192,8 @@ const reset = () => {
   calls.preApprovalSearch.length = 0;
   calls.paymentSearch.length = 0;
   calls.preApprovalUpdate.length = 0;
+  calls.preApprovalGet.length = 0;
+  setShouldFailFor = null;
   logs.length = 0;
   preApprovalGetResult = null;
   paymentGetResult = null;
@@ -957,6 +963,214 @@ const reset = () => {
   setup(paid('2027-01-05T12:00:00.000Z', 'monthly', { subscriptionCancelledAt: '2026-12-01T00:00:00.000Z' }));
   await deliver(annualPay({ id: '9301', date_approved: '2026-12-15T10:00:00.000Z' }));
   check('estender: pagar o anual também tira a marca de cancelada', leagueOf().subscriptionPlan === 'annual' && leagueOf().subscriptionCancelledAt === undefined && sameDates(leagueOf(), '2028-01-05T12:00:00.000Z'), leagueOf());
+  unfreezeClock();
+
+  // ═════════════ Assinatura mensal em dobro: não cria outra enquanto a primeira está pendente; se duas forem concluídas, fica uma ═════════════
+  // O teste real de 14/10/2026 criou 2 assinaturas em 4 segundos. Concluir as duas cobraria em dobro, todo mês, a mesma liga.
+  console.log('── assinatura mensal em dobro');
+  const PENDENTE = (extra = {}) => ({ status: 'pending', external_reference: 'L', init_point: 'https://mp.test/preapproval/xyz', ...extra });
+  const checkoutRecord = () => store.get('leagues/L/billing_meta/monthlyCheckout');
+  const PRIMEIRO_PEDIDO = async () => { // liga L (sem plano), admin "adm", outro admin "adm2"; o 1º pedido do "adm" já foi feito
+    setup();
+    store.set('users/adm2', { email: 'adm2@x.com', leagues: { L: { role: 'admin' } } });
+    await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+    calls.preApprovalGet.length = 0;
+  };
+
+  // ── reaproveita o checkout pendente ──
+  setup();
+  const r1 = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: o 1º pedido cria a assinatura e guarda o checkout pendente (id, admin, valor e hora; nunca o e-mail)', calls.preApprovalCreate.length === 1 && r1.initPoint === 'https://mp.test/preapproval/xyz' && JSON.stringify(checkoutRecord()) === JSON.stringify({ preapprovalId: 'pre-1', uid: 'adm', amount: 29.9, createdAt: NOW_ISO }) && !/adm@x\.com/.test(JSON.stringify(checkoutRecord())) && !logs.some(l => l.level === 'warn' || l.level === 'error'), { registro: checkoutRecord(), logs });
+  check('mensal: o 1º pedido não consulta nenhum checkout anterior no Mercado Pago (não havia)', calls.preApprovalGet.length === 0, calls.preApprovalGet);
+
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE();
+  const r2 = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: tocar de novo com o checkout ainda pendente devolve o MESMO link e NÃO cria outra assinatura', calls.preApprovalCreate.length === 1 && r2.initPoint === 'https://mp.test/preapproval/xyz', { criadas: calls.preApprovalCreate.length, r2 });
+  check('mensal: …conferindo no Mercado Pago o estado do checkout guardado (uma consulta, pelo id guardado)', calls.preApprovalGet.join() === 'pre-1', calls.preApprovalGet);
+  check('mensal: …e o registro do checkout continua o mesmo', checkoutRecord().preapprovalId === 'pre-1' && checkoutRecord().createdAt === NOW_ISO, checkoutRecord());
+  await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: …e vale também para o 3º toque', calls.preApprovalCreate.length === 1, calls.preApprovalCreate.length);
+
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE();
+  freezeClock('2026-12-20T12:29:00.000Z');
+  await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: 29 minutos depois ainda reaproveita o checkout pendente', calls.preApprovalCreate.length === 1, calls.preApprovalCreate.length);
+  freezeClock('2026-12-20T12:31:00.000Z');
+  const rVelho = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: 31 minutos depois NÃO reaproveita (o link pode ter vencido): cria uma assinatura nova e guarda o novo registro', calls.preApprovalCreate.length === 2 && rVelho.initPoint === 'https://mp.test/preapproval/xyz' && checkoutRecord().preapprovalId === 'pre-2' && checkoutRecord().createdAt === '2026-12-20T12:31:00.000Z', checkoutRecord());
+
+  // ── dúvida = cria uma nova, como sempre foi ──
+  for (const [rotulo, extra, esperaConsulta] of [
+    ['o Mercado Pago diz que o checkout foi cancelado', PENDENTE({ status: 'cancelled' }), true],
+    ['o checkout pendente veio sem o link', PENDENTE({ init_point: undefined }), true],
+    ['o checkout guardado é de outra liga', PENDENTE({ external_reference: 'OUTRA' }), true],
+    ['o checkout guardado não existe mais (sem estado)', {}, true],
+  ]) {
+    await PRIMEIRO_PEDIDO();
+    preApprovalGetResult = extra;
+    await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+    check(`mensal: ${rotulo}: cria uma assinatura nova e guarda o novo checkout`, calls.preApprovalCreate.length === 2 && checkoutRecord().preapprovalId === 'pre-2' && (calls.preApprovalGet.length === 1) === esperaConsulta, { criadas: calls.preApprovalCreate.length, registro: checkoutRecord(), consultas: calls.preApprovalGet });
+  }
+  await PRIMEIRO_PEDIDO();
+  getShouldThrow = true;
+  const rFalha = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  getShouldThrow = false;
+  check('mensal: o Mercado Pago não responde à consulta do checkout guardado: o pedido segue e cria uma assinatura nova (nunca trava a pessoa)', calls.preApprovalCreate.length === 2 && rFalha.initPoint === 'https://mp.test/preapproval/xyz', calls.preApprovalCreate.length);
+  check('mensal: …e o aviso fica no registro (sem erro, para não disparar alerta)', logs.some(l => l.level === 'warn' && /criando um novo/.test(l.m)) && !logs.some(l => l.level === 'error'), logs);
+
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE();
+  await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm2'));
+  check('mensal: outro admin da mesma liga NÃO recebe o checkout do primeiro (o e-mail de pagamento é o de cada admin): cria o dele', calls.preApprovalCreate.length === 2 && calls.preApprovalCreate[1].payer_email === 'adm2@x.com' && checkoutRecord().uid === 'adm2', { criadas: calls.preApprovalCreate.map(c => c.payer_email), registro: checkoutRecord() });
+
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE();
+  store.set('leagues/L/billing_meta/monthlyCheckout', { ...checkoutRecord(), amount: 19.9 });
+  await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: checkout guardado com outro valor (preço mudou) não é reaproveitado', calls.preApprovalCreate.length === 2 && calls.preApprovalGet.length === 0, { criadas: calls.preApprovalCreate.length, consultas: calls.preApprovalGet });
+
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE();
+  store.set('leagues/L/billing_meta/monthlyCheckout', { ...checkoutRecord(), createdAt: 'lixo' });
+  await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: registro com hora ilegível não é reaproveitado (cria uma nova)', calls.preApprovalCreate.length === 2, calls.preApprovalCreate.length);
+
+  // ── a pessoa já concluiu o checkout (o aviso ainda não chegou): não cria outra, ativa o plano na hora ──
+  await PRIMEIRO_PEDIDO();
+  preApprovalGetResult = PENDENTE({ status: 'authorized', next_payment_date: '2027-01-19T12:00:00.000Z' });
+  const codigoAutorizada = await codeOf(call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')));
+  check('mensal: checkout guardado já AUTORIZADO: não cria outra assinatura e responde "já tem plano ativo"', calls.preApprovalCreate.length === 1 && codigoAutorizada === 'failed-precondition', { criadas: calls.preApprovalCreate.length, codigoAutorizada });
+  check('mensal: …e a liga já fica ativa com a data real da próxima cobrança (sem esperar o aviso do Mercado Pago)', leagueOf().subscriptionPlan === 'monthly' && leagueOf().subscriptionRenewsAt === '2027-01-19T12:00:00.000Z', leagueOf());
+
+  // ── o registro é só um atalho: se não der para gravar, o pedido continua funcionando ──
+  setup();
+  setShouldFailFor = 'monthlyCheckout';
+  const rSemRegistro = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: não conseguir guardar o checkout pendente NÃO derruba o pedido (devolve o link, sem registro, com aviso no log)', rSemRegistro.initPoint === 'https://mp.test/preapproval/xyz' && !checkoutRecord() && logs.some(l => l.level === 'warn' && /guardar o checkout mensal/.test(l.m)), { r: rSemRegistro, logs });
+  setShouldFailFor = null;
+  const rSemRegistro2 = await call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm'));
+  check('mensal: …e sem registro o próximo toque só cria outra assinatura (como era antes; a duplicada autorizada é cancelada depois)', calls.preApprovalCreate.length === 2, calls.preApprovalCreate.length);
+
+  // ── a barreira antiga continua: com plano em vigor não se cria assinatura nem se consulta o checkout guardado ──
+  setup(paid('2027-01-10T00:00:00.000Z'));
+  store.set('leagues/L/billing_meta/monthlyCheckout', { preapprovalId: 'pre-9', uid: 'adm', amount: 29.9, createdAt: NOW_ISO });
+  const codigoAtivo = await codeOf(call(fns.createMonthlySubscription, { liga: 'L' }, authOf('adm')));
+  check('mensal: liga com plano em vigor continua barrada ANTES de tudo (nenhuma consulta nem criação)', codigoAtivo === 'failed-precondition' && calls.preApprovalGet.length === 0 && calls.preApprovalCreate.length === 0, { codigoAtivo, consultas: calls.preApprovalGet });
+
+  // ── duas assinaturas AUTORIZADAS na mesma liga: fica uma só ──
+  const ASSIN = (extra = {}) => ({ id: 'preA', status: 'authorized', external_reference: 'L', next_payment_date: '2027-01-14T00:00:00.000Z', date_created: '2026-12-20T11:59:00.000Z', ...extra });
+  const avisoPreapproval = async () => { const res = fakeRes(); await fns.mercadoPagoWebhook({ ...baseReq }, res); return res; };
+  const avisaAutorizada = (pre, lista) => { preApprovalGetResult = pre; preApprovalSearchResults = lista; return avisoPreapproval(); };
+  const cancelamentos = () => cancelled().slice().sort();
+
+  setup();
+  let rw = await avisaAutorizada(ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), [ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), ASSIN()]);
+  check('webhook: duas assinaturas autorizadas — a de validade mais longa fica e a outra é cancelada no Mercado Pago', JSON.stringify(cancelled()) === JSON.stringify(['preA:cancelled']) && rw.statusCode === 200, { cancelled: cancelled(), code: rw.statusCode });
+  check('webhook: …a liga fica ativa com a data da que ficou', leagueOf().subscriptionPlan === 'monthly' && leagueOf().subscriptionRenewsAt === '2027-01-15T00:00:00.000Z', leagueOf());
+  check('webhook: …a busca é só das autorizadas da própria liga', calls.preApprovalSearch.some(o => o.external_reference === 'L' && o.status === 'authorized'), calls.preApprovalSearch);
+  check('webhook: …o registro diz qual foi mantida e qual foi cancelada (para o dono conferir a devolução do mês em dobro), como aviso e não como erro', logs.some(l => l.level === 'warn' && /duplicada cancelada/.test(l.m) && l.d.liga === 'L' && l.d.mantida === 'preB' && l.d.cancelada === 'preA') && !logs.some(l => l.level === 'error'), logs);
+
+  setup();
+  await avisaAutorizada(ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), [ASSIN(), ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' })]);
+  check('webhook: a ordem em que o Mercado Pago lista não muda qual fica', JSON.stringify(cancelled()) === JSON.stringify(['preA:cancelled']), cancelled());
+
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN()]);
+  check('webhook: uma assinatura só — nada é cancelado', calls.preApprovalUpdate.length === 0 && leagueOf().subscriptionPlan === 'monthly', calls.preApprovalUpdate);
+
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN(), ASSIN({ id: 'preP', status: 'pending', next_payment_date: undefined })]);
+  check('webhook: uma autorizada e uma pendente — a pendente não cobra e não é tocada', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN({ id: 'preC', next_payment_date: '2027-01-13T00:00:00.000Z' }), ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), ASSIN()]);
+  check('webhook: três autorizadas — fica a de validade mais longa e as outras duas são canceladas, cada uma uma vez', JSON.stringify(cancelamentos()) === JSON.stringify(['preA:cancelled', 'preC:cancelled']), cancelled());
+
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN({ id: 'preZ', date_created: '2026-12-20T11:59:30.000Z' }), ASSIN({ id: 'preY', date_created: '2026-12-20T11:58:00.000Z' })]);
+  check('webhook: validades iguais — fica a criada primeiro (a mais antiga)', JSON.stringify(cancelled()) === JSON.stringify(['preZ:cancelled']), cancelled());
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN({ id: 'preY', date_created: '2026-12-20T11:58:00.000Z' }), ASSIN({ id: 'preZ', date_created: '2026-12-20T11:59:30.000Z' })]);
+  check('webhook: …e a ordem da lista não muda isso', JSON.stringify(cancelled()) === JSON.stringify(['preZ:cancelled']), cancelled());
+
+  setup();
+  await avisaAutorizada(ASSIN(), [ASSIN({ id: 'preOutra1', external_reference: 'OUTRA' }), ASSIN({ id: 'preOutra2', external_reference: 'OUTRA' }), ASSIN()]);
+  check('webhook: assinaturas de OUTRA liga na resposta nunca são canceladas (só as da própria liga contam)', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+
+  // O cancelamento recusado não derruba o aviso: o plano fica, o erro vai para o log e a reconciliação tenta de novo.
+  setup();
+  updateShouldThrow = true;
+  rw = await avisaAutorizada(ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), [ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), ASSIN()]);
+  check('webhook: cancelamento da duplicada recusado — o aviso responde 200 e o plano fica ativo', rw.statusCode === 200 && leagueOf().subscriptionPlan === 'monthly', { code: rw.statusCode, league: leagueOf() });
+  check('webhook: …o erro fica no log (o dono precisa saber)', logs.some(l => l.level === 'error' && /cancelar a assinatura mensal duplicada/.test(l.m) && l.d.assinatura === 'preA'), logs);
+  updateShouldThrow = false;
+  paymentSearchResults = [];
+  await fns.reconcileSubscriptions();
+  check('webhook: …e a reconciliação cancela a duplicada depois', JSON.stringify(cancelled()) === JSON.stringify(['preA:cancelled']), cancelled());
+
+  setup();
+  preApprovalGetResult = ASSIN();
+  searchShouldThrow = true;
+  rw = await avisoPreapproval();
+  searchShouldThrow = false;
+  check('webhook: não conseguir conferir as duplicadas não derruba o aviso (200, plano ativo, aviso no log; a reconciliação confere)', rw.statusCode === 200 && leagueOf().subscriptionPlan === 'monthly' && logs.some(l => l.level === 'warn' && /duplicadas; a reconciliação confere/.test(l.m)), { code: rw.statusCode, league: leagueOf(), logs });
+
+  setup();
+  rw = await avisaAutorizada(ASSIN({ external_reference: '../x' }), [ASSIN({ external_reference: '../x' }), ASSIN({ id: 'preB', external_reference: '../x' })]);
+  check('webhook: referência de liga inválida — nenhuma busca extra nem cancelamento', rw.statusCode === 200 && calls.preApprovalUpdate.length === 0 && calls.preApprovalSearch.length === 0, { search: calls.preApprovalSearch, updates: calls.preApprovalUpdate });
+
+  // ── a consulta do app (volta do checkout) também tira a duplicada ──
+  setup();
+  preApprovalSearchResults = [ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), ASSIN()];
+  const rc = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  check('consulta do app: duas autorizadas — devolve a de validade mais longa e cancela a outra', rc.status === 'active' && rc.renewsAt === '2027-01-15T00:00:00.000Z' && JSON.stringify(cancelled()) === JSON.stringify(['preA:cancelled']), { rc, cancelled: cancelled() });
+
+  // ── pagamento anual com duas mensais autorizadas: cada uma é cancelada UMA vez (a duplicada e a coberta pelo anual) ──
+  setup(paid('2026-12-30T00:00:00.000Z'));
+  preApprovalSearchResults = [ASSIN({ id: 'preA', next_payment_date: '2026-12-30T00:00:00.000Z' }), ASSIN({ id: 'preB', next_payment_date: '2027-01-02T00:00:00.000Z' })];
+  await deliver(annualPay({ id: '9601', date_approved: '2026-12-15T10:00:00.000Z' }));
+  check('estender com duas mensais autorizadas: o anual entra e as DUAS mensais são canceladas, cada uma uma única vez', leagueOf().subscriptionPlan === 'annual' && JSON.stringify(cancelamentos()) === JSON.stringify(['preA:cancelled', 'preB:cancelled']) && new Set(calls.preApprovalUpdate.map(u => u.id)).size === calls.preApprovalUpdate.length, { league: leagueOf(), cancelled: cancelled() });
+
+  setup(paid('2026-12-30T00:00:00.000Z'));
+  preApprovalSearchResults = [ASSIN({ id: 'preA', next_payment_date: '2026-12-30T00:00:00.000Z' }), ASSIN({ id: 'preB', next_payment_date: '2027-01-02T00:00:00.000Z' })];
+  paymentSearchResults = [annualPay({ id: '9602', date_approved: '2026-12-15T10:00:00.000Z' })];
+  updateShouldThrow = true;
+  const rCheckFalha = await call(fns.checkSubscriptionStatus, { liga: 'L' }, authOf('adm'));
+  updateShouldThrow = false;
+  const falhas = logs.filter(l => l.level === 'error').map(l => l.d?.assinatura).sort();
+  check('consulta do app com o anual e duas mensais, e o Mercado Pago recusando todos os cancelamentos: o plano anual entra e NENHUMA mensal é esquecida (a duplicada continua na lista e o cancelamento do anual tenta de novo as duas)', rCheckFalha.plan === 'annual' && JSON.stringify(falhas) === JSON.stringify(['preA', 'preA', 'preB']), { plano: rCheckFalha.plan, falhas });
+
+  // ── reconciliação (rede de segurança de 6 em 6 horas) ──
+  setup();
+  store.set('leagues/L2', { name: 'Liga L2' });
+  preApprovalSearchResults = [
+    ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' }), ASSIN(),
+    ASSIN({ id: 'preDois', external_reference: 'L2', next_payment_date: '2027-01-20T00:00:00.000Z' }),
+  ];
+  paymentSearchResults = [];
+  await fns.reconcileSubscriptions();
+  check('reconciliação: duas autorizadas na liga L — cancela só a duplicada; a liga L2 (uma só) não é tocada', JSON.stringify(cancelled()) === JSON.stringify(['preA:cancelled']) && leagueOf().subscriptionRenewsAt === '2027-01-15T00:00:00.000Z' && store.get('leagues/L2').subscriptionRenewsAt === '2027-01-20T00:00:00.000Z', { cancelled: cancelled(), l: leagueOf(), l2: store.get('leagues/L2') });
+  check('reconciliação: …e o registro conta as duplicadas canceladas', logs.some(l => l.level === 'info' && /Reconciliação de assinaturas concluída/.test(l.m) && l.d.duplicadasCanceladas === 1), logs.filter(l => /Reconciliação/.test(l.m)));
+  calls.preApprovalUpdate.length = 0;
+  preApprovalSearchResults = [ASSIN({ id: 'preB', next_payment_date: '2027-01-15T00:00:00.000Z' })]; // o Mercado Pago já não lista a cancelada
+  await fns.reconcileSubscriptions();
+  check('reconciliação: depois de cancelada a duplicada, repetir não cancela nada', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+
+  setup();
+  preApprovalSearchResults = [
+    { id: 'semRef1', status: 'authorized', next_payment_date: '2027-01-15T00:00:00.000Z' }, { id: 'semRef2', status: 'authorized', next_payment_date: '2027-01-16T00:00:00.000Z' },
+    ASSIN({ id: 'inv1', external_reference: '../x' }), ASSIN({ id: 'inv2', external_reference: '../x' }),
+  ];
+  await fns.reconcileSubscriptions();
+  check('reconciliação: assinaturas sem referência de liga, ou com referência inválida, nunca são canceladas (nem em dobro)', calls.preApprovalUpdate.length === 0, calls.preApprovalUpdate);
+
+  setup(paid('2027-03-01T00:00:00.000Z', 'annual'));
+  preApprovalSearchResults = [ASSIN({ id: 'preA', next_payment_date: '2027-01-05T00:00:00.000Z' }), ASSIN({ id: 'preB', next_payment_date: '2027-01-06T00:00:00.000Z' })];
+  await fns.reconcileSubscriptions();
+  check('reconciliação: anual em vigor + duas mensais — as duas são canceladas, cada uma uma única vez (a duplicada e a coberta pelo anual)', JSON.stringify(cancelamentos()) === JSON.stringify(['preA:cancelled', 'preB:cancelled']) && calls.preApprovalUpdate.length === 2, cancelled());
+
   unfreezeClock();
 
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);

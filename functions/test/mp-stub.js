@@ -9,7 +9,7 @@
 //   preapprovals: [{ id, external_reference, status, next_payment_date? }]   assinaturas mensais "existentes"
 //   payments:     [{ id, external_reference, status, transaction_amount, date_approved, ... }]
 //   updates:      [{ id, body }]     cancelamentos (PUT) que a função fez
-//   created:      [body]             assinaturas criadas (POST /preapproval)
+//   created:      [body]             assinaturas criadas (POST /preapproval); cada uma também entra em "preapprovals", pendente
 //   preferences:  [body]             cobranças anuais criadas (POST /checkout/preferences)
 //
 // Rotas:
@@ -72,9 +72,14 @@ if (FILE && realFetch) {
       return reply(200, found);
     }
     if (method === 'POST' && url.pathname === '/preapproval') {
-      state.created.push(body());
+      const b = body();
+      state.created.push(b);
+      const id = `pre-novo-${state.created.length}`;
+      const init_point = `https://mp.test/preapproval/${state.created.length}`;
+      // Como na API de verdade, a assinatura criada passa a existir (pendente, com o link de pagamento): é o que a busca e a consulta enxergam.
+      state.preapprovals.push({ id, status: 'pending', external_reference: b.external_reference, payer_email: b.payer_email, auto_recurring: b.auto_recurring, date_created: new Date().toISOString(), init_point });
       save(state);
-      return reply(201, { id: `pre-novo-${state.created.length}`, status: 'pending', init_point: `https://mp.test/preapproval/${state.created.length}` });
+      return reply(201, { id, status: 'pending', init_point });
     }
     if (method === 'POST' && url.pathname === '/checkout/preferences') {
       state.preferences.push(body());

@@ -1284,6 +1284,48 @@ async function callMp(action, factory) {
 // Liga com plano pago em vigor (dentro da validade, incluindo a tolerância técnica).
 const hasActivePlan = league => Date.parse(league?.subscriptionActiveUntil) > Date.now();
 
+// Quanto tempo um checkout mensal que ainda não foi concluído pode ser reaproveitado. Curto de propósito: cobre o toque repetido e a tela que
+// voltou sem abrir, e evita entregar um link antigo que o Mercado Pago já tenha deixado vencer.
+const MONTHLY_CHECKOUT_REUSE_MS = 30 * 60 * 1000;
+
+// O checkout mensal que este admin abriu há pouco e ainda está PENDENTE no Mercado Pago, para entregar o mesmo link em vez de criar outra
+// assinatura (duas assinaturas autorizadas cobrariam em dobro todo mês). O servidor guarda só o id, o uid do admin, o valor e a hora em
+// leagues/{liga}/billing_meta/monthlyCheckout (fechado ao navegador pelas regras; some junto com a liga) e confere o estado de verdade na
+// API. Qualquer dúvida (registro velho, outro admin, outro valor, falha do Mercado Pago, link ausente) devolve null e o pedido segue como
+// sempre: cria uma assinatura nova. Devolve { initPoint } (pendente), { authorized: true } (a pessoa já concluiu: o plano é ativado na hora)
+// ou null.
+async function reusablePendingMonthly(liga, uid) {
+  try {
+    const last = (await db.doc(`leagues/${liga}/billing_meta/monthlyCheckout`).get()).data();
+    if (!last?.preapprovalId || last.uid !== uid || Number(last.amount) !== MP_PLANS.monthly.amount) return null;
+    if (!(Date.now() - Date.parse(last.createdAt) < MONTHLY_CHECKOUT_REUSE_MS)) return null;
+    const pre = await new PreApproval(mpClient()).get({ id: last.preapprovalId });
+    if (String(pre?.external_reference || "") !== liga) return null;
+    if (pre.status === "authorized") {
+      await activateSubscription(liga, "monthly", monthlyRenewsAt(pre));
+      return { authorized: true };
+    }
+    if (pre.status === "pending" && pre.init_point) return { initPoint: pre.init_point };
+    return null;
+  } catch (e) {
+    logger.warn("Não foi possível conferir se já existe um checkout mensal pendente; criando um novo", { liga, erro: String(e?.message || e).slice(0, 200) });
+    return null;
+  }
+}
+
+// Guarda o checkout mensal recém-criado para reusablePendingMonthly. Nunca derruba o pedido: sem o registro, o próximo toque só cria
+// outra assinatura, como sempre foi (e a duplicada autorizada é cancelada por dedupeAuthorizedMonthlies).
+async function rememberPendingMonthly(liga, uid, created) {
+  if (!created?.id) return;
+  try {
+    await db.doc(`leagues/${liga}/billing_meta/monthlyCheckout`).set({
+      preapprovalId: String(created.id), uid, amount: MP_PLANS.monthly.amount, createdAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    logger.warn("Falha ao guardar o checkout mensal pendente", { liga, erro: String(e?.message || e).slice(0, 200) });
+  }
+}
+
 exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_ACCESS_TOKEN] }, async request => {
   const auth = requireAuth(request);
   const liga = leagueIdOf(request.data);
@@ -1294,6 +1336,12 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
   if (hasActivePlan((await db.doc(`leagues/${liga}`).get()).data())) {
     throw fail("failed-precondition", "Esta liga já tem um plano ativo. Para ampliá-lo, use \"Estender plano\".");
   }
+
+  // Quem toca em "Mensal" de novo logo depois (a tela que voltou sem abrir, duas abas) recebe o MESMO checkout ainda pendente, em vez
+  // de uma segunda assinatura no Mercado Pago: se as duas fossem concluídas, a liga seria cobrada em dobro todo mês.
+  const again = await reusablePendingMonthly(liga, auth.uid);
+  if (again?.authorized) throw fail("failed-precondition", "Esta liga já tem um plano ativo. Para ampliá-lo, use \"Estender plano\".");
+  if (again?.initPoint) return { initPoint: again.initPoint };
 
   // payer_email é obrigatório para este tipo de assinatura (o SDK marca como opcional,
   // mas a API recusa sem ele: "payer_email is required"). Em teste, se o Access Token for
@@ -1315,6 +1363,7 @@ exports.createMonthlySubscription = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_
       },
     },
   }));
+  await rememberPendingMonthly(liga, auth.uid, result);
   await recordCheckoutStart(liga, "monthly");
   return { initPoint: result.init_point };
 });
@@ -1588,6 +1637,48 @@ async function cancelCoveredMonthlies(liga, pres) {
   }
 }
 
+// Uma liga com DUAS ou mais assinaturas mensais AUTORIZADAS seria cobrada em dobro todo mês (por exemplo, quem abriu o checkout duas vezes
+// e concluiu as duas). Fica a de validade mais longa (a mesma que activateSubscription grava; empate: a criada primeiro) e as outras são
+// canceladas no Mercado Pago. Só mexe nas AUTORIZADAS: uma pendente não cobra (se for autorizada depois, cai aqui de novo) e uma
+// assinatura sem referência de liga válida nunca é tocada. A primeira cobrança das duas já pode ter acontecido, então o aviso no registro
+// diz qual foi cancelada, para o dono devolver o mês em dobro. Nunca lança: o que não der agora a reconciliação (de 6 em 6 horas) tenta de
+// novo. Devolve { authorized, canceled }: as autorizadas que continuam valendo (a mantida e as que não deu para cancelar) e quantas cancelou.
+async function dedupeAuthorizedMonthlies(liga, pres, client = mpClient()) {
+  const authorized = (pres || []).filter(p => p && String(p.external_reference || "") === liga && (p.status === undefined || p.status === "authorized"));
+  if (authorized.length < 2 || !LEAGUE_ID_RE.test(String(liga || ""))) return { authorized, canceled: 0 };
+  const renewKey = p => { const d = p.next_payment_date ? new Date(p.next_payment_date) : null; return d && !Number.isNaN(d.getTime()) ? d.toISOString() : ""; };
+  const keep = [...authorized].sort((a, b) => renewKey(b).localeCompare(renewKey(a))
+    || String(a.date_created || "").localeCompare(String(b.date_created || ""))
+    || String(a.id).localeCompare(String(b.id)))[0];
+  const remaining = [keep];
+  let canceled = 0;
+  for (const pre of authorized) {
+    if (pre === keep) continue;
+    try {
+      await new PreApproval(client).update({ id: pre.id, body: { status: "cancelled" } });
+      canceled++;
+      logger.warn("Assinatura mensal duplicada cancelada: a liga já tinha outra autorizada (conferir se a primeira cobrança das duas precisa de devolução)", { liga, mantida: keep.id, cancelada: pre.id });
+    } catch (e) {
+      remaining.push(pre);
+      logger.error("Não foi possível cancelar a assinatura mensal duplicada; a reconciliação tenta de novo", { liga, assinatura: pre.id, erro: e?.message });
+    }
+  }
+  return { authorized: remaining, canceled };
+}
+
+// Depois de uma assinatura mensal autorizada (aviso do Mercado Pago): procura as autorizadas da liga e cancela as duplicadas. Nunca lança.
+async function cancelDuplicateMonthliesOf(liga, client = mpClient()) {
+  try {
+    if (!LEAGUE_ID_RE.test(String(liga || ""))) return;
+    const res = await new PreApproval(client).search({
+      options: { external_reference: liga, status: "authorized", sort: "date_created:desc", limit: 10 },
+    });
+    await dedupeAuthorizedMonthlies(liga, res?.results || [], client);
+  } catch (e) {
+    logger.warn("Não foi possível conferir se a liga tem assinaturas mensais duplicadas; a reconciliação confere", { liga, erro: String(e?.message || e).slice(0, 200) });
+  }
+}
+
 // Fallback do webhook: o app chama isto quando o admin volta do checkout do Mercado
 // Pago (ver back_url/back_urls acima), caso a notificação ainda não tenha chegado ou
 // tenha se perdido. Consulta a API do Mercado Pago diretamente (nunca confia em nada que
@@ -1606,7 +1697,7 @@ exports.checkSubscriptionStatus = onCall({ ...CALLABLE, secrets: [MERCADOPAGO_AC
   const preResult = await callMp("a consulta de assinaturas", () => new PreApproval(client).search({
     options: { external_reference: liga, status: "authorized", sort: "date_created:desc", limit: 10 },
   }));
-  const authorized = (preResult?.results || []).filter(r => String(r.external_reference) === liga);
+  const { authorized } = await dedupeAuthorizedMonthlies(liga, preResult?.results || [], client);
 
   const paymentResult = await callMp("a consulta de pagamentos", () => new Payment(client).search({
     options: { external_reference: liga, sort: "date_created", criteria: "desc", limit: 20 },
@@ -1683,6 +1774,14 @@ exports.reconcileSubscriptions = onSchedule(
       }
       if (items.length < 50) break;
     }
+    // Duas assinaturas mensais autorizadas na mesma liga cobrariam em dobro: fica uma só (a de validade mais longa). Rede de segurança
+    // de dedupeAuthorizedMonthlies, que já roda no aviso e na consulta do app.
+    let duplicadas = 0;
+    for (const [liga, pres] of byLeague) {
+      const r = await dedupeAuthorizedMonthlies(liga, pres, client);
+      duplicadas += r.canceled;
+      byLeague.set(liga, r.authorized);
+    }
     // Assinaturas antes dos pagamentos anuais: o pagamento soma 12 meses ao vencimento que a mensal já deu.
     for (const [liga, pres] of byLeague) {
       if (await activateSubscription(liga, "monthly", pres.map(monthlyRenewsAt).sort().pop())) monthly++;
@@ -1702,7 +1801,7 @@ exports.reconcileSubscriptions = onSchedule(
     // Rede de segurança do cancelamento automático: mensal que o plano anual já cobre e que ainda cobraria.
     for (const [liga, pres] of byLeague) canceled += await cancelCoveredMonthlies(liga, pres);
 
-    logger.info("Reconciliação de assinaturas concluída", { monthly, annual, mensaisCanceladas: canceled });
+    logger.info("Reconciliação de assinaturas concluída", { monthly, annual, mensaisCanceladas: canceled, duplicadasCanceladas: duplicadas });
   }
 );
 
@@ -1751,6 +1850,8 @@ exports.mercadoPagoWebhook = onRequest(
         const result = await new PreApproval(client).get({ id });
         if (result.status === "authorized") {
           await activateSubscription(result.external_reference, "monthly", monthlyRenewsAt(result));
+          // Concluir dois checkouts mensais da mesma liga cobraria em dobro: fica uma só autorizada (nunca lança).
+          await cancelDuplicateMonthliesOf(String(result.external_reference || ""), client);
         }
       } else if (topic === "payment") {
         // Só o pagamento do plano anual ativa por aqui; cobranças mensais da assinatura

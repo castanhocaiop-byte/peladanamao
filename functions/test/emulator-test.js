@@ -734,6 +734,64 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   w = await webhook(9999);
   check('webhook: pagamento que o Mercado Pago não encontra → 500 (ele tenta de novo depois)', w.status === 500 && (await league()).subscriptionRenewsAt === keep);
 
+  // ═════════════ ASSINATURA MENSAL EM DOBRO ═════════════
+  // O teste real de 14/10/2026 criou 2 assinaturas mensais em 4 segundos. Concluir as duas cobraria a mesma liga em dobro, todo mês:
+  // o servidor reaproveita o checkout que ainda está pendente e, se duas forem autorizadas, cancela a duplicada (Firestore e funções de
+  // verdade nos emuladores; o Mercado Pago é o simulado).
+  console.log('── assinatura mensal em dobro: reaproveita o checkout pendente e cancela a duplicada autorizada');
+  const webhookPre = id => fetch(`${FN_URL}/mercadoPagoWebhook?type=subscription_preapproval&data.id=${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(res => ({ status: res.status }));
+  const isoIn = days => new Date(Date.now() + days * DAYMS).toISOString();
+  const statusOf = (id) => (mpGet().preapprovals.find(p => p.id === id) || {}).status;
+  await setLeague({});
+  await db.del('owner', 'leagues/la/billing_meta/monthlyCheckout');
+  mpState({});
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  const link1 = r.result && r.result.initPoint;
+  const rec1 = docData(await db.get('owner', 'leagues/la/billing_meta/monthlyCheckout'));
+  check('mensal: o 1º pedido cria a assinatura e o servidor guarda o checkout pendente (id, admin, valor e hora; nunca o e-mail)', r.status === 200 && mpGet().created.length === 1 && !!rec1 && rec1.preapprovalId === 'pre-novo-1' && rec1.uid === U.admA.uid && rec1.amount === 29.9 && typeof rec1.createdAt === 'string' && !/@/.test(JSON.stringify(rec1)), { r: r.raw, rec1 });
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  check('mensal: tocar de novo devolve o MESMO link e o Mercado Pago não recebe uma 2ª assinatura', r.status === 200 && r.result.initPoint === link1 && mpGet().created.length === 1, { r: r.raw, criadas: mpGet().created.length });
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  check('mensal: …nem no 3º toque', r.status === 200 && r.result.initPoint === link1 && mpGet().created.length === 1, r.raw);
+  check('o registro do checkout pendente ninguém lê nem grava direto (admin, jogador, listagem) → recusado', no(await db.get(U.admA.token, 'leagues/la/billing_meta/monthlyCheckout')) && no(await db.get(U.pl1.token, 'leagues/la/billing_meta/monthlyCheckout')) && no(await db.set(U.admA.token, 'leagues/la/billing_meta/monthlyCheckout', { preapprovalId: 'x', uid: U.admA.uid, amount: 29.9, createdAt: NOW })));
+
+  // A pessoa conclui o checkout: o Mercado Pago passa a assinatura para "autorizada" e avisa.
+  const stubA = mpGet();
+  Object.assign(stubA.preapprovals.find(p => p.id === 'pre-novo-1'), { status: 'authorized', next_payment_date: isoIn(30) });
+  mpState(stubA);
+  w = await webhookPre('pre-novo-1');
+  L = await league();
+  check('o aviso da assinatura autorizada ativa a liga como mensal, com a data real da próxima cobrança', w.status === 200 && L.subscriptionPlan === 'monthly' && L.subscriptionRenewsAt === stubA.preapprovals[0].next_payment_date, { w, L });
+  check('…e, sendo a única autorizada, nada é cancelado', mpGet().updates.length === 0, mpGet().updates);
+  r = await callFn('createMonthlySubscription', U.admA.token, { liga: 'la' });
+  check('mensal: com a assinatura já ativa o pedido é barrado (nada é criado)', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && mpGet().created.length === 1, r.raw);
+
+  // Duas assinaturas AUTORIZADAS na mesma liga (as duas checkouts concluídos): o aviso cancela a de validade menor.
+  const near = isoIn(28), far = isoIn(33);
+  await setLeague({});
+  mpState({ preapprovals: [
+    { id: 'dup-A', external_reference: 'la', status: 'authorized', next_payment_date: near, date_created: isoIn(-1) },
+    { id: 'dup-B', external_reference: 'la', status: 'authorized', next_payment_date: far, date_created: isoIn(-1) },
+    { id: 'dup-P', external_reference: 'la', status: 'pending' },
+    { id: 'dup-outra1', external_reference: 'lb', status: 'authorized', next_payment_date: far },
+    { id: 'dup-outra2', external_reference: 'lb', status: 'authorized', next_payment_date: near },
+  ] });
+  w = await webhookPre('dup-B');
+  L = await league();
+  check('duas autorizadas na mesma liga: o aviso cancela SÓ a de validade menor (a mais longa fica, a pendente e as de OUTRA liga não são tocadas)', w.status === 200 && JSON.stringify(mpGet().updates) === JSON.stringify([{ id: 'dup-A', body: { status: 'cancelled' } }]) && statusOf('dup-A') === 'cancelled' && statusOf('dup-B') === 'authorized' && statusOf('dup-P') === 'pending' && statusOf('dup-outra1') === 'authorized' && statusOf('dup-outra2') === 'authorized', { w, updates: mpGet().updates });
+  check('…e a liga fica ativa com a data da assinatura que ficou', L.subscriptionPlan === 'monthly' && L.subscriptionRenewsAt === far, L);
+  w = await webhookPre('dup-B');
+  check('…o mesmo aviso de novo não cancela mais nada', w.status === 200 && mpGet().updates.length === 1, mpGet().updates);
+
+  // A consulta do app (volta do checkout) também tira a duplicada.
+  await setLeague({});
+  mpState({ preapprovals: [
+    { id: 'chk-A', external_reference: 'la', status: 'authorized', next_payment_date: far, date_created: isoIn(-1) },
+    { id: 'chk-B', external_reference: 'la', status: 'authorized', next_payment_date: near, date_created: isoIn(-1) },
+  ] });
+  r = await callFn('checkSubscriptionStatus', U.admA.token, { liga: 'la' });
+  check('consulta do app com duas autorizadas: devolve o plano com a validade mais longa e cancela a outra', r.status === 200 && r.result.status === 'active' && r.result.plan === 'monthly' && r.result.renewsAt === far && JSON.stringify(mpGet().updates) === JSON.stringify([{ id: 'chk-B', body: { status: 'cancelled' } }]), r.raw);
+
   // ═════════════ MÉTRICAS DO FUNIL (painel só do dono + contadores anônimos) ═════════════
   console.log('── métricas do funil: regras do banco e funções');
   await seed();
