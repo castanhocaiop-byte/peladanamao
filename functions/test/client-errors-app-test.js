@@ -373,6 +373,7 @@ function makeApp({ fnImpl, reportThrows = false } = {}) {
   // ═══ painel do dono: seção "Erros do app" ═══════════════════════════════════════════════════════════════════
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const panelCode = slice('/* ── Painel do dono: métricas do funil', '/* ── Excluir a própria conta');
+  const REF_EVENTS = new Function(slice('const REF_EVENTS =', '\nconst refEventOf') + '\nreturn REF_EVENTS;')(); // o grupo "Origem das entradas" do painel usa a tabela de canais
   function makePanel({ callFn, copyOk = true, owner = true } = {}) {
     const layers = [];
     let errBox = null;
@@ -387,7 +388,7 @@ function makeApp({ fnImpl, reportThrows = false } = {}) {
       body: { appendChild: el => layers.push(el) },
     };
     const copied = [], toasts = [], calls = [];
-    const env = { st: { authUser: owner ? { email: 'castanho.caiop@gmail.com', emailVerified: true } : null }, callFn: async (n, d) => { calls.push(n); return callFn(n, d); }, esc, document: doc, pixCopyText: async t => { copied.push(t); return copyOk; }, toast: (m, t) => toasts.push([m, t]) };
+    const env = { st: { authUser: owner ? { email: 'castanho.caiop@gmail.com', emailVerified: true } : null }, callFn: async (n, d) => { calls.push(n); return callFn(n, d); }, esc, document: doc, REF_EVENTS, pixCopyText: async t => { copied.push(t); return copyOk; }, toast: (m, t) => toasts.push([m, t]) };
     const names = Object.keys(env);
     const api = new Function(...names, panelCode + '\nreturn { openOwnerMetrics, clientErrorsHtml, errorReportText, copyErrorReport, ownerMetricsHtml, getErrors: () => _ownerErrors, setErrors: v => { _ownerErrors = v; } };')(...names.map(n => env[n]));
     return { api, layers, copied, toasts, calls, errBox: () => errBox };

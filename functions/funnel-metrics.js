@@ -16,7 +16,10 @@ const TRIAL_ENDING_DAYS = 3; // "teste acabando": faltam até 3 dias (igual ao e
 const OFFER_DAYS = 5;        // a faixa do plano aparece nos últimos 5 dias do teste (igual ao app)
 const ACTIVE_DAYS = 14;      // liga "usada recentemente"
 
-const EVENT_NAMES_CLIENT = ["planBannerSeen", "planBannerClick", "subscriptionOpened", "installBannerSeen", "installClick", "appInstalled", "cardOpen", "cardShare", "cardVisit", "pixOpen", "pixCopy"];
+// Origem das entradas: quem abre um link com ?ref=<canal> e entra no app soma 1 no contador do canal (só o contador do dia: o servidor não
+// guarda quem foi). O app tem a MESMA tabela (REF_EVENTS no index.html) e um teste confere. O link do cartão do jogador já tinha o seu (cardVisit).
+const REF_EVENTS = { cartao: "cardVisit", whatsapp: "refWhatsapp", grupos: "refGrupos", instagram: "refInstagram", tiktok: "refTiktok", facebook: "refFacebook", youtube: "refYoutube", arena: "refArena", indicacao: "refIndicacao", resumo: "refResumo", anuncio: "refAnuncio" };
+const EVENT_NAMES_CLIENT = ["planBannerSeen", "planBannerClick", "subscriptionOpened", "installBannerSeen", "installClick", "appInstalled", "cardOpen", "cardShare", "cardVisit", "pixOpen", "pixCopy", ...Object.values(REF_EVENTS).filter(n => n !== "cardVisit")];
 const EVENT_NAMES_SERVER = ["checkoutMonthly", "checkoutAnnual"];
 const EVENT_NAMES = [...EVENT_NAMES_CLIENT, ...EVENT_NAMES_SERVER];
 
@@ -123,4 +126,4 @@ function sumEvents(byDay, days, now = Date.now()) {
   return out;
 }
 
-module.exports = { computeFunnel, snapshotOf, sumEvents, dayKeySP, lastDayKeys, classifyLeague, EVENT_NAMES, EVENT_NAMES_CLIENT, EVENT_NAMES_SERVER, TRIAL_ENDING_DAYS, OFFER_DAYS, ACTIVE_DAYS };
+module.exports = { computeFunnel, snapshotOf, sumEvents, dayKeySP, lastDayKeys, classifyLeague, EVENT_NAMES, EVENT_NAMES_CLIENT, EVENT_NAMES_SERVER, REF_EVENTS, TRIAL_ENDING_DAYS, OFFER_DAYS, ACTIVE_DAYS };

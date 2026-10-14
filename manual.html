@@ -1706,6 +1706,10 @@ p strong {
             <td>🎖 Badges conquistadas</td>
             <td>Badges que algum participante deste campeonato <strong>ganhou pela primeira vez</strong> nesta edição. O sistema calcula as badges do jogador sem este campeonato e compara com o estado atual — a diferença são as conquistas novas. Ordenadas da mais rara para a menos rara. Bloco omitido se nenhuma badge nova foi desbloqueada.</td>
           </tr>
+          <tr>
+            <td>📲 Rodapé</td>
+            <td>A última linha, depois de uma linha em branco, é sempre <code>📲 Feito no Pelada na Mão: peladanamao.com.br/?ref=resumo</code>: cada resumo colado no grupo apresenta o app a quem lê (organizadores de outras peladas inclusive). O <code>?ref=resumo</code> faz a entrada de quem abrir o link contar no painel do dono, em "Origem das entradas" (seção 28). O WhatsApp pode mostrar a prévia do site logo abaixo do resumo; para tirar a linha, é só apagá-la antes de enviar.</td>
+          </tr>
         </tbody>
       </table>
 
@@ -2372,6 +2376,11 @@ p strong {
         <div class="callout-label warn">Preferência fica no aparelho</div>
         A marcação de "já vi o elenco/ranking" e o fechar manual do card ficam guardados apenas no navegador/aparelho usado no momento (não no servidor). Trocando de celular ou navegador, ou limpando os dados do site, o card pode voltar a aparecer do zero.
       </div>
+
+      <div class="callout" id="elenco-celular">
+        <div class="callout-label">Elenco no celular</div>
+        Na aba <strong>Elenco</strong>, cada jogador ocupa uma linha com a foto, o nome e a nota em estrelas; o admin vê, na mesma linha, os botões <strong>Ativo/Inativo</strong>, <strong>🍖</strong>, <strong>🧤</strong>, <strong>✏️</strong> e <strong>✕</strong>. Num celular não cabe tudo ao lado do nome, então o nome fica sozinho na <strong>primeira linha</strong> (inteiro, sem nada por cima) e as <strong>estrelas e os botões descem juntos para a segunda linha</strong>; em telas muito estreitas os botões ainda se dividem em duas fileiras. No computador e no tablet, onde cabe, tudo continua <strong>numa linha só</strong>. Quem não é admin vê só as estrelas ao lado do nome. Antes de 14/10/2026 o nome ficava por baixo das estrelas no celular do admin.
+      </div>
     </section>
 
     <!-- 25. Trial e Plano Free -->
@@ -2632,6 +2641,13 @@ p strong {
         O endereço oficial é <strong>peladanamao.com.br</strong>. O endereço antigo (<code>aceoma.vercel.app</code>) continua funcionando, mas <strong>redireciona</strong> para o oficial, mantendo o convite ou a página que a pessoa abriu: links antigos colados em grupos não quebram. Os dados (conta, ligas, jogadores, financeiro) são os mesmos nos dois; o que é guardado <em>por endereço</em>, em cada aparelho, é o login e a permissão de notificações — então quem usava o endereço antigo <strong>entra de novo uma vez</strong> e reativa as notificações no oficial. As notificações também abrem o endereço oficial. Enquanto um aparelho não reativar, as notificações <strong>continuam chegando pelo endereço antigo</strong> e o navegador escreve <code>aceoma.vercel.app</code> embaixo do aviso (o título é o nome da liga; o ícone e o link já são do endereço oficial). Para trocar esse rótulo, no Chrome abra <code>chrome://settings/content/notifications</code>, remova <code>aceoma.vercel.app</code> e ative de novo em peladanamao.com.br: ativar no oficial <em>sem</em> remover o antigo faz cada aviso chegar <strong>em dobro</strong> enquanto o antigo continuar cadastrado.
       </div>
 
+      <div class="callout warn" id="login-navegador-embutido">
+        <div class="callout-label warn">Entrar pelo Instagram, TikTok ou Facebook <span class="tag">Dica</span></div>
+        Quem toca num link do Pelada na Mão dentro do <strong>Instagram</strong>, do <strong>TikTok</strong> ou do <strong>Facebook</strong> (e também do Messenger, LinkedIn, Snapchat, LINE e WeChat) abre o site no <strong>navegador embutido</strong> desse aplicativo, e não no Chrome ou no Safari. Ali o <strong>Google não deixa entrar com a conta Google</strong> (regra do Google desde 2021: a janela de login dá o erro 403 <code>disallowed_useragent</code>), e o link de acesso do <strong>Entrar sem senha</strong> abre em outro navegador. Por isso, na tela de login, o app reconhece esses navegadores e mostra um aviso no lugar do botão do Google: <em>"Você está no navegador do Instagram. O Google não deixa entrar com a conta Google por aqui."</em> A saída é abrir o site no Chrome (ou no Safari): pelos <strong>três pontinhos (⋯)</strong> → <strong>Abrir no navegador</strong>. No Android há também o botão <strong>Abrir no Chrome</strong> (leva junto o convite ou a origem do link) e, em qualquer aparelho, o botão <strong>Copiar link</strong> para colar no navegador. No iPhone não existe o botão do Chrome (o iPhone não deixa um aplicativo abrir o Chrome por conta própria): só as instruções e o Copiar link. Dentro do navegador embutido o <strong>e-mail e senha funcionam normalmente</strong>, e quem preferir insistir no Google pode tocar em <em>"Tentar com o Google mesmo assim"</em> (caso o aparelho tenha sido identificado errado). O <strong>app instalado na tela inicial</strong> nunca é tratado como navegador embutido.
+        <br><br>
+        <strong>Link de acesso aberto em outro navegador ou aparelho.</strong> O <strong>Entrar sem senha</strong> manda um link por e-mail, que só entra sozinho no mesmo navegador em que foi pedido (o e-mail fica guardado nele). Se o link abrir em <em>outro</em> navegador ou aparelho (pedido dentro do Instagram e aberto no Chrome, ou pedido no computador e aberto no celular), a tela de login agora pede para <strong>confirmar o e-mail</strong>: é só digitar o mesmo e-mail em que o link chegou. Antes, nesse caso, nada acontecia. Link já usado ou <strong>vencido</strong>: a tela explica e oferece <strong>Pedir um novo link</strong>. E, se o login do Google falhar por outro motivo (janela bloqueada, sem internet), a mensagem vem em português na própria tela de login, e não mais com o texto técnico do Firebase.
+      </div>
+
       <h3>Compartilhar o link da liga</h3>
       <p>Quando alguém cola o link do Pelada na Mão (por exemplo, o <strong>convite da liga</strong>) no WhatsApp, Telegram ou numa rede social, aparece uma <strong>prévia</strong> com o logo, o título "Pelada na Mão — organize sua pelada no celular" e uma descrição curta, em vez de um endereço solto. A prévia é a mesma para todos os links do site: ela apresenta o Pelada na Mão, não a liga.</p>
       <div class="callout warn">
@@ -2641,7 +2657,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
-        O site publica um manifesto (<code>manifest.webmanifest</code>: nome, cores, ícones de 192 e 512 pixels e uma versão "maskable" do 512, abrindo em <code>standalone</code> na raiz) e as etiquetas de compartilhamento <code>og:*</code> no <code>index.html</code>, com a imagem <code>og-image.png</code> (1200×630) em endereço absoluto do domínio. O iPhone usa o <code>apple-touch-icon.png</code> (180×180, fundo opaco). Há também <code>robots.txt</code> e <code>sitemap.xml</code> para os buscadores, e os arquivos de imagem são gerados a partir do <code>logo.webp</code> por <code>scripts/make-icons.js</code>. O deploy só publica o que está na lista de permitidos do <code>.vercelignore</code>, e um teste automático (<code>pwa-assets-test.js</code>, no CI) confere que tudo que o site cita existe, tem o tamanho certo e está nessa lista — o ícone das notificações push (<code>icon-192.png</code>) dava erro 404 antes disso. O app não registra um service worker de cache de propósito: o único service worker é o das notificações, e um de cache serviria versões antigas do site depois de cada atualização.
+        O site publica um manifesto (<code>manifest.webmanifest</code>: nome, cores, ícones de 192 e 512 pixels e uma versão "maskable" do 512, abrindo em <code>standalone</code> na raiz) e as etiquetas de compartilhamento <code>og:*</code> no <code>index.html</code>, com a imagem <code>og-image.jpg</code> (1200×630) em endereço absoluto do domínio. A imagem é JPEG, de uns 80 KB, e não PNG: o WhatsApp costuma ignorar imagem de prévia acima de ~300 KB (o PNG antigo tinha 461 KB), e o <code>pwa-assets-test.js</code> confere esse limite. O iPhone usa o <code>apple-touch-icon.png</code> (180×180, fundo opaco). Há também <code>robots.txt</code> e <code>sitemap.xml</code> para os buscadores, e os arquivos de imagem são gerados a partir do <code>logo.webp</code> por <code>scripts/make-icons.js</code>. O deploy só publica o que está na lista de permitidos do <code>.vercelignore</code>, e um teste automático (<code>pwa-assets-test.js</code>, no CI) confere que tudo que o site cita existe, tem o tamanho certo e está nessa lista — o ícone das notificações push (<code>icon-192.png</code>) dava erro 404 antes disso. O app não registra um service worker de cache de propósito: o único service worker é o das notificações, e um de cache serviria versões antigas do site depois de cada atualização.
       </div>
     </section>
 
@@ -2666,11 +2682,34 @@ p strong {
       </table>
 
       <h3>Uso do app (contadores anônimos)</h3>
-      <p>Alguns passos acontecem só na tela da pessoa, e o servidor não vê sozinho. Para eles o app avisa o servidor, que <strong>soma 1 a um contador do dia</strong>: viram a faixa do plano, tocaram nela, abriram a tela 💳, viram a faixa Instalar, tocaram em Instalar, instalaram o app, abriram o cartão do jogador, compartilharam o cartão e entraram por um link de cartão. Os checkouts (mensal e anual) são contados pelo próprio servidor quando o Mercado Pago aceita criar o pagamento. A tela mostra "7 dias / 30 dias" e as taxas de toque.</p>
+      <p>Alguns passos acontecem só na tela da pessoa, e o servidor não vê sozinho. Para eles o app avisa o servidor, que <strong>soma 1 a um contador do dia</strong>: viram a faixa do plano, tocaram nela, abriram a tela 💳, viram a faixa Instalar, tocaram em Instalar, instalaram o app, abriram o cartão do jogador, compartilharam o cartão, entraram por um link de cartão e entraram por um link de cada canal de origem (veja "Origem das entradas", abaixo). Os checkouts (mensal e anual) são contados pelo próprio servidor quando o Mercado Pago aceita criar o pagamento. A tela mostra "7 dias / 30 dias" e as taxas de toque.</p>
       <ul>
         <li>Cada aviso conta <strong>uma vez por sessão</strong> (aba aberta): o número representa pessoas e não redesenhos da tela.</li>
         <li>Os contadores só existem a partir desta versão: antes disso não há histórico de uso.</li>
         <li>Se o aviso falhar (sem internet, por exemplo), nada acontece e o app segue normal. Um problema ao contar também nunca atrapalha um pagamento.</li>
+      </ul>
+
+      <h3>Origem das entradas</h3>
+      <p>Quem abre um link do Pelada na Mão com <strong><code>?ref=</code>&lt;canal&gt;</strong> e entra no app soma <strong>1 a um contador do dia</strong> daquele canal. É a forma de saber qual divulgação traz gente, sem ferramenta de terceiros: o dono põe o link certo em cada lugar (WhatsApp, grupos, Instagram…) e olha o grupo <strong>Origem das entradas</strong> do painel, em 7 e 30 dias. O canal precisa estar na tabela abaixo e ser escrito <strong>exatamente assim, em minúsculas</strong>; qualquer outro valor é ignorado.</p>
+      <table class="data-table">
+        <thead><tr><th>Link</th><th>Onde usar</th><th>Contador no painel</th></tr></thead>
+        <tbody>
+          <tr><td><code>?ref=cartao</code></td><td>Já vai no cartão do jogador compartilhado (seção 29)</td><td>Entraram por um link de cartão (em Uso do app)</td></tr>
+          <tr><td><code>?ref=resumo</code></td><td>Já vai no rodapé do resumo do campeonato para o grupo (seção 15)</td><td>Resumo do campeonato no grupo</td></tr>
+          <tr><td><code>?ref=whatsapp</code></td><td>Mensagem direta a um organizador</td><td>WhatsApp (mensagem direta)</td></tr>
+          <tr><td><code>?ref=grupos</code></td><td>Grupos e comunidades (WhatsApp, Facebook, Telegram…)</td><td>Grupos e comunidades</td></tr>
+          <tr><td><code>?ref=instagram</code>, <code>?ref=tiktok</code>, <code>?ref=facebook</code>, <code>?ref=youtube</code></td><td>Link na bio ou na descrição de cada rede</td><td>Instagram, TikTok, Facebook, YouTube</td></tr>
+          <tr><td><code>?ref=arena</code></td><td>Cartaz com QR code em arenas e quadras</td><td>Arenas e quadras</td></tr>
+          <tr><td><code>?ref=indicacao</code></td><td>Jogador indicando o app a outro organizador</td><td>Indicação de jogador</td></tr>
+          <tr><td><code>?ref=anuncio</code></td><td>Anúncios pagos</td><td>Anúncios pagos</td></tr>
+        </tbody>
+      </table>
+      <p>Por exemplo: <code>https://peladanamao.com.br/?ref=instagram</code>.</p>
+      <ul>
+        <li>O número conta <strong>pessoas que entraram no app</strong> depois de abrir o link (inclui quem já tinha conta), uma vez por link aberto: quem abre e não entra não é contado, e não são cliques.</li>
+        <li>O app guarda o canal no próprio aparelho até a pessoa entrar; vale o <strong>último</strong> link aberto, e um canal desconhecido não apaga um conhecido.</li>
+        <li>A apresentação (seção 30) abre normalmente com esses links. A mensagem de convocação <strong>não</strong> leva <code>?ref=</code>: quem a recebe já é da liga.</li>
+        <li>Só o <strong>nome do canal</strong> vai ao servidor, nunca a pessoa: é o mesmo contador anônimo do resto desta seção.</li>
       </ul>
 
       <h3>Erros do app</h3>
@@ -2686,7 +2725,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
-        Funções <code>getFunnelMetrics</code> (só o dono, com e-mail verificado, no máximo 20 chamadas por minuto), <code>trackEvent</code> (qualquer pessoa logada, só os nomes da lista, 120 por minuto) e <code>snapshotFunnelMetrics</code> (diária). Os dados ficam em <code>metrics_events/AAAA-MM-DD</code> (contadores), <code>metrics_daily/AAAA-MM-DD</code> (retratos) e <code>leagues/{liga}/billing_meta/checkout</code> (marca do checkout, que some junto com a liga ao encerrá-la); as regras do banco fecham as três ao navegador. O cálculo é uma função pura (<code>functions/funnel-metrics.js</code>) coberta por testes, inclusive nos emuladores.
+        Funções <code>getFunnelMetrics</code> (só o dono, com e-mail verificado, no máximo 20 chamadas por minuto), <code>trackEvent</code> (qualquer pessoa logada, só os nomes da lista, 120 por minuto) e <code>snapshotFunnelMetrics</code> (diária). Os dados ficam em <code>metrics_events/AAAA-MM-DD</code> (contadores), <code>metrics_daily/AAAA-MM-DD</code> (retratos) e <code>leagues/{liga}/billing_meta/checkout</code> (marca do checkout, que some junto com a liga ao encerrá-la); as regras do banco fecham as três ao navegador. O cálculo é uma função pura (<code>functions/funnel-metrics.js</code>) coberta por testes, inclusive nos emuladores. A tabela de canais de origem (<code>REF_EVENTS</code>) existe nos dois lados, no <code>index.html</code> e nesse arquivo, e um teste confere que são idênticas; o servidor só aceita os nomes da lista (os 11 contadores de uso e os 10 de origem das entradas).
       </div>
     </section>
 
@@ -2738,7 +2777,7 @@ p strong {
       <table class="data-table">
         <thead><tr><th>Quem abre o endereço</th><th>O que aparece</th></tr></thead>
         <tbody>
-          <tr><td>Visitante novo neste aparelho, com o endereço limpo, ou vindo de um <strong>link de cartão</strong> (<code>?ref=cartao</code>) ou de um anúncio (<code>utm_…</code>, <code>fbclid</code>, <code>gclid</code>)</td><td>A apresentação.</td></tr>
+          <tr><td>Visitante novo neste aparelho, com o endereço limpo, ou vindo de um <strong>link com origem</strong> (<code>?ref=cartao</code>, <code>?ref=instagram</code>, <code>?ref=whatsapp</code>… veja a seção 28) ou de um anúncio (<code>utm_…</code>, <code>fbclid</code>, <code>gclid</code>)</td><td>A apresentação.</td></tr>
           <tr><td>Quem chega por um <strong>convite</strong> (<code>?invite=…&amp;liga=…</code>), pela volta do <strong>pagamento</strong> do Mercado Pago, pelo <strong>link de acesso por e-mail</strong> ou com qualquer outro parâmetro no endereço</td><td>O login, direto. A apresentação nunca fica no meio de um convite.</td></tr>
           <tr><td>Quem <strong>já entrou</strong> neste aparelho (o app guarda uma marca no próprio aparelho, sem identificar a pessoa)</td><td>O login, direto.</td></tr>
           <tr><td>Quem usa o <strong>app instalado</strong> na tela inicial</td><td>O login, direto.</td></tr>

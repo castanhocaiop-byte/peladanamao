@@ -96,6 +96,17 @@ check('convocação, asteriscos no nome saem: a primeira linha tem exatamente 2 
 api = comLiga('FutQuarta');
 check('convocação: só a primeira linha ganhou (o convite, a linha em branco e o endereço continuam como eram)', linhas(conv(api)).slice(2).join('\n') === '\nConfirme sua presença em:\nhttps://peladanamao.com.br', linhas(conv(api)).slice(2));
 
+// ── rodapé do resumo: apresenta o app a quem lê o grupo ─────────────────────────────────────
+const rodape = '📲 Feito no Pelada na Mão: peladanamao.com.br/?ref=resumo';
+api = comLiga('FutQuarta');
+msg = api.gerarResumoChamp('c1');
+check('resumo: termina com UMA linha em branco e o rodapé do app (📲 Feito no Pelada na Mão: peladanamao.com.br/?ref=resumo), sem linhas sobrando no fim', msg.endsWith('\n\n' + rodape) && !msg.endsWith('\n\n\n' + rodape) && linhas(msg).filter(l => l === rodape).length === 1 && msg === msg.trimEnd(), linhas(msg).slice(-4));
+check('resumo: o rodapé é a ÚLTIMA linha e o resto da mensagem (título, campeão, elenco) não mudou', linhas(msg).at(-1) === rodape && linhas(msg)[0] === '🏆 *FUTQUARTA — 12/09/2026*' && linhas(msg)[2] === '🥇 *Campeão: Azul*' && linhas(msg)[3] === '👥 Ana, Bia', linhas(msg));
+check('resumo: o link do rodapé leva o ?ref=resumo (é o que faz a entrada contar no painel do dono) e o nome do produto, nunca o nome antigo', /peladanamao\.com\.br\/\?ref=resumo$/.test(msg) && /Pelada na Mão/.test(rodape) && !/aceoma/i.test(msg), msg);
+check('resumo: liga sem nome (ou lista vazia): o rodapé continua lá, a mensagem nunca sai sem ele', comLiga('').gerarResumoChamp('c1').endsWith('\n\n' + rodape) && makeEnv({ leagues: [] }).gerarResumoChamp('c1').endsWith('\n\n' + rodape), comLiga('').gerarResumoChamp('c1'));
+check('convocação: NÃO leva o rodapé nem ?ref= (quem recebe já é do grupo; contar a entrada de quem já tem conta poluiria o painel de origens)', !/ref=|Feito no Pelada/.test(comLiga('FutQuarta').convocacaoMsg({ date: '2026-10-10' })), comLiga('FutQuarta').convocacaoMsg({ date: '2026-10-10' }));
+check('o texto do rodapé existe UMA vez no app (constante WA_APP_FOOTER) e o resumo a usa', (html.match(/Feito no Pelada na Mão/g) || []).length === 1 && /const WA_APP_FOOTER = '📲 Feito no Pelada na Mão: peladanamao\.com\.br\/\?ref=resumo';/.test(html) && /return `\$\{msg\.trim\(\)\}.{4}\$\{WA_APP_FOOTER\}`;/.test(html));
+
 // ── como está ligado no app ─────────────────────────────────────────────────────────────────
 const fnSrc = slice('function gerarResumoChamp(', 'function copyChampSummary(');
 check('gerarResumoChamp monta o título com o ajudante do nome da liga (uma vez) e não tem nenhum "ACEOMA"/"Aceoma" escrito dentro', (fnSrc.match(/waLeagueTitle\(\)/g) || []).length === 1 && /let msg = `🏆 \*\$\{waLeagueTitle\(\)\} — \$\{fdt\(champ\.date\)\}\*\\n\\n`;/.test(fnSrc) && !/aceoma/i.test(fnSrc), fnSrc.slice(fnSrc.indexOf('let msg'), fnSrc.indexOf('let msg') + 120));
@@ -108,6 +119,7 @@ check('PRIVACIDADE: o ajudante só lê o nome da liga já carregado (não chama 
 // ── manual ──────────────────────────────────────────────────────────────────────────────────
 const resumoSec = plain(manual.slice(manual.indexOf('id="resumo"'), manual.indexOf('<!-- 17. Múltiplas Ligas -->')));
 check('manual (seção 15): diz que a primeira linha do resumo traz o nome da liga em maiúsculas e a data, que os asteriscos saem e que sem nome sai "Pelada na Mão"', /🏆 Título A primeira linha traz o nome da liga, em maiúsculas, e a data do campeonato/.test(resumoSec) && /FUTQUARTA — 12\/09\/2026/.test(resumoSec) && /Os asteriscos que o nome tiver são tirados/.test(resumoSec) && /uma liga sem nome sai como "Pelada na Mão"/.test(resumoSec), resumoSec.slice(0, 300));
+check('manual (seção 15): a linha "📲 Rodapé" diz que o resumo termina com "Feito no Pelada na Mão: peladanamao.com.br/?ref=resumo", que o ?ref=resumo conta a entrada no painel (seção 28) e que dá para apagar a linha antes de enviar', /📲 Rodapé/.test(resumoSec) && /Feito no Pelada na Mão: peladanamao\.com\.br\/\?ref=resumo/.test(resumoSec) && /em "Origem das entradas" \(seção 28\)/.test(resumoSec) && /é só apagá-la antes de enviar/.test(resumoSec), resumoSec.slice(resumoSec.indexOf('Rodapé') - 20, resumoSec.indexOf('Rodapé') + 200));
 const convSec = plain(manual.slice(manual.indexOf('id="convocacao"'), manual.indexOf('id="financeiro"')));
 check('manual (seção 11): o Copiar mensagem e o WhatsApp individual dizem que a mensagem começa com o nome da liga', /Copiar mensagem Copia para a área de transferência uma mensagem WhatsApp que começa com o nome da liga \(em maiúsculas e negrito, por exemplo ⚽🍖 \*FUTQUARTA\*\)/.test(convSec) && /Abre o WhatsApp com a mesma mensagem de convocação \(com o nome da liga na primeira linha\)/.test(convSec), convSec.slice(convSec.indexOf('Link / Copiar'), convSec.indexOf('Link / Copiar') + 300));
 

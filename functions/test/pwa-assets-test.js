@@ -21,6 +21,20 @@ function pngSize(file) {
   return ok ? { w: b.readUInt32BE(16), h: b.readUInt32BE(20) } : null;
 }
 
+// Tamanho de um JPEG, lido do primeiro marcador de quadro (SOF), também sem biblioteca de imagem.
+function jpegSize(file) {
+  const b = fs.readFileSync(path.join(root, file));
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1];
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
 const html = read('index.html');
 const head = html.slice(0, html.indexOf('</head>'));
 const allowed = read('.vercelignore').split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith('!')).map(l => l.slice(1));
@@ -49,11 +63,15 @@ for (const i of icons) {
 // ── ícone do iPhone, prévia do link e arquivos de busca ───────────────────────────────────────
 check('iPhone: apple-touch-icon é um PNG 180×180 e está citado no site', /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/.test(head) && pngSize('apple-touch-icon.png')?.w === 180 && pngSize('apple-touch-icon.png')?.h === 180);
 check('o site cita o manifesto', /<link rel="manifest" href="\/manifest\.webmanifest">/.test(head));
-const og = { type: meta('property', 'og:type'), title: meta('property', 'og:title'), desc: meta('property', 'og:description'), url: meta('property', 'og:url'), image: meta('property', 'og:image'), w: meta('property', 'og:image:width'), h: meta('property', 'og:image:height'), alt: meta('property', 'og:image:alt'), locale: meta('property', 'og:locale') };
+const og = { type: meta('property', 'og:type'), title: meta('property', 'og:title'), desc: meta('property', 'og:description'), url: meta('property', 'og:url'), image: meta('property', 'og:image'), w: meta('property', 'og:image:width'), h: meta('property', 'og:image:height'), alt: meta('property', 'og:image:alt'), imageType: meta('property', 'og:image:type'), locale: meta('property', 'og:locale') };
 check('prévia do link: título, descrição, endereço e texto da imagem preenchidos, em português', !!og.title && !!og.desc && og.url === SITE && !!og.alt && og.locale === 'pt_BR' && og.type === 'website', og);
-check('prévia do link: o endereço da imagem é ABSOLUTO, no domínio do site, e o arquivo existe', og.image === SITE + 'og-image.png' && exists('og-image.png'), og);
+check('prévia do link: o endereço da imagem é ABSOLUTO, no domínio do site, e o arquivo existe', og.image === SITE + 'og-image.jpg' && exists('og-image.jpg'), og);
 check('prévia do link: a imagem está liberada no .vercelignore (senão o WhatsApp não mostra nada: o endereço é absoluto e não entra na conferência dos arquivos locais)', !!og.image && allowed.includes(String(og.image).slice(SITE.length)), { image: og.image, allowed });
-check('prévia do link: a imagem é PNG de 1200×630 e a etiqueta diz o mesmo tamanho', pngSize('og-image.png')?.w === 1200 && pngSize('og-image.png')?.h === 630 && og.w === '1200' && og.h === '630', { real: pngSize('og-image.png'), og });
+check('prévia do link: a imagem é JPEG de 1200×630 e as etiquetas dizem o mesmo tipo e tamanho', jpegSize('og-image.jpg')?.w === 1200 && jpegSize('og-image.jpg')?.h === 630 && og.w === '1200' && og.h === '630' && og.imageType === 'image/jpeg', { real: jpegSize('og-image.jpg'), og });
+const ogBytes = exists('og-image.jpg') ? fs.statSync(path.join(root, 'og-image.jpg')).size : Infinity;
+check(`prévia do link: a imagem pesa até 300 KB (o WhatsApp costuma ignorar prévia maior; o PNG antigo tinha 461 KB e a atual tem ${Math.round(ogBytes / 1024)} KB)`, ogBytes <= 300 * 1024, { ogBytes });
+check('prévia do link: o PNG antigo saiu do repositório e do site (ninguém aponta mais para ele)', !exists('og-image.png') && !allowed.includes('og-image.png') && !/og-image\.png/.test(html), { png: exists('og-image.png') });
+check('manual (seção 27): cita a prévia og-image.jpg de uns 80 KB e o limite de ~300 KB do WhatsApp, e não o PNG antigo', /og-image\.jpg/.test(read('manual.html')) && !/og-image\.png/.test(read('manual.html')) && /acima de ~300 KB/.test(read('manual.html')));
 check('prévia do link: título e descrição curtos o bastante para não serem cortados (≤ 70 e ≤ 160 caracteres)', (og.title || '').length <= 70 && (og.desc || '').length <= 160, { t: (og.title || '').length, d: (og.desc || '').length });
 check('prévia do link: cartão grande do Twitter/X', meta('name', 'twitter:card') === 'summary_large_image');
 check('busca: description (≤ 160), canonical e título da página', (meta('name', 'description') || '').length > 40 && (meta('name', 'description') || '').length <= 160 && head.includes(`<link rel="canonical" href="${SITE}">`) && /<title>Pelada na Mão — [^<]+<\/title>/.test(head));

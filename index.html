@@ -230,8 +230,8 @@
 <meta property="og:title" content="Pelada na Mão — organize sua pelada no celular">
 <meta property="og:description" content="Convocação, sorteio de times, resultados, ranking, conquistas e mensalidades em um só lugar. Crie sua liga e teste grátis.">
 <meta property="og:url" content="https://peladanamao.com.br/">
-<meta property="og:image" content="https://peladanamao.com.br/og-image.png">
-<meta property="og:image:type" content="image/png">
+<meta property="og:image" content="https://peladanamao.com.br/og-image.jpg">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Logo do Pelada na Mão: uma mão segurando o celular, com bola, medalha e troféu na tela.">
@@ -1537,17 +1537,7 @@ function initFirebase() {
     try { MESSAGING = firebase.messaging(); } catch(_) {}
     try { FN = firebase.app().functions('us-east1'); } catch(_) {}
 
-    if (AUTH.isSignInWithEmailLink(location.href)) {
-      const storedEmail = localStorage.getItem('aceoma_emailForSignIn');
-      if (storedEmail) {
-        AUTH.signInWithEmailLink(storedEmail, location.href)
-          .then(() => {
-            localStorage.removeItem('aceoma_emailForSignIn');
-            history.replaceState(null, '', location.pathname);
-          })
-          .catch(e => toast('Erro no link de acesso: ' + e.message));
-      }
-    }
+    handleEmailLinkOnLoad();
 
     AUTH.onAuthStateChanged(async user => {
       window.__pnmStage = 'auth';
@@ -1799,12 +1789,17 @@ function dismissTermsNotice() {
    só soma 1 ao contador do dia: não guarda quem foi. Cada aviso vai uma vez por sessão (aba), para o número
    contar pessoas e não redesenhos da tela. Falha em silêncio: contar nunca atrapalha o app. */
 const _evSent = new Set();
-// Link de cartão compartilhado (?ref=cartao): guarda a origem e, quando a pessoa já está logada, conta UMA entrada pelo
-// cartão (sem saber quem é). Só aceita o valor conhecido.
-try { if (new URLSearchParams(location.search).get('ref') === 'cartao') localStorage.setItem('aceoma_ref', 'cartao'); } catch(_) {}
+// Origem da entrada (?ref=<canal>): o link do cartão do jogador (?ref=cartao), o do resumo do campeonato (?ref=resumo) e os que o dono espalha
+// (WhatsApp, grupos, Instagram, TikTok…). O app guarda a origem e, quando a pessoa já está logada, conta UMA entrada no canal (sem saber quem é:
+// o servidor só soma 1 no contador do dia). Só vale o valor da tabela, escrito exatamente assim; o servidor tem a mesma tabela
+// (REF_EVENTS em functions/funnel-metrics.js) e um teste confere.
+const REF_EVENTS = { cartao: 'cardVisit', whatsapp: 'refWhatsapp', grupos: 'refGrupos', instagram: 'refInstagram', tiktok: 'refTiktok', facebook: 'refFacebook', youtube: 'refYoutube', arena: 'refArena', indicacao: 'refIndicacao', resumo: 'refResumo', anuncio: 'refAnuncio' };
+const refEventOf = ref => (typeof ref === 'string' && Object.prototype.hasOwnProperty.call(REF_EVENTS, ref) ? REF_EVENTS[ref] : '');
+try { const ref = new URLSearchParams(location.search).get('ref'); if (refEventOf(ref)) localStorage.setItem('aceoma_ref', ref); } catch(_) {}
 function trackRef() {
   try {
-    if (localStorage.getItem('aceoma_ref') === 'cartao' && st.authUser && FN) { localStorage.removeItem('aceoma_ref'); trackEvent('cardVisit', false); }
+    const ev = refEventOf(localStorage.getItem('aceoma_ref'));
+    if (ev && st.authUser && FN) { localStorage.removeItem('aceoma_ref'); trackEvent(ev, false); }
   } catch(_) {}
 }
 function trackEvent(name, oncePerSession = true) {
@@ -1866,9 +1861,12 @@ function parseSiteOrigin(origin) {
 }
 
 // Link que o Android entende como "abrir no Chrome"; se não houver Chrome, ele volta para o mesmo endereço.
-function chromeIntentUrl(origin) {
+// "tail" é o caminho e os parâmetros da página (convite, origem…); só passa o que é comum (letras, números e alguns símbolos): um ";" ou "#"
+// alteraria o próprio link do Android. Qualquer outra coisa volta para a raiz do site.
+function chromeIntentUrl(origin, tail = '/') {
   const s = parseSiteOrigin(origin);
-  return s ? `intent://${s.host}/#Intent;scheme=${s.scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(`${s.scheme}://${s.host}/`)};end` : '';
+  const t = /^\/(?!\/)[A-Za-z0-9\-._~%&=+,\/:?@!*()]*$/.test(String(tail)) ? String(tail) : '/';
+  return s ? `intent://${s.host}${t}#Intent;scheme=${s.scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(`${s.scheme}://${s.host}${t}`)};end` : '';
 }
 
 // Decide se mostra o convite e para qual aparelho. Pura: recebe tudo o que precisa.
@@ -2292,6 +2290,9 @@ async function shareMjCard() {
    Camada solta no <body> (abre em qualquer tela). Só números agregados: nenhum dado de pessoa. */
 const isSystemOwner = () => st.authUser?.email === 'castanho.caiop@gmail.com' && !!st.authUser?.emailVerified;
 
+// Canais de origem no painel (a ordem é a da tela). A chave é a do ?ref= e o contador é REF_EVENTS[chave]; o cartão do jogador fica em "Uso do app".
+const OWNER_REF_ROWS = [['WhatsApp (mensagem direta)', 'whatsapp'], ['Grupos e comunidades', 'grupos'], ['Instagram', 'instagram'], ['TikTok', 'tiktok'], ['Facebook', 'facebook'], ['YouTube', 'youtube'], ['Arenas e quadras', 'arena'], ['Indicação de jogador', 'indicacao'], ['Resumo do campeonato no grupo', 'resumo'], ['Anúncios pagos', 'anuncio']];
+
 function ownerMetricsHtml(m) {
   const f = m?.funnel || {}, a = f.accounts || {}, l = f.leagues || {}, s = f.states || {}, r = f.rates || {}, c = f.trialCohort || {}, rev = f.revenue || {};
   const e7 = m?.events?.last7d || {}, e30 = m?.events?.last30d || {}, hist = m?.history || [];
@@ -2354,6 +2355,9 @@ function ownerMetricsHtml(m) {
     ${ev('Entraram por um link de cartão', 'cardVisit', 'pessoas já logadas que chegaram pelo link ?ref=cartao')}
     ${ev('Abriram o Pagar com PIX', 'pixOpen')}
     ${ev('Copiaram o código PIX', 'pixCopy', pixRate)}
+    ${h('Origem das entradas (7 dias / 30 dias)')}
+    <div style="font-size:11px;color:var(--text3);line-height:1.4;padding:4px 0 2px">Pessoas que abriram um link com <b>?ref=…</b> e entraram no app (inclui quem já tinha conta). O link do cartão do jogador aparece acima, em Uso do app.</div>
+    ${OWNER_REF_ROWS.map(([label, ref]) => ev(label, REF_EVENTS[ref], '?ref=' + ref)).join('')}
     ${h('Evolução (retrato diário, 60 dias)')}
     ${hist.length >= 2 ? trend('Contas', 'accounts', num) + trend('Ligas', 'leagues', num) + trend('Receita mensal estimada', 'mrr', brl) + trend('Planos pagos ativos', 'monthlyActive', num)
       : '<div style="font-size:12px;color:var(--text3);padding:8px 0">O retrato do dia é gravado de madrugada (3h30). A evolução aparece a partir do segundo dia.</div>'}`;
@@ -2548,7 +2552,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto e estatísticas), e só sai dele se você tocar em Compartilhar. Nunca leva e-mail nem WhatsApp.')}
-        ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista), sem identificar quem foi. Servem para melhorar o produto.')}
+        ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
 
@@ -2789,6 +2793,60 @@ async function sendMagicLink(email) {
   localStorage.setItem('aceoma_emailForSignIn', email);
 }
 
+// Link de acesso do e-mail ("Entrar sem senha") aberto neste navegador: entra sozinho. Se o e-mail não está guardado aqui (o link abriu em outro
+// navegador ou aparelho: pedido dentro do Instagram e aberto no Chrome, ou pedido no computador e aberto no celular), a tela de login pede para
+// confirmar o e-mail. Antes, nesse caso, nada acontecia e a pessoa ficava sem entender.
+function handleEmailLinkOnLoad() {
+  if (!AUTH.isSignInWithEmailLink(location.href)) return;
+  let stored = '';
+  try { stored = localStorage.getItem('aceoma_emailForSignIn') || ''; } catch(_) {}
+  if (!stored) { st._emailLink = { mode: 'confirm', msg: '', typed: '' }; return; }
+  AUTH.signInWithEmailLink(stored, location.href)
+    .then(() => {
+      try { localStorage.removeItem('aceoma_emailForSignIn'); } catch(_) {}
+      history.replaceState(null, '', location.pathname);
+    })
+    .catch(e => emailLinkFailed(e?.code, ''));
+}
+
+// O link não serviu. E-mail diferente do que o recebeu, sem conexão ou muitas tentativas: continua na confirmação, com o motivo, para tentar
+// de novo. Link já usado ou vencido: avisa e oferece pedir outro.
+function emailLinkFailed(code, typed) {
+  const retry = code === 'auth/invalid-email' || code === 'auth/network-request-failed' || code === 'auth/too-many-requests';
+  st._emailLink = { mode: retry ? 'confirm' : 'dead', msg: emailLinkErrMsg(code), typed: typed || '' };
+  render();
+}
+
+function emailLinkErrMsg(code) {
+  switch (code) {
+    case 'auth/invalid-action-code':
+    case 'auth/expired-action-code': return 'Este link de acesso já foi usado ou venceu. Peça um novo.';
+    case 'auth/invalid-email': return 'Este não é o e-mail que recebeu o link. Digite o mesmo e-mail.';
+    case 'auth/network-request-failed': return 'Sem conexão com a internet. Confira a rede e tente de novo.';
+    case 'auth/too-many-requests': return 'Muitas tentativas. Tente mais tarde.';
+    default: return 'Não foi possível entrar com este link de acesso. Peça um novo.';
+  }
+}
+
+async function doConfirmEmailLink() {
+  const email = (document.getElementById('li-confirm-email')?.value || '').trim();
+  if (!email) { st._emailLink = { ...st._emailLink, msg: 'Digite o seu e-mail.' }; render(); return; }
+  try {
+    await AUTH.signInWithEmailLink(email, location.href);
+    try { localStorage.removeItem('aceoma_emailForSignIn'); } catch(_) {}
+    st._emailLink = null;
+    history.replaceState(null, '', location.pathname);
+  } catch(e) { emailLinkFailed(e?.code, email); }
+}
+
+// Sai da confirmação (Cancelar, Voltar ao login): limpa o endereço do link e mostra o login de sempre.
+function skipEmailLink() {
+  st._emailLink = null;
+  try { history.replaceState(null, '', location.pathname); } catch(_) {}
+  render();
+}
+function emailLinkAskNew() { st._loginTab = 'link'; skipEmailLink(); }
+
 async function doLoginEmail(mode) {
   const email = document.getElementById('li-email')?.value?.trim();
   const pw = document.getElementById('li-pw')?.value;
@@ -2817,12 +2875,33 @@ async function doForgotPassword() {
   }
 }
 
+// Texto em português para quem não conseguiu entrar com o Google. Vazio = a pessoa fechou a janela de propósito (não é erro). Antes aparecia
+// o texto técnico do Firebase, em inglês.
+function googleLoginErrMsg(code) {
+  switch (code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+    case 'auth/user-cancelled': return '';
+    case 'auth/popup-blocked': return 'O navegador bloqueou a janela do Google. Libere os pop-ups deste site e tente de novo, ou entre com e-mail e senha.';
+    case 'auth/operation-not-supported-in-this-environment':
+    case 'auth/web-storage-unsupported': return 'Este navegador não permite entrar com o Google. Abra o Pelada na Mão no Chrome ou no Safari, ou entre com e-mail e senha.';
+    case 'auth/network-request-failed': return 'Sem conexão com a internet. Confira a rede e tente de novo.';
+    case 'auth/too-many-requests': return 'Muitas tentativas. Tente mais tarde.';
+    case 'auth/account-exists-with-different-credential': return 'Já existe uma conta com este e-mail, criada com e-mail e senha. Entre com e-mail e senha.';
+    default: return 'Não foi possível entrar com o Google agora. Tente de novo ou entre com e-mail e senha.';
+  }
+}
+
 async function doLoginGoogle() {
+  const err = document.getElementById('login-err');
+  if (err) err.textContent = '';
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     await AUTH.signInWithPopup(provider);
   } catch(e) {
-    toast('Erro Google: ' + (e.message||e));
+    const msg = googleLoginErrMsg(e?.code);
+    if (!msg) return;
+    if (err) err.textContent = msg; else toast(msg);
   }
 }
 
@@ -3158,6 +3237,10 @@ function waLeagueTitle() {
   const nome = String(st.availableLeagues?.find(l => l.id === st.leagueId)?.name || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
   return (nome || 'Pelada na Mão').toUpperCase();
 }
+
+// Última linha do resumo do campeonato para o grupo: cada resumo colado no WhatsApp apresenta o app a quem lê (organizadores de outras
+// peladas inclusive). O ?ref=resumo faz a entrada contar no painel do dono, em "Origem das entradas".
+const WA_APP_FOOTER = '📲 Feito no Pelada na Mão: peladanamao.com.br/?ref=resumo';
 
 function convocacaoMsg(preset) {
   const isToday = preset.date === today();
@@ -5356,12 +5439,16 @@ function vPlayers() {
     const isActive = p.active !== false;
     const isChurr = !!p.somenteChurrasco;
     const isGoal  = !!p.goleiro;
-    return `<div style="display:flex;align-items:center;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:${isActive?1:.45}">
+    // O nome vem primeiro e nunca passa por baixo das estrelas e dos botões: a linha quebra (flex-wrap) e o grupo de controles desce para uma
+    // 2ª linha quando não cabe ao lado do nome. Num celular o admin tem 5 estrelas + 5 botões (uns 300 px); com tudo numa linha só o nome
+    // encolhia até zero e o texto saía por cima das estrelas.
+    return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:${isActive?1:.45}">
       <span style="display:inline-flex;margin-right:6px">${playerAvatar(p.name, 34)}</span>
-      <div style="flex:1;min-width:0">
+      <div style="flex:1 1 120px;min-width:0;overflow-wrap:anywhere">
         <div style="font-size:14px;font-weight:600">${esc(p.name)}${isChurr&&st.appCfg?.hasChurrasco?` <span style="font-size:10px;font-weight:700;color:#FF8A3C;background:#FF8A3C18;padding:2px 5px;border-radius:10px">🍖</span>`:''}${isGoal?` <span style="font-size:10px;font-weight:700;color:#4FC3F7;background:#4FC3F718;padding:2px 5px;border-radius:10px">🧤</span>`:''}</div>
         ${isAdmin()&&waOf(p)?`<div style="font-size:11px;color:#25D366;margin-top:1px">💬 +55 ${esc(waOf(p))}</div>`:''}
       </div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto">
       <span style="display:flex;gap:0">${renderStars(p.id, p.stars)}</span>
       ${isAdmin()?`
       <button onclick="togglePlayerActive('${p.id}',${isActive})"
@@ -5387,6 +5474,7 @@ function vPlayers() {
       <button onclick="deleteRegisteredPlayer('${p.id}')"
         style="background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;opacity:.7;padding:4px 6px">✕</button>
       `:''}
+      </div>
     </div>`;
   };
 
@@ -5752,8 +5840,19 @@ function vLogin() {
       style="width:100%;padding:12px 14px;background:var(--s2);border:1px solid var(--border);border-radius:10px;
              color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box" ${extra}>`;
 
+  // Dentro do navegador de outro aplicativo (Instagram, TikTok, Facebook…) o Google barra o login: aparece o aviso, com a saída, no lugar do botão.
+  const emb = embeddedLoginInfo();
+  const googleBtn = `<button onclick="doLoginGoogle()"
+        style="width:100%;padding:12px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
+               border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
+               justify-content:center;gap:10px;font-family:inherit;margin-bottom:20px">
+        ${googleSvg} ${signup ? 'Continuar com Google' : 'Entrar com Google'}
+      </button>`;
+
   let body = '';
-  if (mode === 'link') {
+  if (st._emailLink) {
+    body = emailLinkPanel(st._emailLink);
+  } else if (mode === 'link') {
     body = `
       <button onclick="st._loginTab='email';render()"
         style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:20px;
@@ -5771,12 +5870,7 @@ function vLogin() {
       <p style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">É o primeiro passo para criar a sua liga. O teste grátis de 8 dias começa quando a liga é criada.</p>` : '';
     body = `
       ${intro}
-      <button onclick="doLoginGoogle()"
-        style="width:100%;padding:12px;background:var(--s2);color:var(--text);font-size:14px;font-weight:600;
-               border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;
-               justify-content:center;gap:10px;font-family:inherit;margin-bottom:20px">
-        ${googleSvg} ${signup ? 'Continuar com Google' : 'Entrar com Google'}
-      </button>
+      ${emb ? embeddedNotice(emb) : googleBtn}
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
         <div style="flex:1;height:1px;background:var(--border)"></div>
         <span style="font-size:12px;color:var(--text3);white-space:nowrap">ou use seu email</span>
@@ -5818,6 +5912,94 @@ function vLogin() {
       <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text3);font-size:12px;text-decoration:underline;font-family:inherit">📄 Termos de Uso</a>
     </div>
   </div>`;
+}
+
+// Navegador embutido em outro aplicativo (Instagram, TikTok, Facebook…). O Google barra o login com a conta Google nele (erro 403
+// disallowed_useragent, regra do Google desde 2021) e o link de acesso do e-mail abre em outro navegador. Devolve { name, named } ou null.
+// Pura: recebe o que precisa. O app instalado na tela inicial (standalone) nunca é "embutido": no iPhone a identificação dele também vem
+// sem "Safari", e o login do Google funciona nele.
+function embeddedBrowserOf(ua, { standalone = false } = {}) {
+  ua = String(ua || '');
+  if (standalone) return null;
+  const apps = [
+    ['Instagram', /Instagram/i],
+    ['WeChat', /MicroMessenger/i], // antes do Messenger: "MicroMessenger" contém "Messenger"
+    ['Messenger', /\bMessenger|Orca-Android/i],
+    ['Facebook', /FBAN|FBAV|FB_IAB|FBIOS/i],
+    ['TikTok', /musical_ly|TikTok|BytedanceWebview/i],
+    ['LinkedIn', /LinkedInApp/i],
+    ['Snapchat', /Snapchat/i],
+    ['LINE', /\bLine\//i],
+  ];
+  for (const [name, re] of apps) if (re.test(ua)) return { name, named: true };
+  if (/; wv\)/.test(ua)) return { name: '', named: false }; // WebView do Android: outro aplicativo
+  // WebView do iPhone/iPad: o Safari e os navegadores de verdade trazem "Safari/" na identificação; um aplicativo que abre o link por conta própria não
+  if (/iPhone|iPad|iPod/.test(ua) && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)) return { name: '', named: false };
+  return null;
+}
+
+// O que a tela de login precisa saber sobre o navegador: null (navegador de verdade) ou { name, named, chromeUrl }. No Android, chromeUrl é o link
+// que abre esta mesma página no Chrome (com o convite ou a origem, se houver).
+function embeddedLoginInfo() {
+  try {
+    const ua = navigator.userAgent || '';
+    let standalone = navigator.standalone === true;
+    try { standalone = standalone || !!(window.matchMedia && (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches)); } catch(_) {}
+    const emb = embeddedBrowserOf(ua, { standalone });
+    if (!emb) return null;
+    return { ...emb, chromeUrl: /Android/i.test(ua) ? chromeIntentUrl(location.origin, location.pathname + location.search) : '' };
+  } catch(_) { return null; } // não conseguir identificar o navegador nunca pode derrubar a tela de login
+}
+
+function embeddedNotice(emb) {
+  const where = emb.named ? `no navegador do ${emb.name}` : 'dentro de outro aplicativo';
+  const chrome = emb.chromeUrl
+    ? `<a href="${esc(emb.chromeUrl)}" style="flex:1;min-width:120px;text-align:center;text-decoration:none;background:#00C97A;color:#000;border-radius:9px;padding:10px 12px;font-size:13px;font-weight:800">Abrir no Chrome</a>`
+    : '';
+  return `<div id="embedded-notice" role="note" style="background:#f0a50014;border:1px solid #f0a50055;border-radius:12px;padding:14px;margin-bottom:18px;font-size:13px;line-height:1.55;color:var(--text2)">
+    <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px">📲 Você está ${where}</div>
+    O Google <b>não deixa entrar com a conta Google</b> por aqui. Para usar o Google, abra o Pelada na Mão no <b>Chrome</b> (ou no <b>Safari</b>): toque nos <b>três pontinhos (⋯)</b> e escolha <b>Abrir no navegador</b>.
+    <div style="margin-top:8px">Ou entre com <b>e-mail e senha</b> logo abaixo: funciona aqui mesmo.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${chrome}<button type="button" onclick="copyAppLink()" style="flex:1;min-width:120px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Copiar link</button></div>
+    <button type="button" onclick="doLoginGoogle()" style="display:block;margin:10px auto 0;background:none;border:none;color:var(--text3);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:0">Tentar com o Google mesmo assim</button>
+  </div>`;
+}
+
+// Copia o endereço desta página (com o convite ou a origem, se houver) para colar no Chrome ou no Safari. Os navegadores embutidos costumam negar a
+// área de transferência moderna: tenta a cópia à moda antiga antes de desistir.
+async function copyAppLink() {
+  const url = String(location.href).split('#')[0];
+  const done = () => toast('Link copiado! Cole no Chrome ou no Safari.', 'ok');
+  try { await navigator.clipboard.writeText(url); done(); return; } catch(_) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, url.length);
+    const ok = document.execCommand('copy');
+    ta.remove();
+    if (ok) { done(); return; }
+  } catch(_) {}
+  toast('Não consegui copiar. Toque e segure o endereço na barra do navegador.', 'err');
+}
+
+// Painel que substitui o formulário quando a pessoa abre o link de acesso do e-mail: confirmar o e-mail (outro navegador ou aparelho) ou link vencido.
+function emailLinkPanel(s) {
+  const btn = 'width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;border:none;border-radius:10px;cursor:pointer;margin-top:12px;font-family:inherit';
+  const ghost = 'background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit;margin-top:14px;text-decoration:underline';
+  const msg = s.msg ? `<div style="font-size:13px;color:var(--danger);margin-bottom:12px;line-height:1.5">${esc(s.msg)}</div>` : '';
+  if (s.mode === 'dead') {
+    return `<p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px">Link de acesso vencido</p>
+      ${msg}
+      <button onclick="emailLinkAskNew()" style="${btn}">Pedir um novo link</button>
+      <div style="text-align:center"><button onclick="skipEmailLink()" style="${ghost}">Voltar ao login</button></div>`;
+  }
+  return `<p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Confirme o seu e-mail</p>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.5">Você abriu o link de acesso que enviamos por e-mail. Para entrar, digite o mesmo e-mail em que recebeu o link.</p>
+    ${msg}
+    <input id="li-confirm-email" type="email" value="${esc(s.typed || '')}" placeholder="Seu e-mail" autocomplete="email" onkeydown="if(event.key==='Enter')doConfirmEmailLink()"
+      style="width:100%;padding:12px 14px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box">
+    <button onclick="doConfirmEmailLink()" style="${btn}">Entrar</button>
+    <div style="text-align:center"><button onclick="skipEmailLink()" style="${ghost}">Cancelar</button></div>`;
 }
 
 function slugify(s) {
@@ -8537,7 +8719,7 @@ function gerarResumoChamp(champId) {
       msg += `${b.emoji} *${b.label}* — ${playerName}${rarity}\n`;
     }
   }
-  return msg.trim();
+  return `${msg.trim()}\n\n${WA_APP_FOOTER}`;
 }
 
 function copyChampSummary(champId) {

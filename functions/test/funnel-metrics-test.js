@@ -85,7 +85,12 @@ const s7 = m.sumEvents(byDay, 7, NOW), s30 = m.sumEvents(byDay, 30, NOW);
 check('soma dos contadores nos últimos 7 dias (o dia 05/10 fica de fora)', s7.planBannerSeen === 8 && s7.planBannerClick === 2 && s7.installClick === 4 && s7.checkoutMonthly === 1 && s7.appInstalled === 0, s7);
 check('…e nos últimos 30 dias (o dia 05/10 entra)', s30.planBannerSeen === 108, s30);
 check('valores inválidos nos contadores são ignorados', m.sumEvents({ '2026-10-20': { planBannerSeen: 'x', installClick: null, appInstalled: 2 } }, 1, NOW).planBannerSeen === 0);
-check('lista de eventos: 11 do app + 2 do servidor, sem repetição', m.EVENT_NAMES.length === 13 && new Set(m.EVENT_NAMES).size === 13 && m.EVENT_NAMES_CLIENT.length === 11 && m.EVENT_NAMES_SERVER.length === 2);
+check('lista de eventos: 21 do app (11 de uso + 10 de origem das entradas) + 2 do servidor, sem repetição', m.EVENT_NAMES.length === 23 && new Set(m.EVENT_NAMES).size === 23 && m.EVENT_NAMES_CLIENT.length === 21 && m.EVENT_NAMES_SERVER.length === 2);
+check('…a tabela de origens (REF_EVENTS): 11 canais, chave só com letras minúsculas, o cartão usa o cardVisit de sempre e os 10 novos têm um contador refNome só deles', Object.keys(m.REF_EVENTS).length === 11 && Object.keys(m.REF_EVENTS).every(k => /^[a-z]+$/.test(k)) && m.REF_EVENTS.cartao === 'cardVisit' && Object.entries(m.REF_EVENTS).filter(([k]) => k !== 'cartao').every(([k, v]) => v === 'ref' + k[0].toUpperCase() + k.slice(1)) && new Set(Object.values(m.REF_EVENTS)).size === 11, m.REF_EVENTS);
+check('…todo contador de origem é aceito do app, e nenhum é dos que só o servidor conta', Object.values(m.REF_EVENTS).every(n => m.EVENT_NAMES_CLIENT.includes(n) && !m.EVENT_NAMES_SERVER.includes(n)));
+const byRef = { '2026-10-20': { refWhatsapp: 3, refInstagram: 1 }, '2026-10-19': { refWhatsapp: 2, cardVisit: 4 }, '2026-10-05': { refWhatsapp: 50 } };
+const r7 = m.sumEvents(byRef, 7, NOW), r30 = m.sumEvents(byRef, 30, NOW);
+check('soma dos contadores de origem: 7 dias (WhatsApp 5, Instagram 1, cartão 4, os demais 0) e 30 dias (o dia 05/10 entra: WhatsApp 55)', r7.refWhatsapp === 5 && r7.refInstagram === 1 && r7.cardVisit === 4 && r7.refGrupos === 0 && r7.refAnuncio === 0 && r30.refWhatsapp === 55, { r7, r30 });
 check('…com os dois do PIX copia e cola (abrir a tela e copiar o código), contados pelo app', m.EVENT_NAMES_CLIENT.includes('pixOpen') && m.EVENT_NAMES_CLIENT.includes('pixCopy') && !m.EVENT_NAMES_SERVER.includes('pixCopy'));
 
 console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);

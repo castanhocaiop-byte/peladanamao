@@ -127,8 +127,13 @@ const reset = () => { store.clear(); logs.length = 0; setShouldFail = null; mpRe
     const rr = await tryCall(fns.trackEvent, { name: nome }, user('u1'));
     check(`trackEvent: o evento do cartão do jogador / do PIX copia e cola "${nome}" é aceito e soma 1 no contador do dia`, rr.res?.ok === true && store.get(`metrics_events/${today()}`)[nome] === 1, store.get(`metrics_events/${today()}`));
   }
+  for (const nome of Object.values(funnel.REF_EVENTS).filter(n => n !== 'cardVisit')) {
+    const rr = await tryCall(fns.trackEvent, { name: nome }, user('u1'));
+    check(`trackEvent: o contador de origem das entradas "${nome}" é aceito e soma 1 no contador do dia`, rr.res?.ok === true && store.get(`metrics_events/${today()}`)[nome] === 1, store.get(`metrics_events/${today()}`));
+  }
+  check('trackEvent: os 10 contadores de origem convivem no mesmo documento do dia, só números', Object.values(funnel.REF_EVENTS).filter(n => n !== 'cardVisit').every(n => store.get(`metrics_events/${today()}`)[n] === 1) && Object.values(store.get(`metrics_events/${today()}`)).every(v => typeof v === 'number'), store.get(`metrics_events/${today()}`));
   check('trackEvent: só o contador é gravado, nunca quem foi (nem id, nem e-mail)', !/u1|u2|@/.test(JSON.stringify([...store.entries()].filter(([k]) => k.startsWith('metrics_')))), [...store.entries()]);
-  for (const bad of ['', 'qualquerCoisa', 'checkoutMonthly', '__proto__', 'a'.repeat(100), undefined, 42]) {
+  for (const bad of ['', 'qualquerCoisa', 'instagram', 'ref_instagram', 'refQualquer', 'checkoutMonthly', '__proto__', 'a'.repeat(100), undefined, 42]) {
     const rr = await tryCall(fns.trackEvent, { name: bad }, user('u1'));
     check(`trackEvent: nome inválido (${JSON.stringify(bad)?.slice(0, 20)}) → invalid-argument e nada é gravado além do que já havia`, rr.err?.code === 'invalid-argument', rr.err?.code);
   }

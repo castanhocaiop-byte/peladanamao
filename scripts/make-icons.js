@@ -6,7 +6,7 @@
 //   npm install --no-save sharp        (na raiz do projeto; não vira dependência)
 //   node scripts/make-icons.js
 //
-// Saídas na raiz do projeto: icon-192.png, icon-512.png, icon-maskable-512.png, apple-touch-icon.png, og-image.png
+// Saídas na raiz do projeto: icon-192.png, icon-512.png, icon-maskable-512.png, apple-touch-icon.png, og-image.jpg
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -50,9 +50,11 @@ function glowSvg(w, h) {
   out('apple-touch-icon.png', await sharp(await square(logo, 512, 0.9)).resize(180, 180).png({ compressionLevel: 9 }).toBuffer());
 
   // Prévia do link: 1200×630 (proporção que o WhatsApp e as redes usam), logo centralizado sobre um clarão suave.
+  // É JPEG, não PNG: o WhatsApp costuma ignorar imagem de prévia acima de ~300 KB (o PNG tinha 461 KB; o JPEG, ~80 KB, igual a olho nu).
+  // O pwa-assets-test confere esse limite.
   const W = 1200, H = 630;
   const h = Math.round(H * 0.84);
   const lg = await sharp(logo.data).resize({ height: h, fit: 'inside' }).toBuffer();
-  out('og-image.png', await sharp({ create: { width: W, height: H, channels: 4, background: BG } })
-    .composite([{ input: Buffer.from(glowSvg(W, H)), top: 0, left: 0 }, { input: lg, gravity: 'center' }]).png({ compressionLevel: 9 }).toBuffer());
+  out('og-image.jpg', await sharp({ create: { width: W, height: H, channels: 4, background: BG } })
+    .composite([{ input: Buffer.from(glowSvg(W, H)), top: 0, left: 0 }, { input: lg, gravity: 'center' }]).jpeg({ quality: 90, mozjpeg: true }).toBuffer());
 })().catch(e => { console.error(e); process.exit(1); });

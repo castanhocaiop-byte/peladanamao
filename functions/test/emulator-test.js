@@ -820,6 +820,11 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   check('duas pessoas somam no mesmo contador, e o documento guarda só números (nada de quem foi)', evDoc.planBannerSeen === 2 && Object.values(evDoc).every(v => typeof v === 'number') && !JSON.stringify(evDoc).includes(U.pl1.uid), evDoc);
   r = await callFn('trackEvent', U.pl1.token, { name: 'checkoutMonthly' });
   check('o app não consegue inflar os eventos que só o servidor conta (checkout) → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+  r = await callFn('trackEvent', U.pl1.token, { name: 'refInstagram' });
+  const refDoc = docData(await db.get('owner', `metrics_events/${day}`));
+  check('origem das entradas: o contador de canal (refInstagram) é aceito, soma 1 no contador do dia e não guarda quem foi', r.status === 200 && refDoc.refInstagram === 1 && Object.values(refDoc).every(v => typeof v === 'number') && !JSON.stringify(refDoc).includes(U.pl1.uid), { r: r.raw, refDoc });
+  r = await callFn('trackEvent', U.pl1.token, { name: 'ref_instagram' });
+  check('nome de canal escrito errado (ref_instagram) → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
   r = await callFn('trackEvent', U.pl1.token, { name: 'qualquerCoisa' });
   check('evento desconhecido → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
 
