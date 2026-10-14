@@ -21,24 +21,27 @@ const check = (label, cond, extra) => {
 
 // ── contexto de desenho falso: guarda o que foi desenhado e mede texto como "0,5 × tamanho da fonte por letra" ──
 function fakeCtx() {
-  const ctx = { texts: [], images: [], strokes: [], fills: [], clips: 0, saves: 0, restores: 0, font: '', fillStyle: '', strokeStyle: '', lineWidth: 0, textAlign: 'left', textBaseline: 'alphabetic' };
+  const ctx = { texts: [], images: [], strokes: [], fills: [], fillRects: [], radials: [], k: 1, tx: 0, ty: 0, stack: [], clips: 0, saves: 0, restores: 0, font: '', fillStyle: '', strokeStyle: '', lineWidth: 0, textAlign: 'left', textBaseline: 'alphabetic' };
   const size = () => Number((/(\d+)px/.exec(ctx.font) || [0, 16])[1]);
   const noop = () => {};
   Object.assign(ctx, {
-    beginPath: noop, closePath: noop, moveTo: noop, arcTo: noop, arc: noop, fillRect: noop, rect: noop,
-    createLinearGradient: () => ({ addColorStop: noop }), createRadialGradient: () => ({ addColorStop: noop }),
-    save() { ctx.saves++; }, restore() { ctx.restores++; }, clip() { ctx.clips++; },
+    beginPath: noop, closePath: noop, moveTo: noop, arcTo: noop, arc: noop, rect: noop,
+    createLinearGradient: () => ({ addColorStop: noop }), createRadialGradient: (...a) => { ctx.radials.push(a); return { addColorStop: noop }; },
+    save() { ctx.saves++; ctx.stack.push([ctx.k, ctx.tx, ctx.ty]); }, restore() { ctx.restores++; [ctx.k, ctx.tx, ctx.ty] = ctx.stack.pop() || [1, 0, 0]; }, clip() { ctx.clips++; },
+    translate(x, y) { ctx.tx += ctx.k * x; ctx.ty += ctx.k * y; }, scale(s) { ctx.k *= s; }, fillRect(x, y, w, h) { ctx.fillRects.push({ x, y, w, h }); },
     stroke() { ctx.strokes.push(ctx.strokeStyle); }, fill() { ctx.fills.push(ctx.fillStyle); },
-    drawImage(img, ...a) { ctx.images.push({ img, args: a, clipped: ctx.clips > 0 && ctx.saves > ctx.restores }); },
+    drawImage(img, ...a) { ctx.images.push({ img, args: a, ax: ctx.tx + ctx.k * a[0], ay: ctx.ty + ctx.k * a[1], aw: ctx.k * a[2], ah: ctx.k * a[3], clipped: ctx.clips > 0 && ctx.saves > ctx.restores }); },
     measureText: t => ({ width: String(t).length * size() * 0.5 }),
-    fillText(text, x, y) { ctx.texts.push({ text: String(text), x, y, font: ctx.font, fill: ctx.fillStyle, align: ctx.textAlign }); },
+    fillText(text, x, y) { ctx.texts.push({ text: String(text), x, y, ax: ctx.tx + ctx.k * x, ay: ctx.ty + ctx.k * y, k: ctx.k, font: ctx.font, fill: ctx.fillStyle, align: ctx.textAlign }); },
   });
   return ctx;
 }
 
 // ── ambiente do aplicativo falso ────────────────────────────────────────────────────────────────
-function makeEnv({ canShare = true, shareImpl, imageFails = [], toBlobFailsWithPhoto = false, toBlobAlwaysFails = false } = {}) {
-  const calls = { events: [], toasts: [], shared: [], clicks: [], revoked: [], canvases: [] };
+function makeEnv({ canShare = true, shareImpl, imageFails = [], toBlobFailsWithPhoto = false, toBlobAlwaysFails = false, copyOk = true } = {}) {
+  const calls = { events: [], toasts: [], shared: [], clicks: [], revoked: [], canvases: [], copied: [], urlBlobs: new Map() };
+  let urlN = 0;
+  const fakeUrl = { createObjectURL: b => { const u = `blob:teste/${++urlN}-${b.size}`; calls.urlBlobs.set(u, b); return u; }, revokeObjectURL: u => { calls.revoked.push(u); } }; // cada imagem ganha o seu endereço, e soltar cada um é registrado
   const layers = [];
   const doc = {
     fonts: { load: async () => [] },
@@ -46,7 +49,7 @@ function makeEnv({ canShare = true, shareImpl, imageFails = [], toBlobFailsWithP
     createElement: tag => {
       if (tag === 'canvas') {
         const cv = { width: 0, height: 0, ctx: fakeCtx(), getContext() { return cv.ctx; },
-          toBlob(cb) { const drewPhoto = cv.ctx.images.some(i => i.img && i.img.__photo); setTimeout(() => cb(toBlobAlwaysFails || (toBlobFailsWithPhoto && drewPhoto) ? null : new Blob(['png'], { type: 'image/png' })), 0); } };
+          toBlob(cb) { const drewPhoto = cv.ctx.images.some(i => i.img && i.img.__photo); setTimeout(() => cb(toBlobAlwaysFails || (toBlobFailsWithPhoto && drewPhoto) ? null : new Blob(['png' + cv.height], { type: 'image/png' })), 0); } };
         calls.canvases.push(cv); return cv;
       }
       if (tag === 'a') { const a = { href: '', download: '', click() { calls.clicks.push({ href: a.href, download: a.download }); }, remove() {} }; return a; }
@@ -60,12 +63,12 @@ function makeEnv({ canShare = true, shareImpl, imageFails = [], toBlobFailsWithP
   }
   const nav = { share: async d => { calls.shared.push(d); if (shareImpl) return shareImpl(d); }, canShare: () => canShare };
   const env = {
-    st: { _mjCard: null }, document: doc, navigator: nav, Image: FakeImage,
+    st: { _mjCard: null }, document: doc, navigator: nav, Image: FakeImage, URL: fakeUrl, pixCopyText: async t => { calls.copied.push(t); return copyOk; },
     trackEvent: (n, once = true) => { calls.events.push([n, once]); },
     toast: (m, t) => { calls.toasts.push([m, t]); },
   };
   const names = Object.keys(env);
-  const api = new Function(...names, code + '\nreturn { MJ_CARD, mjCardData, mjFitText, drawMjCard, renderMjCard, openMjCard, closeMjCard, downloadMjCard, shareMjCard, getBlob: () => _mjCardBlob, getUrl: () => _mjCardUrl };')(...names.map(n => env[n]));
+  const api = new Function(...names, code + '\nreturn { MJ_CARD, MJ_STORY, MJ_FORMATS, mjCardData, mjFitText, drawMjBackground, drawMjCard, drawMjStory, renderMjCard, openMjCard, closeMjCard, setMjFormat, downloadMjCard, shareMjCard, copyMjCaption, mjCaption, getBlobs: () => _mjBlobs, getUrls: () => _mjUrls, getFormat: () => _mjFormat };')(...names.map(n => env[n]));
   return { api, env, calls, layers };
 }
 
@@ -145,13 +148,13 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   check('abrir: a camada aparece na hora com "Montando seu cartão…" e conta a abertura (uma vez por sessão)', e.layers.length === 1 && e.layers[0].id === 'mj-card' && /Montando seu cartão/.test(e.layers[0].innerHTML) && JSON.stringify(e.calls.events) === JSON.stringify([['cardOpen', true]]), { layers: e.layers.map(l => l.id), ev: e.calls.events });
   await opening;
   const inner = e.layers[0].innerHTML;
-  check('…e quando fica pronto mostra a imagem e os botões Compartilhar e Baixar, com o aviso de privacidade', /<img src="blob:/.test(inner) && /shareMjCard\(\)/.test(inner) && /downloadMjCard\(\)/.test(inner) && /não leva e-mail nem WhatsApp/i.test(inner) && !!e.api.getBlob() && !!e.api.getUrl(), inner.slice(-700));
-  check('…a imagem foi desenhada em 1080×1350 com a foto e o logo', e.calls.canvases.length === 1 && e.calls.canvases[0].width === 1080 && e.calls.canvases[0].height === 1350 && e.calls.canvases[0].ctx.images.length === 2, e.calls.canvases.map(x => [x.width, x.height, x.ctx.images.length]));
+  check('…e quando fica pronto mostra a imagem e os botões Compartilhar, Copiar legenda e Baixar, com o aviso de privacidade', /<img src="blob:/.test(inner) && /shareMjCard\(\)/.test(inner) && /copyMjCaption\(\)/.test(inner) && /downloadMjCard\(\)/.test(inner) && /não leva e-mail nem WhatsApp/i.test(inner) && !!e.api.getBlobs()?.story && !!e.api.getBlobs()?.feed && !!e.api.getUrls()?.story && !!e.api.getUrls()?.feed, inner.slice(-700));
+  check('…as duas imagens foram desenhadas, cada uma com a foto e o logo: Feed 1080×1350 e Story 1080×1920', e.calls.canvases.length === 2 && e.calls.canvases[0].width === 1080 && e.calls.canvases[0].height === 1350 && e.calls.canvases[1].width === 1080 && e.calls.canvases[1].height === 1920 && e.calls.canvases.every(cv => cv.ctx.images.length === 2), e.calls.canvases.map(x => [x.width, x.height, x.ctx.images.length]));
 
   // compartilhar pela janela do celular
   await e.api.shareMjCard();
   const sh = e.calls.shared[0];
-  check('compartilhar: usa a janela do celular com o arquivo PNG, o título e o texto com o link ?ref=cartao', e.calls.shared.length === 1 && sh.files.length === 1 && sh.files[0].name === 'cartao-pelada-na-mao.png' && sh.files[0].type === 'image/png' && /peladanamao\.com\.br\/\?ref=cartao/.test(sh.text) && /Pelada na Mão/.test(sh.title), sh);
+  check('compartilhar (a janela abre no Story): usa a janela do celular com o arquivo PNG do Story, o título e o texto com o link ?ref=cartao', e.calls.shared.length === 1 && sh.files.length === 1 && sh.files[0].name === 'cartao-pelada-na-mao-story.png' && sh.files[0].type === 'image/png' && /peladanamao\.com\.br\/\?ref=cartao/.test(sh.text) && /Pelada na Mão/.test(sh.title), sh);
   check('…conta o toque (sempre) e NÃO baixa nada quando o compartilhamento deu certo', JSON.stringify(e.calls.events.slice(-1)) === JSON.stringify([['cardShare', false]]) && e.calls.clicks.length === 0);
 
   // cancelou
@@ -161,7 +164,7 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   // erro de verdade
   e2 = makeEnv({ shareImpl: async () => { throw new Error('falhou'); } }); e2.env.st._mjCard = c;
   await e2.api.openMjCard(); await e2.api.shareMjCard();
-  check('o compartilhamento falhou de verdade: cai para baixar a imagem', e2.calls.clicks.length === 1 && e2.calls.clicks[0].download === 'cartao-pelada-na-mao.png' && e2.calls.toasts.some(([m, t]) => /Imagem salva/.test(m) && t === 'ok'), e2.calls);
+  check('o compartilhamento falhou de verdade: cai para baixar a imagem', e2.calls.clicks.length === 1 && e2.calls.clicks[0].download === 'cartao-pelada-na-mao-story.png' && e2.calls.toasts.some(([m, t]) => /Imagem salva/.test(m) && t === 'ok'), e2.calls);
   // sem suporte (computador)
   e2 = makeEnv({ canShare: false }); e2.env.st._mjCard = c;
   await e2.api.openMjCard(); await e2.api.shareMjCard();
@@ -176,18 +179,18 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   await e2.api.openMjCard();
   e2.api.closeMjCard();
   await e2.api.shareMjCard();
-  check('fechar: some a camada, solta a imagem da memória e o compartilhar deixa de existir', e2.layers.length === 0 && e2.api.getBlob() === null && e2.api.getUrl() === null && e2.calls.shared.length === 0);
+  check('fechar: some a camada, solta a imagem da memória e o compartilhar deixa de existir', e2.layers.length === 0 && e2.api.getBlobs() === null && e2.api.getUrls() === null && e2.calls.shared.length === 0);
   const e3 = makeEnv(); e3.env.st._mjCard = c;
   const op3 = e3.api.openMjCard(); e3.api.closeMjCard(); await op3;
-  check('fechou antes de a imagem ficar pronta: a camada não ressuscita e nada fica guardado na memória (imagem e endereço dela)', e3.layers.length === 0 && e3.api.getBlob() === null && e3.api.getUrl() === null, { layers: e3.layers.length, blob: !!e3.api.getBlob(), url: e3.api.getUrl() });
+  check('fechou antes de a imagem ficar pronta: a camada não ressuscita e nada fica guardado na memória (imagem e endereço dela)', e3.layers.length === 0 && e3.api.getBlobs() === null && e3.api.getUrls() === null, { layers: e3.layers.length, blobs: !!e3.api.getBlobs(), urls: e3.api.getUrls() });
 
   // foto que não carrega / foto que contamina o canvas / falha total
   const f1 = makeEnv({ imageFails: ['cloudinary'] }); f1.env.st._mjCard = c;
   await f1.api.openMjCard();
-  check('a foto não carrega (erro de rede): o cartão sai com as iniciais, sem erro', /<img src="blob:/.test(f1.layers[0].innerHTML) && f1.calls.canvases[0].ctx.images.length === 1 && f1.calls.canvases[0].ctx.texts.some(t => t.text === 'AM'), f1.calls.canvases.map(x => x.ctx.images.length));
+  check('a foto não carrega (erro de rede): o cartão sai com as iniciais, sem erro', /<img src="blob:/.test(f1.layers[0].innerHTML) && f1.calls.canvases.length === 2 && f1.calls.canvases.every(cv => cv.ctx.images.length === 1 && cv.ctx.texts.some(t => t.text === 'AM')), f1.calls.canvases.map(x => x.ctx.images.length));
   const f2 = makeEnv({ toBlobFailsWithPhoto: true }); f2.env.st._mjCard = c;
   await f2.api.openMjCard();
-  check('a foto "contaminou" o canvas (servidor sem CORS): refaz o cartão sem a foto e entrega a imagem', f2.calls.canvases.length === 2 && /<img src="blob:/.test(f2.layers[0].innerHTML) && f2.calls.canvases[1].ctx.texts.some(t => t.text === 'AM'), f2.calls.canvases.length);
+  check('a foto "contaminou" o canvas (servidor sem CORS): refaz o cartão sem a foto e entrega a imagem', f2.calls.canvases.length === 4 && /<img src="blob:/.test(f2.layers[0].innerHTML) && f2.calls.canvases.slice(2).every(cv => cv.ctx.texts.some(t => t.text === 'AM')), f2.calls.canvases.length);
   const f3 = makeEnv({ toBlobAlwaysFails: true }); f3.env.st._mjCard = c;
   await f3.api.openMjCard();
   check('não consegue gerar a imagem de jeito nenhum: mostra a mensagem de erro (e nenhum botão de compartilhar)', /Não foi possível montar o cartão/.test(f3.layers[0].innerHTML) && !/shareMjCard/.test(f3.layers[0].innerHTML));
@@ -200,6 +203,85 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   check('os dados vêm dos números que a própria aba calculou (títulos, gols, artilharia, campanha, conquistas por raridade)', /titlesText: fmtT\(titles\)/.test(html) && /goals: totalGoals/.test(html) && /art: myArt/.test(html) && /w: myW, d: myD, l: myL, matches: myMatchesPlayed/.test(html) && /getBadgeHolders\(a\.id\)\.length - getBadgeHolders\(b\.id\)\.length/.test(html));
   check('o botão "Compartilhar meu cartão" fica embaixo do nome e só aparece quando há cartão', /\$\{st\._mjCard \? `<button onclick="openMjCard\(\)"[^`]*📤 Compartilhar meu cartão/.test(html));
   check('os três contadores do cartão estão na lista de eventos do painel', ['cardOpen', 'cardShare', 'cardVisit'].every(n => html.includes("'" + n + "'")));
+  // ══ Story (9:16) e Feed (4:5) ═══════════════════════════════════════════════════════════════════════
+  // O cartão saía só em 4:5 (1080×1350). No editor de vídeo (Reels, Edits) uma imagem 4:5 é ampliada para preencher e perde o topo (logo) e o
+  // rodapé (endereço do site): visto no celular do dono em 14/10/2026. Agora há o Story 9:16 (1080×1920) com o cartão INTEIRO entre as margens que
+  // o Instagram cobre, e o Feed 4:5 de sempre, e a pessoa escolhe na janela do cartão.
+  const S = A.MJ_STORY;
+  check('Story: 1080×1920 (9:16), com margens de 250 px em cima (foto de perfil do Instagram) e 340 px embaixo (caixa de resposta)', S.W === 1080 && S.H === 1920 && S.TOP === 250 && S.BOTTOM === 340 && Math.abs(S.W / S.H - 9 / 16) < 1e-9, S);
+  check('os dois formatos: Story 9:16 (cartao-pelada-na-mao-story.png) e Feed 4:5 (cartao-pelada-na-mao.png, o de sempre, 1080×1350)', A.MJ_FORMATS.story.ratio === '9:16' && A.MJ_FORMATS.story.file === 'cartao-pelada-na-mao-story.png' && A.MJ_FORMATS.feed.ratio === '4:5' && A.MJ_FORMATS.feed.file === 'cartao-pelada-na-mao.png' && A.MJ_CARD.W / A.MJ_CARD.H === 0.8, A.MJ_FORMATS);
+  const kS = (S.H - S.TOP - S.BOTTOM) / A.MJ_CARD.H;
+  const sctx = fakeCtx(); A.drawMjStory(sctx, c, photo, logo);
+  const fctx = fakeCtx(); A.drawMjCard(fctx, c, photo, logo);
+  check('Story: o fundo é pintado na imagem INTEIRA (1080×1920) e o cartão não pinta outro fundo de 1080×1350 por cima (sem emenda)', sctx.fillRects.filter(r => r.w === 1080 && r.h === 1920 && r.x === 0 && r.y === 0).length === 2 && !sctx.fillRects.some(r => r.h === 1350), sctx.fillRects);
+  check('Feed: continua pintando o fundo UMA vez em 1080×1350 (degradê e clarão), sem escala nem deslocamento (igual ao de antes)', fctx.fillRects.filter(r => r.w === 1080 && r.h === 1350).length === 2 && fctx.k === 1 && fctx.tx === 0 && fctx.ty === 0 && fctx.texts.every(t => t.k === 1 && t.ax === t.x && t.ay === t.y), fctx.fillRects);
+  check('o clarão atrás da foto: no Feed em (540, 330) com raio 500; no Story acompanha o cartão (y = 250 + 330·k, raio 500·k)', JSON.stringify(fctx.radials[0]) === JSON.stringify([540, 330, 20, 540, 330, 500]) && Math.abs(sctx.radials[0][1] - (250 + 330 * kS)) < 1e-6 && Math.abs(sctx.radials[0][5] - 500 * kS) < 1e-6, { feed: fctx.radials[0], story: sctx.radials[0] });
+  check('Story: o cartão INTEIRO vai escalado (k = 1330/1350 ≈ 0,985): nenhum texto passa das margens de cima (250) e de baixo (1920 − 340 = 1580) nem das laterais', sctx.texts.length > 0 && sctx.texts.every(t => Math.abs(t.k - kS) < 1e-9 && t.ay >= S.TOP && t.ay <= S.H - S.BOTTOM && t.ax >= 0 && t.ax <= S.W), sctx.texts.map(t => [t.text, Math.round(t.ax), Math.round(t.ay)]).filter(x => x[2] < 250 || x[2] > 1580));
+  const rodapeStory = sctx.texts.find(t => t.text === 'peladanamao.com.br');
+  check('Story: o endereço do site (rodapé do cartão) fica ACIMA da caixa de resposta do Instagram (y ≤ 1580) e o logo dentro da área segura (que era o que o corte do 4:5 levava)', !!rodapeStory && rodapeStory.ay <= 1580 && sctx.images[0].img === logo && sctx.images[0].ay >= S.TOP && sctx.images[0].ay + sctx.images[0].ah <= S.H - S.BOTTOM, { rodape: rodapeStory && rodapeStory.ay, logo: sctx.images[0] });
+  const nomeS = sctx.texts.find(t => t.text === 'ANA MARIA SOUZA');
+  check('Story: o cartão fica centralizado na horizontal (o nome, que é centrado no cartão, cai no meio da imagem: x = 540)', !!nomeS && Math.abs(nomeS.ax - 540) < 1e-6, nomeS);
+  check('Story: o cartão tem exatamente os mesmos textos do Feed (nada a mais, nada a menos) e a mesma foto no recorte redondo', JSON.stringify(sctx.texts.map(t => t.text)) === JSON.stringify(fctx.texts.map(t => t.text)) && sctx.images.length === 2 && sctx.images[1].img === photo, { story: sctx.texts.length, feed: fctx.texts.length });
+  check('Story: a transformação é desfeita no fim (save/restore equilibrados, sem escala nem deslocamento sobrando)', sctx.saves === sctx.restores && sctx.k === 1 && sctx.tx === 0 && sctx.ty === 0, { saves: sctx.saves, restores: sctx.restores, k: sctx.k });
+  const sSem = fakeCtx(); A.drawMjStory(sSem, A.mjCardData({ ...SRC, titlesNum: 0, titlesText: '0' }), null, null);
+  check('Story sem foto e sem logo: iniciais no lugar, sem imagem, moldura verde (quem nunca foi campeão), e nada quebra; campeão: moldura dourada', sSem.images.length === 0 && sSem.texts.some(t => t.text === 'AM') && sSem.strokes.includes('#00d67f') && sctx.strokes.includes('#f0b429'), sSem.strokes);
+
+  // ── a janela do cartão: Story ou Feed ────────────────────────────────────────────────────────────────
+  let u = makeEnv(); u.env.st._mjCard = c;
+  await u.api.openMjCard();
+  let htmlU = u.layers[0].innerHTML;
+  check('abre no formato Story (o do status e dos Stories): o botão Story marcado (aria-pressed=true), o Feed não, a imagem do Story e o texto dizendo para que serve', /setMjFormat\('story'\)" aria-pressed="true"/.test(htmlU) && /setMjFormat\('feed'\)" aria-pressed="false"/.test(htmlU) && /formato Story/.test(htmlU) && /Para Stories do Instagram e do Facebook, Reels e o status do WhatsApp/.test(htmlU) && u.api.getFormat() === 'story', htmlU.slice(0, 900));
+  check('as duas imagens ficam PRONTAS ao abrir (o iPhone só deixa compartilhar arquivo logo depois de um toque: nada a montar depois), com endereços diferentes, e a prévia usa a do Story', !!u.api.getBlobs().story && !!u.api.getBlobs().feed && u.api.getUrls().story !== u.api.getUrls().feed && htmlU.includes(u.api.getUrls().story) && !htmlU.includes(u.api.getUrls().feed), u.api.getUrls());
+  check('cada endereço aponta para a imagem do SEU formato (o do Story para a imagem do Story, o do Feed para a do Feed), e as duas imagens são diferentes', u.calls.urlBlobs.get(u.api.getUrls().story) === u.api.getBlobs().story && u.calls.urlBlobs.get(u.api.getUrls().feed) === u.api.getBlobs().feed && u.api.getBlobs().story !== u.api.getBlobs().feed, u.calls.urlBlobs.size);
+  check('o Feed e o Story são imagens diferentes: 1080×1350 e 1080×1920 (dois canvases)', u.calls.canvases.length === 2 && u.calls.canvases[0].height === 1350 && u.calls.canvases[1].height === 1920 && u.calls.canvases.every(cv => cv.width === 1080), u.calls.canvases.map(x => [x.width, x.height]));
+  check('cada imagem sai do seu desenho: o Feed (1º canvas) pelo desenho do cartão, sem escala, com o fundo de 1080×1350; o Story (2º canvas) pelo desenho do Story, com o fundo de 1080×1920 e o cartão escalado', u.calls.canvases[0].ctx.fillRects.some(r => r.h === 1350) && u.calls.canvases[0].ctx.texts.every(t => t.k === 1) && u.calls.canvases[1].ctx.fillRects.some(r => r.h === 1920) && u.calls.canvases[1].ctx.texts.every(t => Math.abs(t.k - kS) < 1e-9), u.calls.canvases.map(x => [x.height, x.ctx.texts[0] && x.ctx.texts[0].k]));
+  u.api.setMjFormat('feed');
+  htmlU = u.layers[0].innerHTML;
+  check('tocar em Feed: troca a prévia para a imagem do Feed (sem montar nada de novo), marca o Feed e muda o texto', u.api.getFormat() === 'feed' && /setMjFormat\('feed'\)" aria-pressed="true"/.test(htmlU) && /setMjFormat\('story'\)" aria-pressed="false"/.test(htmlU) && htmlU.includes(u.api.getUrls().feed) && !htmlU.includes(u.api.getUrls().story) && /formato Feed/.test(htmlU) && /Para publicações do Instagram e conversas/.test(htmlU) && u.calls.canvases.length === 2, htmlU.slice(0, 700));
+  check('o aviso de privacidade, o aviso da legenda do Instagram e os 3 botões (Compartilhar, Copiar legenda, Baixar) continuam depois de trocar o formato', /shareMjCard\(\)/.test(htmlU) && /copyMjCaption\(\)/.test(htmlU) && /downloadMjCard\(\)/.test(htmlU) && /não leva e-mail nem WhatsApp/i.test(htmlU) && /No Instagram a legenda não vai junto com a imagem/.test(htmlU), htmlU.slice(-600));
+  await u.api.shareMjCard();
+  let sh2 = u.calls.shared[0];
+  check('compartilhar no Feed: o arquivo é o do Feed (cartao-pelada-na-mao.png, a imagem de 1350 px de altura), com o mesmo texto e o link ?ref=cartao de sempre', sh2.files[0].name === 'cartao-pelada-na-mao.png' && (await sh2.files[0].text()) === 'png1350' && /\?ref=cartao/.test(sh2.text), sh2.files[0].name);
+  u.api.setMjFormat('story'); await u.api.shareMjCard();
+  sh2 = u.calls.shared[1];
+  check('compartilhar no Story: o arquivo é o do Story (cartao-pelada-na-mao-story.png, a imagem de 1920 px de altura) e cada toque conta (cardShare)', sh2.files[0].name === 'cartao-pelada-na-mao-story.png' && (await sh2.files[0].text()) === 'png1920' && u.calls.events.filter(x => x[0] === 'cardShare').length === 2, u.calls.events);
+  const urlsAntes = u.api.getUrls();
+  u.api.downloadMjCard(); u.api.setMjFormat('feed'); u.api.downloadMjCard();
+  check('baixar: o nome do arquivo e o endereço da imagem seguem o formato (Story: …-story.png com a imagem do Story; Feed: o nome de sempre com a imagem do Feed)', u.calls.clicks.slice(-2).map(k => k.download).join() === 'cartao-pelada-na-mao-story.png,cartao-pelada-na-mao.png' && u.calls.clicks.slice(-2).map(k => k.href).join() === [urlsAntes.story, urlsAntes.feed].join(), u.calls.clicks);
+  const antes = u.api.getFormat();
+  for (const ruim of ['reels', '', undefined, null, 42, '__proto__', 'constructor', 'toString', 'Story']) u.api.setMjFormat(ruim);
+  check('formato desconhecido (reels, vazio, __proto__, constructor, "Story" com maiúscula…): não muda nada', u.api.getFormat() === antes, u.api.getFormat());
+  const ux = makeEnv(); ux.env.st._mjCard = c; let jogou = false;
+  try { ux.api.setMjFormat('feed'); } catch (_) { jogou = true; }
+  check('trocar o formato antes de abrir o cartão: nada acontece e nada quebra', !jogou && ux.api.getFormat() === 'story' && ux.layers.length === 0);
+  u.api.closeMjCard(); u.api.setMjFormat('story');
+  check('fechar: solta as DUAS imagens da memória (os dois endereços), some a camada e o setMjFormat deixa de agir', u.calls.revoked.length === 2 && u.api.getBlobs() === null && u.api.getUrls() === null && u.layers.length === 0 && u.api.getFormat() === 'feed', { revoked: u.calls.revoked, fmt: u.api.getFormat() });
+
+  // ── Copiar legenda ───────────────────────────────────────────────────────────────────────────────────
+  const legenda = A.mjCaption();
+  check('legenda: título, descrição, o link com ?ref=cartao e as hashtags (#pelada #futebolamador #peladanamao), em 4 linhas', /^Meu cartão no Pelada na Mão ⚽🏆\n/.test(legenda) && /\nFaça o da sua: https:\/\/peladanamao\.com\.br\/\?ref=cartao\n/.test(legenda) && /#pelada #futebolamador #peladanamao$/.test(legenda) && legenda.split('\n').length === 4, legenda);
+  check('PRIVACIDADE: a legenda é a mesma para todo mundo (a função nem recebe o cartão) e não leva nome, liga, arroba, e-mail nem WhatsApp', A.mjCaption.length === 0 && !legenda.includes(SRC.name) && !legenda.includes(SRC.league) && !/@|e-?mail|whatsapp/i.test(legenda), legenda);
+  const cp = makeEnv(); cp.env.st._mjCard = c; await cp.api.copyMjCaption();
+  check('Copiar legenda: copia a legenda pronta e avisa "Legenda copiada! Cole na publicação do Instagram."', cp.calls.copied.length === 1 && cp.calls.copied[0] === legenda && cp.calls.toasts.some(([m, t]) => /Legenda copiada! Cole na publicação do Instagram/.test(m) && t === 'ok'), cp.calls);
+  const cq = makeEnv({ copyOk: false }); await cq.api.copyMjCaption();
+  check('Copiar legenda sem conseguir copiar: avisa que não conseguiu (não promete o que não fez)', cq.calls.toasts.length === 1 && /Não consegui copiar a legenda/.test(cq.calls.toasts[0][0]) && cq.calls.toasts[0][1] === 'err', cq.calls.toasts);
+  check('Copiar legenda não conta evento, não compartilha e não manda nada ao servidor (só a área de transferência)', cp.calls.events.length === 0 && cp.calls.shared.length === 0 && cp.calls.clicks.length === 0);
+
+  // ── como está no código ─────────────────────────────────────────────────────────────────────────────
+  check('o código: Story como formato padrão, as duas imagens guardadas juntas (_mjBlobs/_mjUrls) e o fundo único (drawMjBackground) usado pelo Feed e pelo Story', /let _mjBlobs = null, _mjUrls = null, _mjFormat = 'story';/.test(html) && /function drawMjBackground\(/.test(html) && (html.match(/(?<!function )drawMjBackground\(ctx, c,/g) || []).length === 2 && /function drawMjStory\(/.test(html) && !/_mjCardBlob|_mjCardUrl/.test(html));
+  check('o formato só vale se for uma chave própria da tabela (hasOwnProperty): "__proto__" e "constructor" não passam', /!Object\.prototype\.hasOwnProperty\.call\(MJ_FORMATS, fmt\)/.test(html));
+  const uiSrc = slice('const mjSheet', 'async function copyMjCaption') + slice('function mjCaption()', 'async function copyMjCaption');
+  check('PRIVACIDADE: a janela e a legenda do cartão não citam e-mail, contatos nem a conta logada (o aviso "Não leva e-mail nem WhatsApp" é o único trecho que fala disso)', !/contacts|authUser|waOf|\.uid|\.email/i.test(uiSrc.replace(/Não leva e-mail nem WhatsApp\./g, '')), uiSrc.match(/.{20}(contacts|authUser|waOf|\.uid|\.email).{20}/i)?.[0]);
+
+  // ── manual ────────────────────────────────────────────────────────────────────────────────────────────
+  const manual = fs.readFileSync(path.join(__dirname, '..', '..', 'manual.html'), 'utf8');
+  const plainM = s => s.replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  const sec29 = plainM(manual.slice(manual.indexOf('id="cartao-jogador"'), manual.indexOf('<!-- 30. Página de Apresentação')));
+  check('manual (seção 29): explica os dois formatos (Story 9:16 de 1080×1920 e Feed 4:5 de 1080×1350), as margens do Story (250 e 340 px) e que o cartão não é cortado', /Story/.test(sec29) && /1080×1920/.test(sec29) && /9:16/.test(sec29) && /Feed/.test(sec29) && /1080×1350/.test(sec29) && /4:5/.test(sec29) && /250 px em cima/.test(sec29) && /340 px embaixo/.test(sec29) && /sem cortar/.test(sec29) && /Story 1080×1920 \(9:16\) Stories do Instagram/.test(sec29) && /Feed 1080×1350 \(4:5\) Publicação do Instagram/.test(sec29), sec29.slice(0, 400));
+  check('manual: diz que a janela abre no Story, que dá para trocar para o Feed na hora, e explica o Copiar legenda (o Instagram ignora o texto enviado junto com a imagem)', /abre no formato Story|já no formato Story/.test(sec29) && /Escolher o formato no alto da janela/.test(sec29) && /Copiar legenda/.test(sec29) && /Instagram ignora o texto/.test(sec29), sec29.slice(0, 400));
+  check('manual: o quadro "Cortado no Instagram?" explica que o editor de vídeo (Reels, Edits) corta a imagem 4:5, e que a saída é o Story (9:16) ou o Feed numa publicação', /Cortado no Instagram/.test(sec29) && /editor de vídeo/.test(sec29) && /corta/.test(sec29), sec29.slice(0, 300));
+  check('manual (técnico): cita drawMjStory, o fundo único e que as duas imagens ficam prontas antes do toque (trocar de formato só troca a imagem mostrada)', /drawMjStory/.test(sec29) && /fundo/.test(sec29) && /trocar Story\/Feed só troca a imagem mostrada/.test(sec29), sec29.slice(-500));
+
   check('a política de privacidade do app cita o cartão do jogador', /Cartão do jogador:<\/strong> a imagem é montada no seu aparelho/.test(html));
 
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);

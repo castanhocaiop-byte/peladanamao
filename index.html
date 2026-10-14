@@ -2056,13 +2056,18 @@ async function signOutUser() {
 }
 
 /* ── Cartão do jogador (compartilhar) ─────────────────────────────────────────────────────
-   Uma imagem 1080×1350 (formato bom para WhatsApp e Instagram), desenhada no próprio aparelho com o que a aba
-   Meu Craque acabou de mostrar: nome, foto (se tiver), títulos, campeonatos, gols e as conquistas mais raras.
+   Duas imagens do mesmo cartão, desenhadas no próprio aparelho com o que a aba Meu Craque acabou de mostrar (nome,
+   foto se tiver, títulos, campeonatos, gols e as conquistas mais raras): FEED 4:5 (1080×1350: publicação do Instagram
+   e conversas) e STORY 9:16 (1080×1920: o cartão inteiro entre as margens que o Instagram cobre; Stories, Reels e status).
    Só sai do aparelho se a pessoa tocar em Compartilhar (ou Baixar). Nunca leva e-mail nem WhatsApp. O link que
    acompanha o cartão tem ?ref=cartao: quem entra por ele é contado (sem saber quem é) no painel do dono. */
 const MJ_CARD = { W: 1080, H: 1350, LINK: 'https://peladanamao.com.br/?ref=cartao', FILE: 'cartao-pelada-na-mao.png' };
+// Versão Story (9:16): o MESMO cartão inteiro, sem cortar nada, entre as margens que o Instagram cobre com a foto de perfil (em cima) e a caixa de
+// resposta (embaixo).
+const MJ_STORY = { W: 1080, H: 1920, TOP: 250, BOTTOM: 340, FILE: 'cartao-pelada-na-mao-story.png' };
+const MJ_FORMATS = { story: { label: 'Story', ratio: '9:16', file: MJ_STORY.FILE }, feed: { label: 'Feed', ratio: '4:5', file: MJ_CARD.FILE } };
 const MJ_GOLD = '#f0b429', MJ_GREEN = '#00d67f', MJ_TEXT = '#e6edf3', MJ_MUTED = '#8b949e';
-let _mjCardBlob = null, _mjCardUrl = null;
+let _mjBlobs = null, _mjUrls = null, _mjFormat = 'story'; // as duas imagens ficam prontas antes do toque em Compartilhar (o iPhone exige)
 
 // Normaliza o que a aba Meu Craque calculou. Pura: só texto e números, nada de função nem de dado de contato.
 function mjCardData(s = {}) {
@@ -2113,17 +2118,21 @@ function mjFitText(ctx, text, maxW, size, minSize, family, weight) {
 const MJ_HEAD = '"Bebas Neue", Impact, "Arial Narrow", sans-serif';
 const MJ_BODY = 'Inter, "Segoe UI", system-ui, sans-serif';
 
-// Desenha o cartão. `photoImg` e `logoImg` são imagens já carregadas (ou null: sem foto, vira iniciais).
-function drawMjCard(ctx, c, photoImg, logoImg) {
-  const { W, H } = MJ_CARD;
-  const accent = c.isChampion ? MJ_GOLD : MJ_GREEN;
-  // fundo: degradê escuro com um clarão da cor do jogador atrás da foto
+// Fundo: degradê escuro com um clarão da cor do jogador atrás da foto. Serve ao cartão do feed e ao Story (que o estica para 1080×1920).
+function drawMjBackground(ctx, c, W, H, glowY, glowR) {
   const bg = ctx.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0, '#0d1117'); bg.addColorStop(1, c.isChampion ? '#2a1f05' : '#0b2a21');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W / 2, 330, 20, W / 2, 330, 500);
+  const glow = ctx.createRadialGradient(W / 2, glowY, 20, W / 2, glowY, glowR);
   glow.addColorStop(0, c.isChampion ? 'rgba(240,180,41,0.32)' : 'rgba(0,214,127,0.26)'); glow.addColorStop(1, 'rgba(13,17,23,0)');
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+}
+
+// Desenha o cartão. `photoImg` e `logoImg` são imagens já carregadas (ou null: sem foto, vira iniciais). `opts.noBg`: sem o fundo (o Story pinta o dele).
+function drawMjCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD;
+  const accent = c.isChampion ? MJ_GOLD : MJ_GREEN;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 330, 500);
   // moldura
   ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
 
@@ -2196,6 +2205,19 @@ function drawMjCard(ctx, c, photoImg, logoImg) {
   ctx.fillText('peladanamao.com.br', cx, H - 54);
 }
 
+// Versão Story (9:16): o cartão INTEIRO, sem cortar nada, escalado para caber entre as margens que o Instagram cobre (em cima e embaixo), sobre o
+// mesmo fundo esticado para 1080×1920 (sem emenda entre o cartão e o resto da imagem).
+function drawMjStory(ctx, c, photoImg, logoImg) {
+  const { W, H, TOP, BOTTOM } = MJ_STORY;
+  const k = (H - TOP - BOTTOM) / MJ_CARD.H;
+  drawMjBackground(ctx, c, W, H, TOP + 330 * k, 500 * k);
+  ctx.save();
+  ctx.translate((W - MJ_CARD.W * k) / 2, TOP);
+  ctx.scale(k, k);
+  drawMjCard(ctx, c, photoImg, logoImg, { noBg: true });
+  ctx.restore();
+}
+
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
 function mjLoadImage(url) {
   return new Promise(resolve => {
@@ -2210,27 +2232,62 @@ function mjLoadImage(url) {
 }
 const mjCanvasBlob = canvas => new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('sem imagem'))), 'image/png'));
 
-// Monta a imagem. Se a foto "contaminar" o canvas (servidor sem CORS), refaz sem a foto: o cartão sai com as iniciais.
+// Monta as duas imagens (feed 4:5 e Story 9:16). Se a foto "contaminar" o canvas (servidor sem CORS), refaz sem a foto: o cartão sai com as iniciais.
 async function renderMjCard(card) {
   try { await Promise.all([document.fonts?.load(`400 40px "Bebas Neue"`), document.fonts?.load(`700 30px Inter`)]); } catch(_) {}
   const [photo, logo] = await Promise.all([mjLoadImage(card.photo), mjLoadImage('/logo.webp')]);
-  const make = async photoImg => {
+  const paint = (draw, W, H, photoImg) => {
     const canvas = document.createElement('canvas');
-    canvas.width = MJ_CARD.W; canvas.height = MJ_CARD.H;
-    drawMjCard(canvas.getContext('2d'), card, photoImg, logo);
+    canvas.width = W; canvas.height = H;
+    draw(canvas.getContext('2d'), card, photoImg, logo);
     return mjCanvasBlob(canvas);
+  };
+  const make = async photoImg => {
+    const [feed, story] = await Promise.all([paint(drawMjCard, MJ_CARD.W, MJ_CARD.H, photoImg), paint(drawMjStory, MJ_STORY.W, MJ_STORY.H, photoImg)]);
+    return { feed, story };
   };
   try { return await make(photo); } catch(e) { if (!photo) throw e; return make(null); }
 }
 
 function closeMjCard() {
   document.getElementById('mj-card')?.remove();
-  if (_mjCardUrl) { try { URL.revokeObjectURL(_mjCardUrl); } catch(_) {} _mjCardUrl = null; }
-  _mjCardBlob = null;
+  if (_mjUrls) for (const u of Object.values(_mjUrls)) { try { URL.revokeObjectURL(u); } catch(_) {} }
+  _mjUrls = null; _mjBlobs = null;
 }
 
-// Abre a prévia: gera a imagem (1ª vez que toca), mostra, e deixa Compartilhar/Baixar prontos para o 2º toque —
-// o iPhone só deixa compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio.
+// A janela do cartão: título, o conteúdo (que muda: "Montando…", o cartão pronto ou o erro) e o ×.
+const mjSheet = body => `<div class="sheet" onclick="event.stopPropagation()" style="max-height:92dvh;display:flex;flex-direction:column">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:17px;font-weight:800">📤 Seu cartão</div>
+      <button onclick="closeMjCard()" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding-right:6px">${body}</div></div>`;
+
+// O cartão pronto: escolha do formato (Story 9:16 ou Feed 4:5), prévia da imagem escolhida e os botões.
+function mjReadyBody() {
+  const pick = fmt => {
+    const f = MJ_FORMATS[fmt], on = _mjFormat === fmt;
+    return `<button onclick="setMjFormat('${fmt}')" aria-pressed="${on}" style="flex:1;padding:10px 6px;border-radius:10px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? '#00d67f18' : 'var(--s2)'};color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">${f.label} <span style="font-weight:600;font-size:11px;opacity:.8">${f.ratio}</span></button>`;
+  };
+  return `<div style="display:flex;gap:8px;margin-bottom:6px">${pick('story')}${pick('feed')}</div>
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:12px;line-height:1.5">${_mjFormat === 'story' ? 'Para Stories do Instagram e do Facebook, Reels e o status do WhatsApp.' : 'Para publicações do Instagram e conversas.'}</div>
+      <img src="${_mjUrls[_mjFormat]}" alt="Seu cartão no Pelada na Mão, formato ${MJ_FORMATS[_mjFormat].label}" style="display:block;width:auto;max-width:100%;max-height:44dvh;margin:0 auto 14px;border-radius:14px;border:1px solid var(--border)">
+      <button onclick="shareMjCard()" style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Compartilhar</button>
+      <button onclick="copyMjCaption()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">📋 Copiar legenda</button>
+      <button onclick="downloadMjCard()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Baixar a imagem</button>
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">No Instagram a legenda não vai junto com a imagem: toque em Copiar legenda e cole na publicação. A imagem foi feita no seu aparelho e só sai dele se você compartilhar. Não leva e-mail nem WhatsApp.</div>`;
+}
+
+// Troca o formato. As duas imagens já estão prontas: não há trabalho assíncrono (o iPhone só deixa compartilhar arquivo logo depois de um toque).
+function setMjFormat(fmt) {
+  const root = document.getElementById('mj-card');
+  if (!Object.prototype.hasOwnProperty.call(MJ_FORMATS, fmt) || !_mjBlobs || !root) return;
+  _mjFormat = fmt;
+  root.innerHTML = mjSheet(mjReadyBody());
+}
+
+// Abre a prévia: gera as duas imagens (1ª vez que toca), mostra a escolhida, e deixa Compartilhar/Baixar prontos para o 2º toque.
 async function openMjCard() {
   const card = st._mjCard;
   if (!card) return;
@@ -2240,49 +2297,49 @@ async function openMjCard() {
   root.id = 'mj-card';
   root.className = 'overlay';
   root.onclick = closeMjCard;
-  const sheet = body => `<div class="sheet" onclick="event.stopPropagation()" style="max-height:92dvh;display:flex;flex-direction:column">
-    <div class="sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:17px;font-weight:800">📤 Seu cartão</div>
-      <button onclick="closeMjCard()" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
-    </div>
-    <div style="overflow-y:auto;flex:1;padding-right:6px">${body}</div></div>`;
-  root.innerHTML = sheet('<div style="padding:40px 0;text-align:center;color:var(--text3);font-size:13px">Montando seu cartão…</div>');
+  root.innerHTML = mjSheet('<div style="padding:40px 0;text-align:center;color:var(--text3);font-size:13px">Montando seu cartão…</div>');
   document.body.appendChild(root);
   try {
-    const blob = await renderMjCard(card);
+    const blobs = await renderMjCard(card);
     if (document.getElementById('mj-card') !== root) return; // fechou antes de ficar pronto
-    _mjCardBlob = blob;
-    _mjCardUrl = URL.createObjectURL(blob);
-    root.innerHTML = sheet(`<img src="${_mjCardUrl}" alt="Seu cartão no Pelada na Mão" style="display:block;width:100%;max-width:360px;margin:0 auto 14px;border-radius:14px;border:1px solid var(--border)">
-      <button onclick="shareMjCard()" style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Compartilhar</button>
-      <button onclick="downloadMjCard()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Baixar a imagem</button>
-      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem foi feita no seu aparelho e só sai dele se você compartilhar. Não leva e-mail nem WhatsApp.</div>`);
+    _mjBlobs = blobs;
+    _mjUrls = { story: URL.createObjectURL(blobs.story), feed: URL.createObjectURL(blobs.feed) };
+    root.innerHTML = mjSheet(mjReadyBody());
   } catch(e) {
-    if (document.getElementById('mj-card') === root) root.innerHTML = sheet('<div style="padding:30px 4px;color:var(--danger);font-size:13px;text-align:center">Não foi possível montar o cartão agora. Tente de novo.</div>');
+    if (document.getElementById('mj-card') === root) root.innerHTML = mjSheet('<div style="padding:30px 4px;color:var(--danger);font-size:13px;text-align:center">Não foi possível montar o cartão agora. Tente de novo.</div>');
   }
 }
 
 function downloadMjCard() {
-  if (!_mjCardUrl) return;
+  const url = _mjUrls?.[_mjFormat];
+  if (!url) return;
   const a = document.createElement('a');
-  a.href = _mjCardUrl; a.download = MJ_CARD.FILE;
+  a.href = url; a.download = MJ_FORMATS[_mjFormat].file;
   document.body.appendChild(a); a.click(); a.remove();
   toast('Imagem salva. É só enviar onde quiser! 📲', 'ok');
 }
 
-// Compartilhar pela janela do próprio celular (WhatsApp, Instagram…). Sem suporte a arquivo (computador, navegador
-// antigo) ou com erro: baixa a imagem. Cancelar a janela não é erro e não baixa nada.
+// Compartilhar pela janela do próprio celular (WhatsApp, Instagram…), com a imagem do formato escolhido. Sem suporte a arquivo (computador,
+// navegador antigo) ou com erro: baixa a imagem. Cancelar a janela não é erro e não baixa nada.
 async function shareMjCard() {
-  const blob = _mjCardBlob;
+  const blob = _mjBlobs?.[_mjFormat];
   if (!blob) return;
   trackEvent('cardShare', false);
-  const file = new File([blob], MJ_CARD.FILE, { type: 'image/png' });
+  const file = new File([blob], MJ_FORMATS[_mjFormat].file, { type: 'image/png' });
   const data = { files: [file], title: 'Meu cartão no Pelada na Mão', text: `Meu cartão no Pelada na Mão ⚽🏆 Faça o da sua pelada: ${MJ_CARD.LINK}` };
   try {
     if (navigator.share && navigator.canShare && navigator.canShare(data)) { await navigator.share(data); return; }
   } catch(e) { if (e && e.name === 'AbortError') return; }
   downloadMjCard();
+}
+
+// Legenda pronta para colar. O Instagram ignora o texto que um aplicativo manda junto com a imagem (o WhatsApp usa): por isso o botão Copiar legenda.
+function mjCaption() {
+  return `Meu cartão no Pelada na Mão ⚽🏆\nTítulos, gols e conquistas da minha pelada numa imagem só.\nFaça o da sua: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+async function copyMjCaption() {
+  if (await pixCopyText(mjCaption())) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
+  else toast('Não consegui copiar a legenda.', 'err');
 }
 
 /* ── Painel do dono: métricas do funil ───────────────────────────────────────────────────

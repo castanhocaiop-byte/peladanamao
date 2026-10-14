@@ -2732,7 +2732,7 @@ p strong {
     <!-- 29. Cartão do Jogador (compartilhar) -->
     <section class="section" id="cartao-jogador">
       <h2 class="section-title"><span class="sn">29</span> Cartão do Jogador (compartilhar)</h2>
-      <p>Na aba <strong>EU (Meu Craque)</strong>, embaixo do nome, o botão <strong>📤 Compartilhar meu cartão</strong> monta uma imagem com as estatísticas do jogador, no formato de cartão, pronta para mandar no WhatsApp, no Instagram ou onde a pessoa quiser. É a forma de a pelada aparecer fora do app: quem vê o cartão de um colega fica sabendo do Pelada na Mão.</p>
+      <p>Na aba <strong>EU (Meu Craque)</strong>, embaixo do nome, o botão <strong>📤 Compartilhar meu cartão</strong> monta o cartão do jogador, com as estatísticas dele, em <strong>dois formatos</strong>: <strong>Story</strong> (9:16, 1080×1920) e <strong>Feed</strong> (4:5, 1080×1350), prontos para mandar no WhatsApp, no Instagram ou onde a pessoa quiser. É a forma de a pelada aparecer fora do app: quem vê o cartão de um colega fica sabendo do Pelada na Mão.</p>
 
       <table class="data-table">
         <thead><tr><th>O que aparece no cartão</th><th>De onde vem</th></tr></thead>
@@ -2746,11 +2746,27 @@ p strong {
         </tbody>
       </table>
 
+      <h3>Story ou Feed</h3>
+      <p>A janela do cartão tem dois botões no alto, <strong>Story 9:16</strong> e <strong>Feed 4:5</strong>. A janela abre no formato Story e a prévia troca na hora; <strong>Compartilhar</strong> e <strong>Baixar</strong> usam sempre a imagem do formato escolhido.</p>
+      <table class="data-table">
+        <thead><tr><th>Formato</th><th>Tamanho</th><th>Para quê</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Story</strong></td><td>1080×1920 (9:16)</td><td>Stories do Instagram e do Facebook, Reels e o status do WhatsApp. O cartão aparece <strong>inteiro, sem cortar</strong>, no meio da imagem: sobram 250 px em cima (onde o Instagram mostra a foto de perfil e o nome) e 340 px embaixo (onde fica a caixa de resposta). O fundo continua o mesmo do cartão, sem emenda.</td></tr>
+          <tr><td><strong>Feed</strong></td><td>1080×1350 (4:5)</td><td>Publicação do Instagram e conversas. O 4:5 é o maior formato em pé do feed, então o cartão aparece inteiro. É o formato que o cartão sempre teve.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <div class="callout-label warn">Cortado no Instagram? <span class="tag">Dica</span></div>
+        O <strong>editor de vídeo</strong> do Instagram (Reels, Edits) amplia a imagem para preencher a tela e <strong>corta</strong> o que sobra: um cartão 4:5 perde o logo em cima e o endereço do site embaixo (aconteceu no primeiro teste real, em 14/10/2026). Para uma <strong>publicação</strong> use o <strong>Feed</strong> (e escolha Publicação na janela de compartilhar do celular); para <strong>Stories e Reels</strong> use o <strong>Story</strong>, que já vem no formato da tela.
+      </div>
+
       <h3>Como compartilhar</h3>
       <ol>
-        <li>Tocar em <strong>📤 Compartilhar meu cartão</strong>: o app monta a imagem (1080×1350 pixels) e mostra a prévia.</li>
-        <li>Tocar em <strong>📤 Compartilhar</strong>: abre a janela do próprio celular com WhatsApp, Instagram e os demais aplicativos. O texto que vai junto traz o endereço <code>peladanamao.com.br/?ref=cartao</code>.</li>
-        <li>Se o aparelho não compartilha arquivo (computador, navegador antigo), ou se der erro, o app <strong>baixa a imagem</strong> para a pessoa enviar como preferir. Também dá para tocar em <strong>⬇️ Baixar a imagem</strong>.</li>
+        <li>Tocar em <strong>📤 Compartilhar meu cartão</strong>: o app monta as duas imagens (Story e Feed) e mostra a prévia, já no formato Story.</li>
+        <li>Escolher o formato no alto da janela: <strong>Story 9:16</strong> ou <strong>Feed 4:5</strong>. A prévia troca na hora.</li>
+        <li>No Instagram, tocar antes em <strong>📋 Copiar legenda</strong>: o <strong>Instagram ignora o texto</strong> que um aplicativo manda junto com a imagem, então a legenda pronta (título, o endereço <code>peladanamao.com.br/?ref=cartao</code> e as hashtags #pelada #futebolamador #peladanamao) vai para a área de transferência e é só colar na publicação.</li>
+        <li>Tocar em <strong>📤 Compartilhar</strong>: abre a janela do próprio celular com WhatsApp, Instagram e os demais aplicativos, com a imagem do formato escolhido. O texto que vai junto (o WhatsApp usa) traz o endereço <code>peladanamao.com.br/?ref=cartao</code>.</li>
+        <li>Se o aparelho não compartilha arquivo (computador, navegador antigo), ou se der erro, o app <strong>baixa a imagem do formato escolhido</strong> (<code>cartao-pelada-na-mao-story.png</code> ou <code>cartao-pelada-na-mao.png</code>) para a pessoa enviar como preferir. Também dá para tocar em <strong>⬇️ Baixar a imagem</strong>.</li>
       </ol>
       <p>Quem só <strong>cancela</strong> a janela de compartilhar não recebe erro nem download. O botão só aparece para quem já disputou pelo menos um campeonato, e <strong>não</strong> aparece quando o admin usa "👁 Ver como" (simulação).</p>
 
@@ -2764,7 +2780,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
-        O desenho usa o canvas do navegador (<code>drawMjCard</code>), com as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. A imagem é gerada ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela.
+        O desenho usa o canvas do navegador: <code>drawMjCard</code> faz o Feed (1080×1350) e <code>drawMjStory</code> faz o Story (1080×1920), que pinta o <strong>fundo</strong> (<code>drawMjBackground</code>, o mesmo do Feed) na imagem inteira e desenha o mesmo cartão escalado (1330/1350) e centralizado entre as margens de 250 e 340 px. Usa as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. As duas imagens são geradas ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Por isso trocar Story/Feed só troca a imagem mostrada (nada é montado de novo), e cada formato tem o seu endereço de imagem, solto da memória ao fechar a janela. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela.
       </div>
     </section>
 
