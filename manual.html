@@ -2470,13 +2470,18 @@ p strong {
         <thead><tr><th>Plano</th><th>Valor</th><th>Como funciona</th></tr></thead>
         <tbody>
           <tr><td>Mensal</td><td>R$ 29,90/mês</td><td>Assinatura recorrente: o Mercado Pago cobra automaticamente todo mês, até a assinatura ser cancelada — no próprio app (<strong>💳 Assinatura → Cancelar assinatura mensal</strong>) ou na conta do Mercado Pago de quem assinou. A liga renova sozinha a cada mês cobrado.</td></tr>
-          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única, parcelável em até 12x no cartão — o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento — ou até o admin <strong>estender o plano</strong> (abaixo), que soma mais 12 meses à data de vencimento. O sistema avisa os admins por e-mail 30 e 7 dias antes de vencer (ver "Avisos por e-mail" abaixo).</td></tr>
+          <tr><td>Anual</td><td>R$ 238,80/ano</td><td>Cobrança única. No cartão de crédito, em até 12x sem juros (o custo do parcelamento é do vendedor, configurado na conta do Mercado Pago: veja o quadro abaixo); o valor cai na conta de uma vez, mesmo parcelado. Não renova sozinho: ao fim de um ano a liga volta ao plano gratuito até um novo pagamento — ou até o admin <strong>estender o plano</strong> (abaixo), que soma mais 12 meses à data de vencimento. O sistema avisa os admins por e-mail 30 e 7 dias antes de vencer (ver "Avisos por e-mail" abaixo).</td></tr>
         </tbody>
       </table>
 
       <div class="callout">
         <div class="callout-label">Anual em destaque</div>
         Na tela <strong>💳 Assinatura</strong>, quando a liga não tem plano em vigor (teste grátis, plano gratuito ou plano vencido), o <strong>anual vem primeiro</strong>, com borda verde e o selo <strong>MELHOR VALOR · ECONOMIZE R$ 120,00</strong>. A conta aparece na própria tela: R$ 238,80 por ano equivale a <strong>R$ 19,90 por mês</strong>, contra <strong>R$ 358,80</strong> em 12 mensalidades de R$ 29,90. O mensal vem em seguida, com o aviso de que não tem fidelidade e se cancela no próprio app. Quem já paga mensal e toca em <strong>Estender plano</strong> vê a mesma conta ("No anual são R$ 238,80 por ano, contra R$ 358,80 em 12 mensalidades: você economiza R$ 120,00"); quem já está no anual (ou no mensal já cancelado) só estende, sem a conta. Os valores da tela, os da página de apresentação (seção 30) e os cobrados pelo servidor são conferidos juntos por um teste automático: se um preço mudar num lugar só, o teste acusa.
+      </div>
+
+      <div class="callout warn" id="parcelamento-cartao">
+        <div class="callout-label warn">Parcelamento no cartão (plano anual): até 12x sem juros</div>
+        No cartão de crédito, o plano anual pode ser pago em <strong>até 12x sem juros</strong> (12x de R$ 19,90). Isso é uma <strong>configuração da conta do Mercado Pago do dono</strong> (<code>mercadopago.com.br/costs-section/merchant-svcs/financing/psj/installments</code>), não do app: a cobrança que o app cria não pede nada especial, e o checkout mostrou 12x sem juros na conferência de 14/10/2026. O <strong>custo é do vendedor</strong> (a taxa do prazo de recebimento mais a taxa do parcelamento, que sobe com o número de parcelas); o comprador paga os mesmos R$ 238,80 em qualquer número de parcelas até 12. O checkout também oferece de <strong>13x a 18x, com juros pagos pelo comprador</strong>: o app não limita o máximo de parcelas (o campo <code>payment_methods.installments</code> não é enviado), e a cobrança mostra cada parcela e o total antes de pagar. Quem recebe: o valor total cai de uma vez na conta do vendedor (menos as taxas, no prazo escolhido no Mercado Pago), mesmo que o comprador parcele. Se a venda for <strong>devolvida</strong> (por exemplo, numa desistência em 7 dias), o Mercado Pago <strong>devolve as taxas</strong> ao vendedor: confirmado com o suporte do Mercado Pago em 14/10/2026. <strong>Mantenha o painel e os textos em sincronia:</strong> se o dono desligar ou mudar o sem juros nessa tela, os textos da apresentação, da tela 💳 (constante <code>PLAN_FREE_INSTALLMENTS</code> no <code>index.html</code>) e deste manual precisam mudar juntos; um teste automático confere que apresentação, tela e manual dizem o mesmo número.
       </div>
 
       <div class="callout">
@@ -2573,7 +2578,7 @@ p strong {
       <ol>
         <li>O pedido chega em <strong>contato@peladanamao.com.br</strong> (confira que essa caixa chega até você). Responda confirmando o recebimento.</li>
         <li>Confira a <strong>data do pagamento</strong> no painel do Mercado Pago: dentro de 7 dias, o direito vale; fora disso, vale a regra de que não há reembolso (cláusula 10).</li>
-        <li>No painel do Mercado Pago, abra o pagamento e use <strong>Devolver</strong>. Se for a assinatura mensal, cancele também a assinatura (menu <em>Assinaturas</em>, ou peça ao admin que use <strong>💳 Assinatura → Cancelar assinatura mensal</strong>).</li>
+        <li>No painel do Mercado Pago, abra o pagamento e use <strong>Devolver</strong>. Se for a assinatura mensal, cancele também a assinatura (menu <em>Assinaturas</em>, ou peça ao admin que use <strong>💳 Assinatura → Cancelar assinatura mensal</strong>). Numa devolução o Mercado Pago <strong>devolve as taxas</strong> cobradas na venda (confirmado com o suporte do Mercado Pago em 14/10/2026, ao perguntar do parcelamento sem juros), então desistir dentro dos 7 dias não deixa taxa para você pagar.</li>
         <li>Peça ao Claude para <strong>tirar o plano pago da liga</strong> (ela volta ao plano gratuito, com o histórico preservado), e avise a pessoa de que a devolução aparece no prazo do Mercado Pago e do cartão.</li>
       </ol>
 
@@ -2748,7 +2753,7 @@ p strong {
         <thead><tr><th>Assunto</th><th>O que está escrito</th></tr></thead>
         <tbody>
           <tr><td>Teste grátis</td><td>8 dias com tudo liberado, sem cartão de crédito.</td></tr>
-          <tr><td>Planos</td><td>Anual R$ 238,80 por ano (R$ 19,90 por mês, economia de R$ 120 por ano, parcelável em até 12x), em destaque como "Melhor valor"; mensal R$ 29,90 por mês, sem fidelidade, cancelado pelo próprio app. Pagamento pelo Mercado Pago; dá para desistir em até 7 dias e receber o valor de volta, e depois disso não há reembolso, com o link da cláusula 10 dos Termos.</td></tr>
+          <tr><td>Planos</td><td>Anual R$ 238,80 por ano (equivale a R$ 19,90 por mês, economia de R$ 120 por ano; no cartão de crédito, em até 12x sem juros), em destaque como "Melhor valor"; mensal R$ 29,90 por mês, sem fidelidade, cancelado pelo próprio app. Pagamento pelo Mercado Pago; dá para desistir em até 7 dias e receber o valor de volta, e depois disso não há reembolso, com o link da cláusula 10 dos Termos.</td></tr>
           <tr><td>Quem paga</td><td>Um plano por liga: só o admin assina, e os jogadores nunca pagam.</td></tr>
           <tr><td>Depois do teste</td><td>A liga não é bloqueada: segue no plano gratuito, com o histórico guardado; o registro de gols, o ranking e as conquistas novas ficam pausados (seção 25).</td></tr>
           <tr><td>Cartões de exemplo</td><td>Duas imagens feitas pelo próprio app, com <strong>nomes inventados</strong> (a página avisa).</td></tr>

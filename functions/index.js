@@ -1242,8 +1242,9 @@ exports.checkAbandonedLeagues = onSchedule(
 
 // ── Pagamento via Mercado Pago ───────────────────────────────────────────────────────────
 // Dois produtos: assinatura mensal recorrente (Preapproval, cobrada automaticamente todo
-// mês) e cobrança anual única (Preference/Checkout Pro, parcelável em até 12x — o Mercado
-// Pago repassa o valor integral de uma vez, mesmo parcelado, então não exige renovação
+// mês) e cobrança anual única (Preference/Checkout Pro; o parcelamento em até 12x sem juros é
+// configuração da CONTA do Mercado Pago, não da preferência — o Mercado Pago repassa o valor
+// integral de uma vez, mesmo parcelado, então não exige renovação
 // automática). Nenhuma das duas telas aparece dentro do app empacotado nas lojas; só no
 // site, e por e-mail. A liga só é marcada como paga quando o webhook confirma a cobrança —
 // os dois onCall abaixo só abrem o link de pagamento, nunca marcam nada como pago.

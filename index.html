@@ -815,8 +815,8 @@ html.lp-show #app { display: none; }
           <span class="lp-badge">Melhor valor</span>
           <h3>Anual</h3>
           <p class="lp-price"><b>R$ 238,80</b> por ano</p>
-          <p class="lp-save">R$ 19,90 por mês: você economiza R$ 120 por ano.</p>
-          <p>Pagamento único, parcelável em até 12x no cartão.</p>
+          <p class="lp-save">Equivale a R$ 19,90 por mês: você economiza R$ 120 por ano.</p>
+          <p>Pagamento único. No cartão de crédito, em até 12x sem juros.</p>
         </div>
         <div class="lp-card lp-plan">
           <h3>Mensal</h3>
@@ -7016,6 +7016,10 @@ function addMonthsISO(iso, months) {
 // Valores mostrados na tela de assinatura (e na apresentação). A cobrança de verdade é a do servidor (MP_PLANS em
 // functions/index.js): functions/test/client-landing-test.js confere que os dois lados batem.
 const PLAN_PRICES = { monthly: 29.9, annual: 238.8 };
+// Parcelas SEM JUROS no cartão de crédito do anual: é configuração da CONTA do Mercado Pago do dono (o custo é dele), conferida no
+// checkout do anual em 14/10/2026. Se ele mudar o painel (mercadopago.com.br/costs-section/merchant-svcs/financing/psj/installments),
+// mude aqui, na apresentação (texto fixo mais acima) e no manual: functions/test/client-landing-test.js confere que os três dizem o mesmo.
+const PLAN_FREE_INSTALLMENTS = 12;
 const PLAN_SAVING = Math.round((PLAN_PRICES.monthly * 12 - PLAN_PRICES.annual) * 100) / 100; // economia do anual: R$ 120,00 por ano
 const planBRL = v => 'R$ ' + Number(v).toFixed(2).replace('.', ',');
 
@@ -7086,7 +7090,7 @@ function mSubscription() {
         <button ${busy?'disabled':''} onclick="startSubscription('annual')"
           style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
           Estender plano — ${planBRL(PLAN_PRICES.annual)}<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
-          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único. No cartão de crédito, em até ${PLAN_FREE_INSTALLMENTS}x sem juros</div>
         </button>
         ${monthlyRunning ? `<div style="font-size:12px;color:var(--text3);line-height:1.5;text-align:center">Ao estender, a assinatura mensal é cancelada sozinha: você não será cobrado de novo.</div>` : ''}
         ${monthlyRunning ? `<div style="font-size:12px;color:var(--accent);font-weight:600;line-height:1.5;text-align:center">No anual são ${planBRL(PLAN_PRICES.annual)} por ano, contra ${planBRL(PLAN_PRICES.monthly * 12)} em 12 mensalidades: você economiza ${planBRL(PLAN_SAVING)}.</div>` : ''}
@@ -7102,7 +7106,7 @@ function mSubscription() {
           <span style="position:absolute;top:-11px;right:12px;background:var(--accent);color:#000;font-size:11px;font-weight:800;letter-spacing:.4px;padding:3px 10px;border-radius:20px">MELHOR VALOR · ECONOMIZE ${planBRL(PLAN_SAVING)}</span>
           Anual — ${planBRL(PLAN_PRICES.annual)} <span style="color:var(--accent)">(${planBRL(PLAN_PRICES.annual / 12)} por mês)</span>
           <div style="font-size:12px;font-weight:400;color:var(--text2);margin-top:2px">Em vez de ${planBRL(PLAN_PRICES.monthly * 12)} em 12 meses no plano mensal: você economiza ${planBRL(PLAN_SAVING)}</div>
-          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único, parcelável em até 12x no cartão</div>
+          <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único. No cartão de crédito, em até ${PLAN_FREE_INSTALLMENTS}x sem juros</div>
         </button>
         <button ${busy?'disabled':''} onclick="startSubscription('monthly')"
           style="${planBtn};border:1px solid var(--border);background:var(--s1);color:var(--text)">
