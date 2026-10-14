@@ -197,6 +197,14 @@ const STAGING = { appUrl: 'https://seriebaceoma-staging.web.app/', webhook: 'htt
   for (const [nome, texto] of [['servidor (functions/index.js)', src], ['app (index.html)', htmlSrc], ['service worker (firebase-messaging-sw.js)', swSrc]]) {
     check(`${nome}: o endereço antigo aceoma.vercel.app não aparece mais (só o vercel.json o cita, para redirecionar)`, !/aceoma\.vercel\.app/i.test(texto));
   }
+  // ── um e-mail de contato só: suporte@peladanamao.com.br (o contato@ antigo não é o certo, e os pedidos de desistência se perderiam) ──
+  const termosSrc = fs.readFileSync(path.join(root, 'termos.html'), 'utf8');
+  const manualSrc = fs.readFileSync(path.join(root, 'manual.html'), 'utf8');
+  for (const [nome, texto] of [['servidor (functions/index.js)', src], ['app (index.html)', htmlSrc], ['Termos (termos.html)', termosSrc], ['manual (manual.html)', manualSrc]]) {
+    check(`${nome}: o e-mail antigo contato@peladanamao.com.br não aparece mais (o de contato é suporte@peladanamao.com.br)`, !/contato@peladanamao/i.test(texto));
+  }
+  check('o servidor usa suporte@peladanamao.com.br (rodapé e resposta dos e-mails, mensagens de erro do Mercado Pago)', /const CONTACT_EMAIL = "suporte@peladanamao\.com\.br";/.test(src), src.match(/const CONTACT_EMAIL = .*/)?.[0]);
+  check('o app diz suporte@peladanamao.com.br (apresentação: pergunta e rodapé, tela de assinatura) e os Termos também (cláusulas 10 e 20 e a nota do rodapé)', (htmlSrc.match(/suporte@peladanamao\.com\.br/g) || []).length === 5 && (termosSrc.match(/suporte@peladanamao\.com\.br/g) || []).length === 3, [(htmlSrc.match(/suporte@peladanamao\.com\.br/g) || []).length, (termosSrc.match(/suporte@peladanamao\.com\.br/g) || []).length]);
   const prodPush = new Function(htmlSrc.slice(htmlSrc.indexOf('const APP_ENVS = {'), htmlSrc.indexOf('const STAGING_HOSTS')) + '\nreturn APP_ENVS;')().production.pushUrl;
   check('notificações da produção abrem o mesmo endereço do site (peladanamao.com.br), onde o login e a permissão de notificação estão', prodPush === 'https://peladanamao.com.br/' && PRODUCTION.appUrl === 'https://peladanamao.com.br/', { prodPush });
   // ── as três tabelas (servidor, app e service worker) batem ──────────────────────────────────

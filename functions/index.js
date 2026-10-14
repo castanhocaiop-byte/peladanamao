@@ -1863,7 +1863,7 @@ exports.deleteLeague = onCall({ ...CALLABLE, timeoutSeconds: 300, secrets: [MERC
 // (subscriptionActiveUntil): um novo pagamento muda o ciclo e libera avisos novos. Só o
 // servidor grava esse campo (as regras só deixam o admin alterar o nome da liga).
 const APP_URL = ENV.appUrl;
-const CONTACT_EMAIL = "contato@peladanamao.com.br";
+const CONTACT_EMAIL = "suporte@peladanamao.com.br";
 const BILLING_REMINDER_DAYS = [7, 30]; // do menor para o maior
 const BILLING_ENDED_WINDOW_DAYS = 7;
 

@@ -427,7 +427,7 @@ const reset = () => {
   };
   let rf = await refusal('Payer is associated with a different site', 400);
   check('recusa "outro país": mensagem em português, sem a dica de teste na produção', rf.err?.code === 'failed-precondition' && /outro país/.test(rf.err.message) && !/different site/i.test(rf.err.message) && !/testuser/.test(rf.err.message), rf.err?.message);
-  check('recusa "outro país": cita o e-mail de suporte', rf.err?.message?.includes('contato@peladanamao.com.br'), rf.err?.message);
+  check('recusa "outro país": cita o e-mail de suporte', rf.err?.message?.includes('suporte@peladanamao.com.br'), rf.err?.message);
   rf = await refusal('payer and collector cannot be the same user', 400);
   check('recusa "mesma conta": diz que a conta que recebe não pode pagar a si mesma', /não pode pagar para si mesma/.test(rf.err?.message || ''), rf.err?.message);
   rf = await refusal('payer_email is required', 400);

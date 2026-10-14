@@ -166,7 +166,7 @@ const reset = () => {
   check('texto: manda usar "Estender plano" e diz que o pagamento soma 12 meses ao vencimento atual (ninguém perde dia pago)', /Estender plano/.test(m0.text) && /soma 12 meses à data de vencimento atual/.test(m0.text) && /nenhum dia já pago/.test(m0.text), m0.text);
   check('HTML: "Estender plano" sai em negrito', /<strong>Estender plano<\/strong>/.test(m0.html), m0.html);
   check('HTML e texto simples saem juntos, com o link do app', /<a href="https:\/\/peladanamao\.com\.br\/"/.test(m0.html) && m0.text.includes('https://peladanamao.com.br/'));
-  check('remetente do Pelada na Mão, resposta para o contato e chave do Resend no cabeçalho', m0.body.from === 'Pelada na Mão <avisos@notificacoes.peladanamao.com.br>' && m0.body.reply_to === 'contato@peladanamao.com.br' && sent[0].headers.Authorization === 'Bearer fake-resend-key' && sent[0].url === 'https://api.resend.com/emails');
+  check('remetente do Pelada na Mão, resposta para o contato e chave do Resend no cabeçalho', m0.body.from === 'Pelada na Mão <avisos@notificacoes.peladanamao.com.br>' && m0.body.reply_to === 'suporte@peladanamao.com.br' && sent[0].headers.Authorization === 'Bearer fake-resend-key' && sent[0].url === 'https://api.resend.com/emails');
   check('anota o aviso na liga, amarrado ao ciclo', league('L').billingNotices?.annual30 === league('L').subscriptionActiveUntil, league('L'));
   check('os avisos não alteram o plano da liga', league('L').subscriptionPlan === 'annual' && league('L').subscriptionActiveUntil === annual(20).subscriptionActiveUntil);
 

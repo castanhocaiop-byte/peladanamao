@@ -183,7 +183,7 @@ function makeEnv({ storageThrows = false, leagues = { L: { role: 'admin' } } } =
   h = modal({ league: { trialEndsAt: iso(Date.now() + 10 * DAY) } });
   check('em teste: mostra o período de teste e os dois planos', /Período de teste/.test(h) && /startSubscription\('monthly'\)/.test(h) && /startSubscription\('annual'\)/.test(h));
   check('em teste: também sem botão manual de verificação', !/Verificar|Já pagou|checkSubscriptionNow/.test(h));
-  check('antes de pagar: avisa que dá para desistir em 7 dias (e como pedir), que depois não há reembolso, e linka a cláusula de planos dos Termos de Uso', /Você pode desistir em até 7 dias depois de pagar e receber o valor de volta \(escreva para contato@peladanamao\.com\.br\); depois disso, não há reembolso\./.test(h) && /href="\/termos\.html#c10"/.test(h));
+  check('antes de pagar: avisa que dá para desistir em 7 dias (e como pedir), que depois não há reembolso, e linka a cláusula de planos dos Termos de Uso', /Você pode desistir em até 7 dias depois de pagar e receber o valor de volta \(escreva para suporte@peladanamao\.com\.br\); depois disso, não há reembolso\./.test(h) && /href="\/termos\.html#c10"/.test(h));
   check('durante a confirmação do pagamento o aviso não aparece (a escolha já foi feita)', !/desistir em até 7 dias/.test(modal({ league: { trialEndsAt: iso(Date.now() + 10 * DAY) }, checking: true })));
 
   h = modal({ league: { subscriptionPlan: 'monthly', subscriptionRenewsAt: iso(renews), subscriptionActiveUntil: iso(until) } });

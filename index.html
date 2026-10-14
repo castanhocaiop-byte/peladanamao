@@ -842,7 +842,7 @@ html.lp-show #app { display: none; }
       <details class="lp-faq"><summary>Dá para cancelar?</summary><p>A assinatura mensal se cancela pelo próprio app, sem falar com ninguém, e a liga continua com o plano até o fim do período já pago. O plano anual não renova sozinho.</p></details>
       <details class="lp-faq"><summary>Posso ter mais de uma liga?</summary><p>Pode. A mesma conta participa de várias ligas e alterna entre elas.</p></details>
       <details class="lp-faq"><summary>E os meus dados?</summary><p>O app mostra o que é guardado e quem vê cada coisa. Você pode apagar a sua conta ou anonimizar o seu nome no histórico quando quiser. Veja a <button type="button" class="lp-linkbtn" onclick="openPrivacyPolicy()">Política de Privacidade</button> e os <a href="/termos.html">Termos de Uso</a>.</p></details>
-      <details class="lp-faq"><summary>Como falo com vocês?</summary><p>Pelo e-mail <a href="mailto:contato@peladanamao.com.br">contato@peladanamao.com.br</a>.</p></details>
+      <details class="lp-faq"><summary>Como falo com vocês?</summary><p>Pelo e-mail <a href="mailto:suporte@peladanamao.com.br">suporte@peladanamao.com.br</a>.</p></details>
     </div>
   </section>
 
@@ -857,7 +857,7 @@ html.lp-show #app { display: none; }
   <div class="lp-foot">
     <div class="lp-wrap">
       <p>© 2026 Pelada na Mão</p>
-      <p><a href="/termos.html">Termos de Uso</a> · <button type="button" class="lp-linkbtn" onclick="openPrivacyPolicy()">Privacidade</button> · <a href="mailto:contato@peladanamao.com.br">contato@peladanamao.com.br</a></p>
+      <p><a href="/termos.html">Termos de Uso</a> · <button type="button" class="lp-linkbtn" onclick="openPrivacyPolicy()">Privacidade</button> · <a href="mailto:suporte@peladanamao.com.br">suporte@peladanamao.com.br</a></p>
     </div>
   </div>
 </div>
@@ -7069,7 +7069,7 @@ function mSubscription() {
   }
 
   const busy = !!st._subBusy;
-  const terms = what => `<div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Você pode desistir em até 7 dias depois de pagar e receber o valor de volta (escreva para contato@peladanamao.com.br); depois disso, não há reembolso. Ao ${what}, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>`;
+  const terms = what => `<div style="font-size:11px;color:var(--text3);line-height:1.5;text-align:center">Você pode desistir em até 7 dias depois de pagar e receber o valor de volta (escreva para suporte@peladanamao.com.br); depois disso, não há reembolso. Ao ${what}, você concorda com os <a href="/termos.html#c10" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:underline">Termos de Uso</a>.</div>`;
   const planBtn = `position:relative;z-index:1;padding:14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;opacity:${busy?'.6':'1'}`;
 
   let actionsHtml;
