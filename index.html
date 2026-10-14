@@ -2917,18 +2917,20 @@ async function doLoginEmail(mode) {
   }
 }
 
+// "Esqueci minha senha": o Firebase não diz se o e-mail tem conta (proteção contra descobrir quem tem cadastro), então um endereço digitado errado também
+// dá sucesso e nada chega. Por isso o aviso não afirma que enviou ("se existir uma conta") e lembra que quem entra só com o Google não tem senha.
+const FORGOT_PASSWORD_OK = 'Se existir uma conta com esse e-mail, enviamos um link para criar uma nova senha. Confira a caixa de entrada e o spam. Quem entra com o Google não tem senha: use o botão do Google.';
 async function doForgotPassword() {
   const email = document.getElementById('li-email')?.value?.trim();
   const err = document.getElementById('login-err');
-  if (!email) {
-    if (err) { err.style.color = 'var(--danger)'; err.textContent = 'Digite seu email no campo acima primeiro.'; }
-    return;
-  }
+  const say = (text, ok) => { if (err) { err.style.color = ok ? 'var(--accent)' : 'var(--danger)'; err.textContent = text; } };
+  if (!email) { say('Digite seu email no campo acima primeiro.', false); return; }
   try {
     await AUTH.sendPasswordResetEmail(email);
-    if (err) { err.style.color = 'var(--accent)'; err.textContent = 'Email enviado! Confira sua caixa de entrada (e o spam).'; }
+    say(FORGOT_PASSWORD_OK, true);
   } catch(e) {
-    if (err) { err.style.color = 'var(--danger)'; err.textContent = _firebaseErrMsg(e.code); }
+    if (e?.code === 'auth/user-not-found') say(FORGOT_PASSWORD_OK, true); // a mesma resposta de sempre: nunca revelar quem tem conta
+    else say(_firebaseErrMsg(e?.code), false);
   }
 }
 
@@ -2990,6 +2992,7 @@ function _firebaseErrMsg(code) {
     'auth/weak-password':'Senha muito fraca (mínimo 6 caracteres).',
     'auth/invalid-email':'Email inválido.',
     'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
+    'auth/network-request-failed':'Sem conexão com a internet. Confira a rede e tente de novo.',
   };
   return m[code] || 'Erro de autenticação.';
 }
