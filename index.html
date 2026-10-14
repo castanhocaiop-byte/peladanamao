@@ -815,7 +815,7 @@ html.lp-show #app { display: none; }
           <span class="lp-badge">Melhor valor</span>
           <h3>Anual</h3>
           <p class="lp-price"><b>R$ 238,80</b> por ano</p>
-          <p class="lp-save">Equivale a R$ 19,90 por mês: você economiza R$ 120 por ano.</p>
+          <p class="lp-save"><b>12x de R$ 19,90 sem juros</b> no cartão de crédito. Você economiza R$ 120 por ano.</p>
           <p>Pagamento único. No cartão de crédito, em até 12x sem juros.</p>
         </div>
         <div class="lp-card lp-plan">
@@ -7089,7 +7089,7 @@ function mSubscription() {
     actionsHtml = `<div style="display:flex;flex-direction:column;gap:10px">
         <button ${busy?'disabled':''} onclick="startSubscription('annual')"
           style="${planBtn};border:1px solid var(--accent);background:var(--accent-bg,transparent);color:var(--text)">
-          Estender plano — ${planBRL(PLAN_PRICES.annual)}<div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
+          Estender plano — ${planBRL(PLAN_PRICES.annual)} <span style="color:var(--accent)">(${PLAN_FREE_INSTALLMENTS}x de ${planBRL(PLAN_PRICES.annual / PLAN_FREE_INSTALLMENTS)} sem juros)</span><div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Soma 12 meses ao vencimento atual: o plano passa a valer até ${fmt(addMonthsISO(renewsAt, 12))}</div>
           <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único. No cartão de crédito, em até ${PLAN_FREE_INSTALLMENTS}x sem juros</div>
         </button>
         ${monthlyRunning ? `<div style="font-size:12px;color:var(--text3);line-height:1.5;text-align:center">Ao estender, a assinatura mensal é cancelada sozinha: você não será cobrado de novo.</div>` : ''}
@@ -7104,7 +7104,7 @@ function mSubscription() {
         <button ${busy?'disabled':''} onclick="startSubscription('annual')"
           style="${planBtn};margin-top:8px;border:2px solid var(--accent);background:#00d67f14;color:var(--text)">
           <span style="position:absolute;top:-11px;right:12px;background:var(--accent);color:#000;font-size:11px;font-weight:800;letter-spacing:.4px;padding:3px 10px;border-radius:20px">MELHOR VALOR · ECONOMIZE ${planBRL(PLAN_SAVING)}</span>
-          Anual — ${planBRL(PLAN_PRICES.annual)} <span style="color:var(--accent)">(${planBRL(PLAN_PRICES.annual / 12)} por mês)</span>
+          Anual — ${planBRL(PLAN_PRICES.annual)} <span style="color:var(--accent)">(${PLAN_FREE_INSTALLMENTS}x de ${planBRL(PLAN_PRICES.annual / PLAN_FREE_INSTALLMENTS)} sem juros)</span>
           <div style="font-size:12px;font-weight:400;color:var(--text2);margin-top:2px">Em vez de ${planBRL(PLAN_PRICES.monthly * 12)} em 12 meses no plano mensal: você economiza ${planBRL(PLAN_SAVING)}</div>
           <div style="font-size:12px;font-weight:400;color:var(--text3);margin-top:2px">Pagamento único. No cartão de crédito, em até ${PLAN_FREE_INSTALLMENTS}x sem juros</div>
         </button>
