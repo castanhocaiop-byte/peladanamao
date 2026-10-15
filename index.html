@@ -1127,6 +1127,7 @@ const BADGE_CATALOG = [
   { id:'goleador',       emoji:'💥', label:'Goleador',             desc:'10+ gols em um único campeonato',               check: s => s.maxGoalsSingleChamp >= 10, fieldOnly: true },
   { id:'maquina',        emoji:'⚡', label:'Máquina de Gols',      desc:'Média de 1+ gol por jogo em 1 campeonato',      check: s => s.hasMachineChamp,           fieldOnly: true },
   { id:'empresario',     emoji:'💪', label:'Eu sou bom, meu empresário que é ruim', desc:'Artilheiro do camp. com o time em último lugar',check: s => s.hasArtLastPlace,           fieldOnly: true },
+  { id:'alergico_gol',   emoji:'🤧', label:'Alérgico a Gol',        desc:'3 campeonatos seguidos sem fazer nenhum gol',  check: s => s.consecGoalless >= 3,       fieldOnly: true },
   // presença emprestada
   { id:'fominha',        emoji:'🙋', label:'Fominha',              desc:'3+ jogos emprestados em um único campeonato',   check: s => s.maxBorrowedMatches >= 3 },
   { id:'jogo_todas',     emoji:'🌪️', label:'Jogo Todas',           desc:'6+ jogos emprestados em um único campeonato',  check: s => s.maxBorrowedMatches >= 6 },
@@ -7219,7 +7220,8 @@ function vMeuJogador() {
       if (late3) { hasDevendoLuxando = true; break; }
     }
   }
-  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), myName };
+  const consecGoalless = goallessStreak([...done].reverse(), myName);
+  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), myName };
   const earnedBadges = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && b.check(_bStats));
   const lockedBadges  = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && !b.check(_bStats));
 
@@ -8697,6 +8699,7 @@ function computePlayerBadgeStats(name) {
   let hasViceStreak3=false;{let vs=0;for(const c of doneChron){const fin=(c.matches||[]).find(m=>m.phase==='final'&&m.played);if(!fin){vs=0;continue;}const wt=fin.hs>fin.as?fin.home:fin.as>fin.hs?fin.away:null;const lt=wt?(fin.home===wt?fin.away:fin.home):null;if(!lt){vs=0;continue;}if((c.teamRosters?.[lt]||[]).includes(name)){vs++;if(vs>=3){hasViceStreak3=true;break;}}else vs=0;}}
   let consecHatTrickChamps=0;{let cur=0;for(const c of [...done].reverse()){const participated=!c.teamRosters||Object.values(c.teamRosters).some(r=>r.includes(name));if(!participated){cur=0;continue;}let hadHT=false;for(const m of(c.matches||[])){if(!m.played)continue;const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);const mc={};for(const g of gs)mc[g.player]=(mc[g.player]||0)+1;if((mc[name]||0)>=3){hadHT=true;break;}}if(hadHT){cur++;if(cur>consecHatTrickChamps)consecHatTrickChamps=cur;}else cur=0;}}
   let hasLastPlaceChurrasco=false;{for(const champ of doneAll){if(!champ.churrasco||!champ.teamRosters)continue;let mtC=null;for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){mtC=t;break;}}if(!mtC)continue;const regMsC=(champ.matches||[]).filter(m=>m.played&&m.phase!=='final'&&m.phase!=='semifinal');if(!regMsC.length)continue;const ptsC={};for(const[t]of Object.entries(champ.teamRosters))ptsC[t]=0;for(const m of regMsC){if(m.hs>m.as){ptsC[m.home]=(ptsC[m.home]||0)+3;}else if(m.as>m.hs){ptsC[m.away]=(ptsC[m.away]||0)+3;}else{ptsC[m.home]=(ptsC[m.home]||0)+1;ptsC[m.away]=(ptsC[m.away]||0)+1;}}const minPtsC=Math.min(...Object.values(ptsC));if(Object.entries(ptsC).filter(([,p])=>p===minPtsC).map(([t])=>t).includes(mtC)){hasLastPlaceChurrasco=true;break;}}}
+  const consecGoalless=goallessStreak([...done].reverse(),name);
   const colorsPlayed=new Set(),colorsWon=new Set();
   for(const champ of doneAll){if(!champ.teamRosters)continue;for(const[color,roster]of Object.entries(champ.teamRosters)){if(!roster.includes(name))continue;colorsPlayed.add(color);const cpW=(champ.champion_players||[]).find(p=>p.name.trim()===name);if(cpW&&(cpW.weight||1)>=1)colorsWon.add(color);}}
   let hasViouSaf=false;{const chron=[...doneAll].reverse();for(let i=0;i<chron.length-1;i++){const cA=chron[i],cB=chron[i+1];if(!cA.teamRosters)continue;let tA=null;for(const[t,r]of Object.entries(cA.teamRosters)){if(r.includes(name)){tA=t;break;}}if(!tA)continue;const rmA=(cA.matches||[]).filter(m=>m.played&&m.phase==='regular');if(!rmA.length)continue;const pA={};for(const[t]of Object.entries(cA.teamRosters))pA[t]=0;for(const m of rmA){if(m.hs>m.as){pA[m.home]=(pA[m.home]||0)+3;}else if(m.as>m.hs){pA[m.away]=(pA[m.away]||0)+3;}else{pA[m.home]=(pA[m.home]||0)+1;pA[m.away]=(pA[m.away]||0)+1;}}const minA=Math.min(...Object.values(pA));if(!Object.entries(pA).filter(([,p])=>p===minA).map(([t])=>t).includes(tA))continue;const cpB=(cB.champion_players||[]).find(p=>p.name.trim()===name);if(cpB&&(cpB.weight||1)>=1){hasViouSaf=true;break;}}}
@@ -8724,7 +8727,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
+  return {champsPlayed,champsPlayedCutoff,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
 }
 
 function getBadgeCache() {
@@ -8769,6 +8772,25 @@ function getBadgeHolders(badgeId) { return getBadgeCache().badgeHolders[badgeId]
 // só contam essa; as de linha não contam goleiros; as de goleiro só contam goleiros.
 function badgeEligibleCount(b) {
   return (st.players || []).filter(p => b.specialFor ? b.specialFor.includes(p.name) : !(b.fieldOnly && p.goleiro) && !(b.gkOnly && !p.goleiro)).length;
+}
+
+// Maior sequência de campeonatos SEGUIDOS em que o jogador esteve no elenco e NÃO fez nenhum gol. `chron` vem do mais antigo para o mais novo e só com campeonatos
+// concluídos, fora do plano gratuito e a partir de 08/09/2026 (quando o registro de gols começou). Só conta campeonato com gols registrados: se ninguém marcou, o
+// admin provavelmente não lançou os gols e não dá para provar nada, então a sequência zera. Faltar a um campeonato, ou fazer um gol, também zera. Serve à aba EU e
+// ao cache de todos os jogadores (os dois calculam as estatísticas das conquistas).
+function goallessStreak(chron, name) {
+  let best = 0, cur = 0;
+  for (const c of chron) {
+    const played = !!c.teamRosters && Object.values(c.teamRosters).some(r => r.includes(name));
+    let anyGoal = false, mine = 0;
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
+      for (const g of gs) { anyGoal = true; if (g.player === name) mine++; }
+    }
+    if (played && anyGoal && mine === 0) { cur++; if (cur > best) best = cur; } else cur = 0;
+  }
+  return best;
 }
 
 function getPlayerRarestBadge(name) {
