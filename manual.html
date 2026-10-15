@@ -463,7 +463,7 @@ p strong {
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
-      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
+      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador e das Conquistas (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
       <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
     </ul>
@@ -501,7 +501,7 @@ p strong {
       <li><a href="#assinatura"><span class="num">26</span> Assinatura e Pagamento</a></li>
       <li><a href="#instalar-app"><span class="num">27</span> Instalar o App e Compartilhar o Link</a></li>
       <li><a href="#metricas-funil"><span class="num">28</span> Métricas do Funil (painel do dono)</a></li>
-      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador (compartilhar)</a></li>
+      <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador e das Conquistas (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
       <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
     </ul>
@@ -1329,7 +1329,7 @@ p strong {
     <!-- 13. Conquistas (Badges) -->
     <section class="section" id="conquistas">
       <h2 class="section-title"><span class="sn">13</span> Conquistas (Badges)</h2>
-      <p>A aba EU exibe um painel de conquistas individuais. Cada badge representa um critério específico; badges conquistadas são exibidas em destaque e as pendentes aparecem bloqueadas (🔒). Clicar em qualquer badge abre uma legenda com o critério completo.</p>
+      <p>A aba EU exibe um painel de conquistas individuais. Cada badge representa um critério específico; badges conquistadas são exibidas em destaque e as pendentes aparecem bloqueadas (🔒). Clicar em qualquer badge abre uma legenda com o critério completo. As conquistas também podem ser <strong>compartilhadas como imagem</strong> (uma conquista, as novas ou todas), com a cor do cartão seguindo a <strong>raridade</strong> da conquista na liga: ver a seção 29.</p>
       <div class="callout">
         <div class="callout-label">Visibilidade</div>
         Badges não conquistadas ficam visíveis (<strong>bloqueadas</strong>) apenas no próprio perfil do jogador. Ao visitar o perfil de outro jogador, todas as badges dele são visíveis — conquistadas e pendentes.
@@ -2731,7 +2731,7 @@ p strong {
 
     <!-- 29. Cartão do Jogador (compartilhar) -->
     <section class="section" id="cartao-jogador">
-      <h2 class="section-title"><span class="sn">29</span> Cartão do Jogador (compartilhar)</h2>
+      <h2 class="section-title"><span class="sn">29</span> Cartão do Jogador e das Conquistas (compartilhar)</h2>
       <p>Na aba <strong>EU (Meu Craque)</strong>, embaixo do nome, o botão <strong>📤 Compartilhar meu cartão</strong> monta o cartão do jogador, com as estatísticas dele, em <strong>dois formatos</strong>: <strong>Story</strong> (9:16, 1080×1920) e <strong>Feed</strong> (4:5, 1080×1350), prontos para mandar no WhatsApp, no Instagram ou onde a pessoa quiser. É a forma de a pelada aparecer fora do app: quem vê o cartão de um colega fica sabendo do Pelada na Mão.</p>
 
       <table class="data-table">
@@ -2770,9 +2770,46 @@ p strong {
       </ol>
       <p>Quem só <strong>cancela</strong> a janela de compartilhar não recebe erro nem download. O botão só aparece para quem já disputou pelo menos um campeonato, e <strong>não</strong> aparece quando o admin usa "👁 Ver como" (simulação).</p>
 
+      <h3 id="cartao-conquistas">Compartilhar conquistas</h3>
+      <p>As <strong>conquistas</strong> também viram imagem, no mesmo esquema do cartão do jogador: <strong>Story</strong> (9:16) e <strong>Feed</strong> (4:5), a mesma janela (escolher o formato, <strong>📤 Compartilhar</strong>, <strong>📋 Copiar legenda</strong> e <strong>⬇️ Baixar a imagem</strong>) e a mesma privacidade. Tudo na aba <strong>EU</strong>, só no <strong>próprio perfil</strong> (nunca na simulação do admin, "👁 Ver como") e só de conquistas que o jogador <strong>já tem</strong>. São três caminhos:</p>
+      <table class="data-table">
+        <thead><tr><th>Onde</th><th>O que gera</th></tr></thead>
+        <tbody>
+          <tr><td>Tocar numa conquista da grade <strong>Conquistas</strong> e, na janela dela, em <strong>📤 Compartilhar conquista</strong></td><td>O <strong>cartão de uma conquista</strong>: selo "CONQUISTA DESBLOQUEADA", o ícone grande num anel, a faixa com o <strong>nível de raridade</strong>, o nome, o que é preciso para ganhar, o destaque "Só você tem na liga!" (ou "Só 2 jogadores da liga têm", "Só 3…") quando são poucos, e quem conquistou (nome do jogador) com o nome da liga.</td></tr>
+          <tr><td>A faixa dourada <strong>🎉 Nova conquista desbloqueada!</strong> no alto da aba EU, botão <strong>📤 Compartilhar</strong></td><td>Com <strong>1</strong> conquista nova abre o cartão dessa conquista; com <strong>2 ou mais</strong> abre o cartão <strong>"Conquistas novas"</strong>, só com elas.</td></tr>
+          <tr><td>Cabeçalho do card <strong>Conquistas</strong>, botão <strong>📤 Compartilhar</strong></td><td>O cartão <strong>"Minhas conquistas"</strong>: foto (ou iniciais), nome, "N de TOTAL conquistas" e todas as que o jogador tem, da mais rara para a mais comum.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="cartao-raridade">A cor segue a raridade</h3>
+      <p>No cartão de uma conquista, a moldura, o anel, o fundo e o brilho têm a cor do <strong>nível de raridade</strong> da conquista <strong>na liga</strong>, e a faixa sobre o anel escreve o nível. O nível sai da fatia dos jogadores que <strong>podem</strong> ter a conquista e já a têm (a mesma base do "% dos elegíveis" da janela da conquista: as conquistas de linha não contam goleiros, as de goleiro só contam goleiros e as exclusivas de uma pessoa contam só ela).</p>
+      <table class="data-table">
+        <thead><tr><th>Nível</th><th>Cor</th><th>Quando</th></tr></thead>
+        <tbody>
+          <tr><td><strong>LENDÁRIA</strong></td><td>Dourado</td><td>Só <strong>1 jogador</strong> da liga tem a conquista.</td></tr>
+          <tr><td><strong>ÉPICA</strong></td><td>Roxo</td><td>Até <strong>15%</strong> dos jogadores que podem ter.</td></tr>
+          <tr><td><strong>RARA</strong></td><td>Azul</td><td>Até <strong>35%</strong> dos jogadores que podem ter.</td></tr>
+          <tr><td><strong>COMUM</strong></td><td>Verde</td><td>O resto.</td></tr>
+        </tbody>
+      </table>
+      <p>O cartão com várias conquistas toma a cor do nível <strong>mais alto</strong> que aparece nele. Cada conquista rara, épica ou lendária ganha uma <strong>borda</strong> na cor do seu nível (a comum fica sem borda) e, embaixo, uma <strong>legenda das cores</strong> ("Raridade na liga: …") mostra só os níveis que aparecem. Até 20 conquistas aparecem com o <strong>nome embaixo</strong>; de 21 a 48 só os <strong>ícones</strong> (o nome ficaria pequeno demais para ler no celular, então o nome da mais rara vai na contagem); acima de 48, os últimos viram <strong>"+N"</strong>. O nível é <strong>da liga</strong>: a mesma conquista pode ser lendária numa liga e comum em outra.</p>
+
+      <h3 id="aviso-conquista-nova">Aviso de conquista nova</h3>
+      <p>Ao abrir a aba EU, quando o app percebe uma conquista que o jogador ainda não tinha visto (compara com as que já guardou), aparece no alto a faixa dourada <strong>🎉 Nova conquista desbloqueada!</strong> (ou "N novas conquistas desbloqueadas!"), com os nomes e o botão <strong>📤 Compartilhar</strong>. A faixa fica por <strong>7 dias</strong> ou até a pessoa tocar no <strong>×</strong>. Ela é guardada <strong>só neste aparelho</strong> (apenas os códigos das conquistas e a hora; nada vai ao servidor) e vale por conta e por liga. Em outro aparelho a faixa não aparece, mas o botão na janela de cada conquista e o do card Conquistas valem em qualquer um.</p>
+
+      <h3>Arquivos, legendas e contadores</h3>
+      <table class="data-table">
+        <thead><tr><th>Cartão</th><th>Arquivos (Story / Feed)</th><th>Legenda copiada</th></tr></thead>
+        <tbody>
+          <tr><td>Uma conquista</td><td><code>conquista-pelada-na-mao-story.png</code> / <code>conquista-pelada-na-mao.png</code></td><td>"Conquista desbloqueada no Pelada na Mão 🏅", o ícone, o nome e a regra, "Raridade na liga: …", o convite com <code>?ref=cartao</code> e as hashtags.</td></tr>
+          <tr><td>Minhas conquistas / Conquistas novas</td><td><code>conquistas-pelada-na-mao-story.png</code> / <code>conquistas-pelada-na-mao.png</code></td><td>"Minhas conquistas no Pelada na Mão 🏅" (ou "Conquistas novas…") com a quantidade, o convite e as hashtags.</td></tr>
+        </tbody>
+      </table>
+      <p>A legenda e o texto que vai junto com a imagem <strong>nunca</strong> levam o nome do jogador nem o da liga: a imagem leva o nome, e quem compartilha escolhe se manda. Os cartões de conquista contam nos <strong>mesmos contadores do cartão</strong> do painel do dono (abriram, compartilharam e entraram por um link <code>?ref=cartao</code>): não há contador separado.</p>
+
       <div class="callout gold">
         <div class="callout-label gold">Privacidade (LGPD)</div>
-        A imagem é <strong>montada no aparelho de quem toca no botão</strong> e só sai dele se a pessoa compartilhar ou baixar: nada é enviado ao servidor. Entram só nome, foto, nome da liga e estatísticas que a própria pessoa já vê; <strong>nunca</strong> e-mail, WhatsApp ou qualquer contato. Um teste automático garante que o código que desenha o cartão nem cita esses campos. A política de privacidade do app informa isso ("Cartão do jogador").
+        A imagem é <strong>montada no aparelho de quem toca no botão</strong> e só sai dele se a pessoa compartilhar ou baixar: nada é enviado ao servidor. Entram só nome, foto, nome da liga, estatísticas e conquistas que a própria pessoa já vê; <strong>nunca</strong> e-mail, WhatsApp ou qualquer contato. Um teste automático garante que o código que desenha o cartão nem cita esses campos. A política de privacidade do app informa isso ("Cartão do jogador").
       </div>
 
       <h3>Como medimos o efeito</h3>
@@ -2780,7 +2817,7 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
-        O desenho usa o canvas do navegador: <code>drawMjCard</code> faz o Feed (1080×1350) e <code>drawMjStory</code> faz o Story (1080×1920), que pinta o <strong>fundo</strong> (<code>drawMjBackground</code>, o mesmo do Feed) na imagem inteira e desenha o mesmo cartão escalado (1330/1350) e centralizado entre as margens de 250 e 340 px. Usa as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. As duas imagens são geradas ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Por isso trocar Story/Feed só troca a imagem mostrada (nada é montado de novo), e cada formato tem o seu endereço de imagem, solto da memória ao fechar a janela. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela.
+        O desenho usa o canvas do navegador: <code>drawMjCard</code> faz o Feed (1080×1350) e <code>drawMjStory</code> faz o Story (1080×1920), que pinta o <strong>fundo</strong> (<code>drawMjBackground</code>, o mesmo do Feed) na imagem inteira e desenha o mesmo cartão escalado (1330/1350) e centralizado entre as margens de 250 e 340 px. Usa as fontes do próprio site (Bebas Neue e Inter) e o logo. A foto de perfil vem do Cloudinary e precisa de CORS para o canvas poder exportar a imagem; se a foto não carregar, ou "contaminar" o canvas, o cartão é refeito sem foto (com as iniciais) em vez de falhar. As duas imagens são geradas ao abrir a prévia, e não no toque em Compartilhar: o iPhone só aceita compartilhar arquivo logo depois de um toque, sem trabalho assíncrono no meio. Por isso trocar Story/Feed só troca a imagem mostrada (nada é montado de novo), e cada formato tem o seu endereço de imagem, solto da memória ao fechar a janela. Os números vêm de <code>st._mjCard</code>, preenchido pela própria aba EU ao desenhar (<code>mjCardData</code>), então o cartão nunca discorda do que está na tela. Os cartões de conquista usam a <strong>mesma janela</strong>: <code>MJ_KINDS</code> (jogador, conquista, conquistas) guarda, para cada tipo, o título, os avisos, o desenho do Feed e do Story, os nomes dos arquivos e os textos de compartilhar e de legenda; <code>drawMjStoryOf</code> desenha o Story de qualquer cartão (o mesmo fundo esticado e o cartão escalado entre as margens). Os dados vêm de <code>st._mjShare</code>, montado pela aba EU só fora da simulação do admin, com a lista da mais rara para a mais comum (<code>mjByRarity</code>); o nível sai de <code>mjTierOf</code> (fatia de <code>badgeEligibleCount</code>, a mesma base da janela da conquista) e dá a cor do cartão (<code>MJ_TIERS</code>). O aviso de conquista nova guarda os códigos em <code>localStorage</code> (<code>aceoma_newBadges</code>, por conta e liga, 7 dias). Só o app muda: nenhuma função nem regra do servidor, e nenhum evento ou canal novo (usa <code>cardOpen</code>, <code>cardShare</code> e <code>?ref=cartao</code>).
       </div>
     </section>
 

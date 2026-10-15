@@ -1729,6 +1729,69 @@ async function notifyNewBadges(newBadges, allEarnedIds) {
   } catch(e) { console.warn('badge notif failed:', e?.message || e); }
 }
 
+// Conquistas novas ainda sem compartilhar. Quando a aba EU percebe uma conquista nova (compara com o que a pessoa já tinha visto), o aviso com o botão
+// Compartilhar fica no alto dela por 7 dias, ou até a pessoa fechar. Guarda só os códigos das conquistas, neste aparelho (localStorage): nada vai ao servidor.
+const NEW_BADGES_STORE = 'aceoma_newBadges', NEW_BADGES_TTL = 7 * 24 * 60 * 60 * 1000;
+function newBadgesKey() { return st.authUser?.uid && st.leagueId ? `${st.authUser.uid}_${st.leagueId}` : ''; }
+function newBadgesRead(key) {
+  try {
+    const e = (JSON.parse(localStorage.getItem(NEW_BADGES_STORE) || '{}') || {})[key];
+    if (e && Array.isArray(e.ids) && Date.now() - Number(e.ts) < NEW_BADGES_TTL) return e.ids.filter(id => typeof id === 'string');
+  } catch(_) {}
+  return [];
+}
+function newBadgesWrite(key, ids) {
+  try {
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem(NEW_BADGES_STORE) || '{}'); } catch(_) {} // guardado estragado: recomeça do zero em vez de nunca mais gravar
+    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
+    if (ids.length) all[key] = { ids, ts: Date.now() }; else delete all[key];
+    localStorage.setItem(NEW_BADGES_STORE, JSON.stringify(all));
+  } catch(_) {}
+}
+function newBadgeIds() {
+  const key = newBadgesKey();
+  if (!key) return [];
+  if (st._newBadges?.key !== key) st._newBadges = { key, ids: newBadgesRead(key) };
+  return st._newBadges.ids;
+}
+function newBadgesAdd(ids) {
+  const key = newBadgesKey();
+  if (!key || !ids?.length) return;
+  const merged = [...new Set([...newBadgeIds(), ...ids])];
+  st._newBadges = { key, ids: merged };
+  newBadgesWrite(key, merged);
+}
+function dismissNewBadges() {
+  const key = newBadgesKey();
+  if (!key) return;
+  st._newBadges = { key, ids: [] };
+  newBadgesWrite(key, []);
+  render();
+}
+// Compartilhar o aviso: 1 conquista nova abre o cartão dela; 2 ou mais abrem o cartão "Conquistas novas". Só vale o que o jogador ainda tem.
+function shareNewBadges() {
+  const ids = newBadgeIds().filter(id => st._mjShare?.earned?.some(x => x.id === id));
+  if (ids.length === 1) openMjBadge(ids[0]);
+  else if (ids.length > 1) openMjBadges('new', ids);
+}
+function newBadgesBanner() {
+  const s = st._mjShare;
+  if (!s) return '';
+  const ids = newBadgeIds(), items = s.earned.filter(x => ids.includes(x.id));
+  if (!items.length) return '';
+  const names = items.slice(0, 3).map(x => `${x.emoji} ${esc(x.label)}`).join(' · ') + (items.length > 3 ? ` · +${items.length - 3}` : '');
+  return `<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:#f0b42914;border:1px solid #f0b42955;border-radius:12px">
+    <span style="font-size:24px;line-height:1">🎉</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:800;color:var(--gold)">${items.length === 1 ? 'Nova conquista desbloqueada!' : items.length + ' novas conquistas desbloqueadas!'}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:2px;overflow-wrap:anywhere">${names}</div>
+    </div>
+    <button onclick="shareNewBadges()" style="flex-shrink:0;padding:7px 12px;border:none;border-radius:20px;background:var(--accent);color:#000;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar</button>
+    <button onclick="dismissNewBadges()" aria-label="Fechar o aviso" style="flex-shrink:0;background:none;border:none;color:var(--text3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px">×</button>
+  </div>`;
+}
+
 function dismissNotifBanner() {
   try { sessionStorage.setItem('aceoma_notif_dismissed', '1'); } catch(_) {}
   render();
@@ -2055,19 +2118,65 @@ async function signOutUser() {
   await AUTH.signOut();
 }
 
-/* ── Cartão do jogador (compartilhar) ─────────────────────────────────────────────────────
+/* ── Cartão do jogador e das conquistas (compartilhar) ─────────────────────────────────────────────────────
    Duas imagens do mesmo cartão, desenhadas no próprio aparelho com o que a aba Meu Craque acabou de mostrar (nome,
    foto se tiver, títulos, campeonatos, gols e as conquistas mais raras): FEED 4:5 (1080×1350: publicação do Instagram
    e conversas) e STORY 9:16 (1080×1920: o cartão inteiro entre as margens que o Instagram cobre; Stories, Reels e status).
    Só sai do aparelho se a pessoa tocar em Compartilhar (ou Baixar). Nunca leva e-mail nem WhatsApp. O link que
-   acompanha o cartão tem ?ref=cartao: quem entra por ele é contado (sem saber quem é) no painel do dono. */
+   acompanha o cartão tem ?ref=cartao: quem entra por ele é contado (sem saber quem é) no painel do dono.
+   O mesmo vale para as CONQUISTAS: o cartão de UMA conquista (janela da conquista e aviso de conquista nova) e o cartão com
+   várias (todas as do jogador, ou só as novas). Cada tipo (MJ_KINDS) traz o seu desenho, os textos e os nomes dos arquivos; a janela,
+   os dois formatos, o Compartilhar, o Baixar e o Copiar legenda são os mesmos. Só no PRÓPRIO perfil, nunca na simulação do admin. */
 const MJ_CARD = { W: 1080, H: 1350, LINK: 'https://peladanamao.com.br/?ref=cartao', FILE: 'cartao-pelada-na-mao.png' };
 // Versão Story (9:16): o MESMO cartão inteiro, sem cortar nada, entre as margens que o Instagram cobre com a foto de perfil (em cima) e a caixa de
 // resposta (embaixo).
 const MJ_STORY = { W: 1080, H: 1920, TOP: 250, BOTTOM: 340, FILE: 'cartao-pelada-na-mao-story.png' };
 const MJ_FORMATS = { story: { label: 'Story', ratio: '9:16', file: MJ_STORY.FILE }, feed: { label: 'Feed', ratio: '4:5', file: MJ_CARD.FILE } };
 const MJ_GOLD = '#f0b429', MJ_GREEN = '#00d67f', MJ_TEXT = '#e6edf3', MJ_MUTED = '#8b949e';
+// Raridade de uma conquista na liga, em 4 níveis, cada um com a sua cor (moldura, anel, fundo e brilho do cartão). Pela fatia dos jogadores que PODEM ter a
+// conquista (a mesma base da janela da conquista): só 1 jogador com ela = lendária; até 15% = épica; até 35% = rara; o resto = comum.
+const MJ_TIERS = {
+  legendary: { name: 'LENDÁRIA', label: 'Lendária', color: '#f0b429', bg: '#2a1f05', glow: 'rgba(240,180,41,0.32)' },
+  epic:      { name: 'ÉPICA',    label: 'Épica',    color: '#b06eff', bg: '#1f1236', glow: 'rgba(176,110,255,0.30)' },
+  rare:      { name: 'RARA',     label: 'Rara',     color: '#4db8ff', bg: '#0b2236', glow: 'rgba(77,184,255,0.28)' },
+  common:    { name: 'COMUM',    label: 'Comum',    color: '#00d67f', bg: '#0b2a21', glow: 'rgba(0,214,127,0.26)' },
+};
+const MJ_TIER_ORDER = ['legendary', 'epic', 'rare', 'common']; // da mais rara para a mais comum
+function mjTierOf(holders, eligible) {
+  const h = Math.max(0, Math.round(Number(holders) || 0)), e = Math.max(0, Math.round(Number(eligible) || 0));
+  if (h === 0) return 'common';
+  if (h === 1) return 'legendary';
+  const share = e > 0 ? h / e : 1;
+  return share <= 0.15 ? 'epic' : share <= 0.35 ? 'rare' : 'common';
+}
+// Da mais rara para a mais comum: primeiro o nível (lendária … comum), depois quantos jogadores têm, depois o nome. Não mexe na lista original.
+function mjByRarity(list) {
+  const rank = b => MJ_TIER_ORDER.indexOf(mjTierOf(b.holders, b.eligible));
+  return list.slice().sort((a, b) => rank(a) - rank(b) || (a.holders || 0) - (b.holders || 0) || String(a.label).localeCompare(String(b.label), 'pt'));
+}
 let _mjBlobs = null, _mjUrls = null, _mjFormat = 'story'; // as duas imagens ficam prontas antes do toque em Compartilhar (o iPhone exige)
+let _mjKind = 'player', _mjData = null; // o que a janela mostra agora: o cartão do jogador (padrão), UMA conquista ou várias
+
+// O que a janela compartilha. Cada tipo traz o título da janela, os avisos, o desenho dos dois formatos, o nome dos arquivos e os textos de compartilhar e de
+// legenda. A legenda e o texto que vai junto nunca levam nome de pessoa nem da liga (a imagem leva, e quem compartilha escolhe).
+const MJ_KINDS = {
+  player: {
+    title: '📤 Seu cartão', busy: 'Montando seu cartão…', fail: 'Não foi possível montar o cartão agora. Tente de novo.', alt: 'Seu cartão no Pelada na Mão', shareTitle: 'Meu cartão no Pelada na Mão',
+    file: { story: MJ_STORY.FILE, feed: MJ_CARD.FILE }, draw: { feed: drawMjCard, story: drawMjStory },
+    text: () => `Meu cartão no Pelada na Mão ⚽🏆 Faça o da sua pelada: ${MJ_CARD.LINK}`, caption: () => mjCaption(),
+  },
+  badge: {
+    title: '📤 Sua conquista', busy: 'Montando sua conquista…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Sua conquista no Pelada na Mão', shareTitle: 'Minha conquista no Pelada na Mão',
+    file: { story: 'conquista-pelada-na-mao-story.png', feed: 'conquista-pelada-na-mao.png' }, draw: { feed: drawMjBadgeCard, story: drawMjBadgeStory },
+    text: d => `Desbloqueei "${d.label}"${d.tier && d.tier !== 'common' && MJ_TIERS[d.tier] ? ` (conquista ${MJ_TIERS[d.tier].label.toLowerCase()})` : ''} no Pelada na Mão 🏅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjBadgeCaption(d),
+  },
+  badges: {
+    title: '📤 Suas conquistas', busy: 'Montando suas conquistas…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Suas conquistas no Pelada na Mão', shareTitle: 'Minhas conquistas no Pelada na Mão',
+    file: { story: 'conquistas-pelada-na-mao-story.png', feed: 'conquistas-pelada-na-mao.png' }, draw: { feed: drawMjBadgesCard, story: drawMjBadgesStory },
+    text: d => `${d.mode === 'new' ? 'Conquistas novas' : 'Minhas conquistas'} no Pelada na Mão 🏅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjBadgesCaption(d),
+  },
+};
+const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
 // Normaliza o que a aba Meu Craque calculou. Pura: só texto e números, nada de função nem de dado de contato.
 function mjCardData(s = {}) {
@@ -2091,6 +2200,43 @@ function mjCardData(s = {}) {
     ],
     record: matches > 0 ? { w: num(s.w), d: num(s.d), l: num(s.l), matches } : null,
     badges: (Array.isArray(s.badges) ? s.badges : []).filter(b => b && b.emoji && b.label).slice(0, 6).map(b => ({ emoji: String(b.emoji), label: String(b.label) })),
+  };
+}
+
+// Dados do cartão de UMA conquista (o que a janela da conquista já mostra, mais o nome de quem conquistou). Pura: só texto e números. `eligible` é quantos
+// jogadores da liga podem ter a conquista: com `holders` dá a raridade (mjTierOf), que decide as cores do cartão.
+function mjBadgeData(s = {}) {
+  const num = n => Math.max(0, Math.round(Number(n) || 0));
+  const holders = num(s.holders), tier = mjTierOf(holders, s.eligible);
+  return {
+    name: String(s.name || '').trim() || 'Jogador',
+    league: String(s.league || '').trim(),
+    emoji: String(s.emoji || '').trim() || '🏅',
+    label: String(s.label || '').trim() || 'Conquista',
+    desc: String(s.desc || '').trim(),
+    holders, // quantos jogadores da liga têm: com 1, 2 ou 3 vira destaque no cartão
+    tier, tone: MJ_TIERS[tier],
+  };
+}
+
+// Dados do cartão com VÁRIAS conquistas: todas as do jogador (mode 'all') ou só as novas (mode 'new'), da mais rara para a mais comum. Pura. Cada item traz
+// `holders` e `eligible` (a raridade dele); o cartão toma a cor da raridade mais alta que aparece nele.
+function mjBadgesData(s = {}) {
+  const num = n => Math.max(0, Math.round(Number(n) || 0));
+  const name = String(s.name || '').trim() || 'Jogador';
+  const items = (Array.isArray(s.items) ? s.items : []).filter(b => b && b.emoji && b.label).slice(0, 200)
+    .map(b => ({ emoji: String(b.emoji), label: String(b.label), tier: mjTierOf(b.holders, b.eligible) }));
+  const tiers = MJ_TIER_ORDER.filter(k => items.some(b => b.tier === k)), tier = tiers[0] || 'common';
+  return {
+    name,
+    league: String(s.league || '').trim(),
+    photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '',
+    initials: name.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽',
+    mode: s.mode === 'new' ? 'new' : 'all',
+    items,
+    tier, tone: MJ_TIERS[tier], tiers,           // a raridade mais alta do cartão e as que aparecem nele (para a legenda das cores)
+    count: Math.max(num(s.count), items.length), // quantas o jogador tem no total (no modo "novas" é mais do que as mostradas)
+    total: num(s.total),                          // quantas existem para ele
   };
 }
 
@@ -2120,11 +2266,12 @@ const MJ_BODY = 'Inter, "Segoe UI", system-ui, sans-serif';
 
 // Fundo: degradê escuro com um clarão da cor do jogador atrás da foto. Serve ao cartão do feed e ao Story (que o estica para 1080×1920).
 function drawMjBackground(ctx, c, W, H, glowY, glowR) {
+  const tone = c.tone || { bg: c.isChampion ? '#2a1f05' : '#0b2a21', glow: c.isChampion ? 'rgba(240,180,41,0.32)' : 'rgba(0,214,127,0.26)' }; // as conquistas trazem a cor da raridade
   const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#0d1117'); bg.addColorStop(1, c.isChampion ? '#2a1f05' : '#0b2a21');
+  bg.addColorStop(0, '#0d1117'); bg.addColorStop(1, tone.bg);
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const glow = ctx.createRadialGradient(W / 2, glowY, 20, W / 2, glowY, glowR);
-  glow.addColorStop(0, c.isChampion ? 'rgba(240,180,41,0.32)' : 'rgba(0,214,127,0.26)'); glow.addColorStop(1, 'rgba(13,17,23,0)');
+  glow.addColorStop(0, tone.glow); glow.addColorStop(1, 'rgba(13,17,23,0)');
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 }
 
@@ -2207,15 +2354,195 @@ function drawMjCard(ctx, c, photoImg, logoImg, opts = {}) {
 
 // Versão Story (9:16): o cartão INTEIRO, sem cortar nada, escalado para caber entre as margens que o Instagram cobre (em cima e embaixo), sobre o
 // mesmo fundo esticado para 1080×1920 (sem emenda entre o cartão e o resto da imagem).
-function drawMjStory(ctx, c, photoImg, logoImg) {
+function drawMjStoryOf(ctx, draw, c, photoImg, logoImg, glowY = 330) {
   const { W, H, TOP, BOTTOM } = MJ_STORY;
   const k = (H - TOP - BOTTOM) / MJ_CARD.H;
-  drawMjBackground(ctx, c, W, H, TOP + 330 * k, 500 * k);
+  drawMjBackground(ctx, c, W, H, TOP + glowY * k, 500 * k);
   ctx.save();
   ctx.translate((W - MJ_CARD.W * k) / 2, TOP);
   ctx.scale(k, k);
-  drawMjCard(ctx, c, photoImg, logoImg, { noBg: true });
+  draw(ctx, c, photoImg, logoImg, { noBg: true });
   ctx.restore();
+}
+function drawMjStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjCard, c, photoImg, logoImg); }
+function drawMjBadgeStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjBadgeCard, c, photoImg, logoImg, 410); }
+function drawMjBadgesStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjBadgesCard, c, photoImg, logoImg, 262); }
+
+// Quebra o texto em até `maxLines` linhas que cabem em `maxW` (a fonte já tem de estar no ctx). O que passar da última linha fica nela e é cortado ao desenhar.
+function mjWrapText(ctx, text, maxW, maxLines) {
+  const words = String(text).split(/\s+/).filter(Boolean), lines = [];
+  let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (!cur || ctx.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { const rest = lines.slice(maxLines - 1).join(' '); lines.length = maxLines - 1; lines.push(rest); }
+  return lines;
+}
+
+// Nome da conquista na fonte dos títulos (Bebas): uma linha de 150 a 104 px ou, se não couber, até duas linhas de 118 px.
+function mjTitleLines(ctx, text, maxW) {
+  for (let s = 150; s >= 104; s -= 2) { ctx.font = `400 ${s}px ${MJ_HEAD}`; if (ctx.measureText(text).width <= maxW) return { lines: [text], size: s }; }
+  ctx.font = `400 118px ${MJ_HEAD}`;
+  return { lines: mjWrapText(ctx, text, maxW, 2), size: 118 };
+}
+
+// Cartão de UMA conquista (Feed 4:5): o ícone grande num anel na cor da raridade (lendária dourado, épica roxo, rara azul, comum verde), a faixa com o nível,
+// o nome, o que é preciso para ganhar, o destaque quando só 1, 2 ou 3 jogadores da liga têm e quem conquistou. O bloco do meio fica centralizado entre o
+// anel e o nome do jogador.
+function drawMjBadgeCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.legendary, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 410, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo e nome da liga
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+
+  // selo e ícone no anel
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
+  ctx.fillText('CONQUISTA DESBLOQUEADA', cx, 232);
+  const cy = 410, r = 140;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 14, 0, Math.PI * 2); ctx.fillStyle = accent; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = '#161b22'; ctx.fill();
+  ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 160px ${MJ_BODY}`;
+  ctx.fillText(c.emoji, cx, cy + 8);
+
+  // faixa com o nível de raridade, em cima da borda de baixo do anel (com um contorno escuro para separar do anel)
+  ctx.font = `800 28px ${MJ_BODY}`;
+  const pw = Math.round(ctx.measureText(tone.name).width) + 64, py = cy + r + 14;
+  ctx.fillStyle = '#0d1117'; mjRoundRect(ctx, cx - pw / 2 - 6, py - 29, pw + 12, 58, 29); ctx.fill();
+  ctx.fillStyle = accent; mjRoundRect(ctx, cx - pw / 2, py - 23, pw, 46, 23); ctx.fill();
+  ctx.fillStyle = '#0d1117'; ctx.fillText(tone.name, cx, py + 1);
+  ctx.textBaseline = 'alphabetic';
+
+  // nome, regra e raridade
+  const title = mjTitleLines(ctx, c.label.toUpperCase(), 940);
+  ctx.font = `500 42px ${MJ_BODY}`;
+  const desc = c.desc ? mjWrapText(ctx, c.desc, 880, 3) : [];
+  const rarity = c.holders === 1 ? 'Só você tem na liga!' : c.holders === 2 || c.holders === 3 ? `Só ${c.holders} jogadores da liga têm` : '';
+  const capT = Math.round(title.size * 0.72), gap = 30;
+  const titleH = capT + (title.lines.length - 1) * 106;
+  const descH = desc.length ? gap + 30 + (desc.length - 1) * 54 : 0;
+  const rarH = rarity ? gap + 34 : 0;
+  const top0 = cy + r + 14 + 23 + 30, bottom0 = 1050;
+  let y = top0 + Math.max(0, (bottom0 - top0 - (titleH + descH + rarH)) / 2);
+  ctx.fillStyle = '#ffffff';
+  title.lines.forEach((l, i) => ctx.fillText(mjFitText(ctx, l, 940, title.size, 70, MJ_HEAD, 400), cx, y + capT + i * 106));
+  y += titleH;
+  if (desc.length) {
+    ctx.fillStyle = MJ_TEXT;
+    desc.forEach((l, i) => ctx.fillText(mjFitText(ctx, l, 880, 42, 42, MJ_BODY, 500), cx, y + gap + 30 + i * 54));
+    y += descH;
+  }
+  if (rarity) { ctx.fillStyle = accent; ctx.font = `700 34px ${MJ_BODY}`; ctx.fillText(rarity, cx, y + gap + 34); }
+
+  // quem conquistou
+  ctx.fillStyle = MJ_MUTED; ctx.font = `700 24px ${MJ_BODY}`; ctx.fillText('CONQUISTADA POR', cx, 1100);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.name.toUpperCase(), 900, 84, 48, MJ_HEAD, 400), cx, 1180);
+
+  // rodapé: chamada para criar a liga
+  ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+
+// Como as conquistas se distribuem no cartão com várias: poucas = grandes, com o nome embaixo; muitas = só os ícones (o nome ficaria pequeno demais para ler
+// no celular). `rowH` é a altura de cada linha da grade.
+function mjGridLayout(n) {
+  const L = n <= 3 ? { cols: 3, emoji: 110, label: 30 } : n <= 8 ? { cols: 4, emoji: 92, label: 26 } : n <= 12 ? { cols: 4, emoji: 80, label: 24 }
+    : n <= 20 ? { cols: 5, emoji: 60, label: 22 } : { cols: 8, emoji: 62, label: 0 };
+  L.rowH = L.label ? 14 + L.emoji + 8 + L.label + (L.label + 4) + 14 : L.emoji + 32;
+  return L;
+}
+
+// Foto redonda com anel (ou as iniciais, se não tiver foto), em tamanho pequeno: o cabeçalho do cartão com várias conquistas.
+function mjAvatar(ctx, c, photoImg, cx, cy, r, color = MJ_GOLD) {
+  ctx.beginPath(); ctx.arc(cx, cy, r + 10, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+  if (photoImg) {
+    const iw = photoImg.naturalWidth || photoImg.width || 1, ih = photoImg.naturalHeight || photoImg.height || 1;
+    const k = Math.max((r * 2) / iw, (r * 2) / ih);
+    ctx.drawImage(photoImg, cx - (iw * k) / 2, cy - (ih * k) / 2, iw * k, ih * k);
+  } else {
+    ctx.fillStyle = '#161b22'; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+    ctx.font = `400 ${Math.round(r * 1.35)}px ${MJ_HEAD}`; ctx.fillText(c.initials, cx, cy + 4);
+  }
+  ctx.restore();
+}
+
+// Cartão com VÁRIAS conquistas (Feed 4:5): foto, nome, quantas são e a grade, da mais rara para a mais comum. O cartão toma a cor da raridade mais alta que
+// aparece nele, e cada conquista rara, épica ou lendária ganha uma borda na cor do seu nível (a comum fica sem borda), com a legenda das cores embaixo. Até 20
+// aparecem com o nome embaixo; de 21 até 48 só os ícones (com o nome da mais rara na contagem); acima de 48 os últimos viram "+N".
+function drawMjBadgesCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.legendary, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 262, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo e nome da liga
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+
+  // foto, título, nome e a contagem
+  mjAvatar(ctx, c, photoImg, cx, 262, 78, accent);
+  const n = c.items.length, L = mjGridLayout(n);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 30px ${MJ_BODY}`;
+  ctx.fillText(c.mode === 'new' ? 'CONQUISTAS NOVAS' : 'MINHAS CONQUISTAS', cx, 392);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.name.toUpperCase(), 920, 92, 52, MJ_HEAD, 400), cx, 480);
+  const base = c.mode === 'new' ? `${n} ${n === 1 ? 'nova' : 'novas'} · ${c.count} no total`
+    : c.total >= c.count && c.total > 0 ? `${c.count} de ${c.total} conquistas` : `${c.count} conquista${c.count === 1 ? '' : 's'}`;
+  const sub = !L.label && n ? `${base} · mais rara: ${c.items[0].label}` : base; // só ícones: o nome da mais rara vai na contagem
+  ctx.fillStyle = MJ_TEXT; ctx.fillText(mjFitText(ctx, sub, 920, 34, 24, MJ_BODY, 700), cx, 534);
+
+  // a grade: cada linha centralizada, o conjunto centralizado na área entre a contagem e a legenda
+  const MAX = 48;
+  const shown = n > MAX ? c.items.slice(0, MAX - 1) : c.items;
+  const cells = shown.length + (n > MAX ? 1 : 0);
+  const rows = Math.ceil(cells / L.cols), cellW = (W - 112) / L.cols;
+  const areaTop = 575, areaBottom = 1150;
+  const gy = areaTop + Math.max(0, (areaBottom - areaTop - rows * L.rowH) / 2);
+  for (let i = 0; i < cells; i++) {
+    const row = Math.floor(i / L.cols), col = i % L.cols, inRow = Math.min(L.cols, cells - row * L.cols);
+    const px = 56 + (W - 112 - inRow * cellW) / 2 + col * cellW, py = gy + row * L.rowH, mx = px + cellW / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; mjRoundRect(ctx, px + 5, py + 5, cellW - 10, L.rowH - 10, 20); ctx.fill();
+    const edge = i < shown.length && shown[i].tier !== 'common' ? MJ_TIERS[shown[i].tier] : null;
+    if (edge) { ctx.lineWidth = 3; ctx.strokeStyle = edge.color; mjRoundRect(ctx, px + 5, py + 5, cellW - 10, L.rowH - 10, 20); ctx.stroke(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (i >= shown.length) { // o "+N" das que não couberam
+      ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText(`+${n - shown.length}`, mx, py + L.rowH / 2);
+      continue;
+    }
+    const b = shown[i];
+    ctx.fillStyle = MJ_TEXT; ctx.font = `400 ${L.emoji}px ${MJ_BODY}`;
+    if (!L.label) { ctx.fillText(b.emoji, mx, py + L.rowH / 2 + 2); continue; }
+    ctx.fillText(b.emoji, mx, py + 14 + L.emoji / 2);
+    ctx.textBaseline = 'alphabetic'; ctx.font = `600 ${L.label}px ${MJ_BODY}`;
+    mjWrapText(ctx, b.label, cellW - 28, 2).forEach((l, j) => ctx.fillText(mjFitText(ctx, l, cellW - 28, L.label, L.label, MJ_BODY, 600), mx, py + 14 + L.emoji + 8 + L.label + j * (L.label + 4)));
+  }
+  // legenda das cores: só os níveis especiais que aparecem neste cartão
+  const keys = (c.tiers || []).filter(k => k !== 'common' && MJ_TIERS[k]);
+  if (keys.length) {
+    ctx.font = `600 24px ${MJ_BODY}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const head = 'Raridade na liga:', headW = ctx.measureText(head).width, wid = k => 28 + ctx.measureText(MJ_TIERS[k].label).width;
+    let x = cx - (headW + 26 + keys.reduce((s, k) => s + wid(k), 0) + (keys.length - 1) * 30) / 2;
+    ctx.fillStyle = MJ_MUTED; ctx.fillText(head, x, 1180); x += headW + 26;
+    keys.forEach(k => {
+      ctx.beginPath(); ctx.arc(x + 9, 1180, 9, 0, Math.PI * 2); ctx.fillStyle = MJ_TIERS[k].color; ctx.fill();
+      ctx.fillStyle = MJ_MUTED; ctx.fillText(MJ_TIERS[k].label, x + 28, 1180); x += wid(k) + 30;
+    });
+  }
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
 }
 
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
@@ -2233,7 +2560,7 @@ function mjLoadImage(url) {
 const mjCanvasBlob = canvas => new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('sem imagem'))), 'image/png'));
 
 // Monta as duas imagens (feed 4:5 e Story 9:16). Se a foto "contaminar" o canvas (servidor sem CORS), refaz sem a foto: o cartão sai com as iniciais.
-async function renderMjCard(card) {
+async function renderMjCard(card, kind = 'player') {
   try { await Promise.all([document.fonts?.load(`400 40px "Bebas Neue"`), document.fonts?.load(`700 30px Inter`)]); } catch(_) {}
   const [photo, logo] = await Promise.all([mjLoadImage(card.photo), mjLoadImage('/logo.webp')]);
   const paint = (draw, W, H, photoImg) => {
@@ -2243,7 +2570,8 @@ async function renderMjCard(card) {
     return mjCanvasBlob(canvas);
   };
   const make = async photoImg => {
-    const [feed, story] = await Promise.all([paint(drawMjCard, MJ_CARD.W, MJ_CARD.H, photoImg), paint(drawMjStory, MJ_STORY.W, MJ_STORY.H, photoImg)]);
+    const draw = MJ_KINDS[kind].draw;
+    const [feed, story] = await Promise.all([paint(draw.feed, MJ_CARD.W, MJ_CARD.H, photoImg), paint(draw.story, MJ_STORY.W, MJ_STORY.H, photoImg)]);
     return { feed, story };
   };
   try { return await make(photo); } catch(e) { if (!photo) throw e; return make(null); }
@@ -2252,14 +2580,14 @@ async function renderMjCard(card) {
 function closeMjCard() {
   document.getElementById('mj-card')?.remove();
   if (_mjUrls) for (const u of Object.values(_mjUrls)) { try { URL.revokeObjectURL(u); } catch(_) {} }
-  _mjUrls = null; _mjBlobs = null;
+  _mjUrls = null; _mjBlobs = null; _mjKind = 'player'; _mjData = null;
 }
 
 // A janela do cartão: título, o conteúdo (que muda: "Montando…", o cartão pronto ou o erro) e o ×.
 const mjSheet = body => `<div class="sheet" onclick="event.stopPropagation()" style="max-height:92dvh;display:flex;flex-direction:column">
     <div class="sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:17px;font-weight:800">📤 Seu cartão</div>
+      <div style="font-size:17px;font-weight:800">${mjKindNow().title}</div>
       <button onclick="closeMjCard()" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
     </div>
     <div style="overflow-y:auto;flex:1;padding-right:6px">${body}</div></div>`;
@@ -2272,7 +2600,7 @@ function mjReadyBody() {
   };
   return `<div style="display:flex;gap:8px;margin-bottom:6px">${pick('story')}${pick('feed')}</div>
       <div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:12px;line-height:1.5">${_mjFormat === 'story' ? 'Para Stories do Instagram e do Facebook, Reels e o status do WhatsApp.' : 'Para publicações do Instagram e conversas. Se o Instagram mostrar o cartão cortado (ele abre em quadrado), toque no botão de proporção do editor (ícone de cantos) e escolha 4:5.'}</div>
-      <img src="${_mjUrls[_mjFormat]}" alt="Seu cartão no Pelada na Mão, formato ${MJ_FORMATS[_mjFormat].label}" style="display:block;width:auto;max-width:100%;max-height:44dvh;margin:0 auto 14px;border-radius:14px;border:1px solid var(--border)">
+      <img src="${_mjUrls[_mjFormat]}" alt="${mjKindNow().alt}, formato ${MJ_FORMATS[_mjFormat].label}" style="display:block;width:auto;max-width:100%;max-height:44dvh;margin:0 auto 14px;border-radius:14px;border:1px solid var(--border)">
       <button onclick="shareMjCard()" style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Compartilhar</button>
       <button onclick="copyMjCaption()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">📋 Copiar legenda</button>
       <button onclick="downloadMjCard()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Baixar a imagem</button>
@@ -2287,34 +2615,51 @@ function setMjFormat(fmt) {
   root.innerHTML = mjSheet(mjReadyBody());
 }
 
-// Abre a prévia: gera as duas imagens (1ª vez que toca), mostra a escolhida, e deixa Compartilhar/Baixar prontos para o 2º toque.
-async function openMjCard() {
-  const card = st._mjCard;
-  if (!card) return;
+// Abre a prévia de um cartão (do jogador, de uma conquista ou de várias): gera as duas imagens (1ª vez que toca), mostra a escolhida, e deixa
+// Compartilhar/Baixar prontos para o 2º toque. `kind` é uma chave de MJ_KINDS e `data` o que o desenho daquele tipo precisa.
+async function openMjShare(kind, data) {
+  if (!Object.prototype.hasOwnProperty.call(MJ_KINDS, kind) || !data) return;
   trackEvent('cardOpen');
   closeMjCard();
+  _mjKind = kind; _mjData = data;
   const root = document.createElement('div');
   root.id = 'mj-card';
   root.className = 'overlay';
   root.onclick = closeMjCard;
-  root.innerHTML = mjSheet('<div style="padding:40px 0;text-align:center;color:var(--text3);font-size:13px">Montando seu cartão…</div>');
+  root.innerHTML = mjSheet(`<div style="padding:40px 0;text-align:center;color:var(--text3);font-size:13px">${MJ_KINDS[kind].busy}</div>`);
   document.body.appendChild(root);
   try {
-    const blobs = await renderMjCard(card);
+    const blobs = await renderMjCard(data, kind);
     if (document.getElementById('mj-card') !== root) return; // fechou antes de ficar pronto
     _mjBlobs = blobs;
     _mjUrls = { story: URL.createObjectURL(blobs.story), feed: URL.createObjectURL(blobs.feed) };
     root.innerHTML = mjSheet(mjReadyBody());
   } catch(e) {
-    if (document.getElementById('mj-card') === root) root.innerHTML = mjSheet('<div style="padding:30px 4px;color:var(--danger);font-size:13px;text-align:center">Não foi possível montar o cartão agora. Tente de novo.</div>');
+    if (document.getElementById('mj-card') === root) root.innerHTML = mjSheet(`<div style="padding:30px 4px;color:var(--danger);font-size:13px;text-align:center">${MJ_KINDS[kind].fail}</div>`);
   }
+}
+function openMjCard() { return openMjShare('player', st._mjCard); }
+
+// Conquistas do PRÓPRIO perfil: a lista vem de st._mjShare, que a aba Meu Craque monta só fora da simulação do admin e só quando já há conquista.
+function openMjBadge(id) {
+  const s = st._mjShare, b = s?.earned?.find(x => x.id === id);
+  if (!b) return;
+  return openMjShare('badge', mjBadgeData({ name: s.name, league: s.league, emoji: b.emoji, label: b.label, desc: b.desc, holders: b.holders, eligible: b.eligible }));
+}
+function openMjBadges(mode, ids) {
+  const s = st._mjShare;
+  if (!s?.earned?.length) return;
+  const isNew = mode === 'new';
+  const items = isNew ? s.earned.filter(x => Array.isArray(ids) && ids.includes(x.id)) : s.earned;
+  if (!items.length) return;
+  return openMjShare('badges', mjBadgesData({ name: s.name, league: s.league, photo: s.photo, mode: isNew ? 'new' : 'all', items, count: s.earned.length, total: s.total }));
 }
 
 function downloadMjCard() {
   const url = _mjUrls?.[_mjFormat];
   if (!url) return;
   const a = document.createElement('a');
-  a.href = url; a.download = MJ_FORMATS[_mjFormat].file;
+  a.href = url; a.download = mjKindNow().file[_mjFormat];
   document.body.appendChild(a); a.click(); a.remove();
   toast('Imagem salva. É só enviar onde quiser! 📲', 'ok');
 }
@@ -2325,8 +2670,9 @@ async function shareMjCard() {
   const blob = _mjBlobs?.[_mjFormat];
   if (!blob) return;
   trackEvent('cardShare', false);
-  const file = new File([blob], MJ_FORMATS[_mjFormat].file, { type: 'image/png' });
-  const data = { files: [file], title: 'Meu cartão no Pelada na Mão', text: `Meu cartão no Pelada na Mão ⚽🏆 Faça o da sua pelada: ${MJ_CARD.LINK}` };
+  const kind = mjKindNow();
+  const file = new File([blob], kind.file[_mjFormat], { type: 'image/png' });
+  const data = { files: [file], title: kind.shareTitle, text: kind.text(_mjData) };
   try {
     if (navigator.share && navigator.canShare && navigator.canShare(data)) { await navigator.share(data); return; }
   } catch(e) { if (e && e.name === 'AbortError') return; }
@@ -2337,8 +2683,18 @@ async function shareMjCard() {
 function mjCaption() {
   return `Meu cartão no Pelada na Mão ⚽🏆\nTítulos, gols e conquistas da minha pelada numa imagem só.\nFaça o da sua: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
+function mjBadgeCaption(d) {
+  const rar = MJ_TIERS[d.tier] ? `\nRaridade na liga: ${MJ_TIERS[d.tier].label}` : '';
+  return `Conquista desbloqueada no Pelada na Mão 🏅\n${d.emoji} ${d.label}${d.desc ? ': ' + d.desc : ''}${rar}\nQual é a sua? Crie a liga da sua pelada: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjBadgesCaption(d) {
+  const isNew = d.mode === 'new', n = isNew ? d.items.length : d.count;
+  const line = isNew ? `${n} ${n === 1 ? 'conquista nova' : 'conquistas novas'} na minha pelada: ${d.items.slice(0, 6).map(b => b.emoji).join(' ')}`
+    : `${n} ${n === 1 ? 'conquista desbloqueada' : 'conquistas desbloqueadas'} na minha pelada.`;
+  return `${isNew ? 'Conquistas novas' : 'Minhas conquistas'} no Pelada na Mão 🏅\n${line}\nCrie a liga da sua: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
 async function copyMjCaption() {
-  if (await pixCopyText(mjCaption())) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
+  if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
   else toast('Não consegui copiar a legenda.', 'err');
 }
 
@@ -2608,7 +2964,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Jogador</strong> (quando sua conta está vinculada a um): nome no elenco, estrelas, gols, times, títulos e votos recebidos.')}
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
-        ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto e estatísticas), e só sai dele se você tocar em Compartilhar. Nunca leva e-mail nem WhatsApp.')}
+        ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -6877,7 +7233,7 @@ function vMeuJogador() {
       const storedIds = st.userDoc?.leagues?.[st.leagueId]?.earnedBadges;
       if (Array.isArray(storedIds)) {
         const newBadges = earnedBadges.filter(b => !storedIds.includes(b.id));
-        if (newBadges.length) notifyNewBadges(newBadges, allIds);
+        if (newBadges.length) { newBadgesAdd(newBadges.map(b => b.id)); notifyNewBadges(newBadges, allIds); }
       } else if (allIds.length && DB) {
         callFn('saveEarnedBadges', { liga: st.leagueId, ids: allIds }).catch(() => {});
       }
@@ -6885,6 +7241,7 @@ function vMeuJogador() {
       const newBadges = earnedBadges.filter(b => !st._knownBadges?.includes(b.id));
       if (newBadges.length) {
         st._knownBadges = allIds;
+        newBadgesAdd(newBadges.map(b => b.id));
         notifyNewBadges(newBadges, allIds);
       }
     }
@@ -6974,6 +7331,12 @@ function vMeuJogador() {
     goals: totalGoals, goalsNote: 'desde 08/09/2026', art: myArt, w: myW, d: myD, l: myL, matches: myMatchesPlayed,
     badges: earnedBadges.slice().sort((a, b) => getBadgeHolders(a.id).length - getBadgeHolders(b.id).length),
   }) : null;
+  // Para compartilhar as conquistas como imagem: só no próprio perfil (nunca na simulação do admin) e quando já há alguma conquista. Guarda só texto e números;
+  // a lista vai da mais rara (nível de raridade e, dentro dele, menos jogadores da liga com ela) para a mais comum.
+  st._mjShare = (!isSimulating && earnedBadges.length) ? {
+    name: myName, league: st.availableLeagues.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], total: earnedBadges.length + lockedBadges.length,
+    earned: mjByRarity(earnedBadges.map(b => ({ id: b.id, emoji: b.emoji, label: b.label, desc: b.desc, holders: getBadgeHolders(b.id).length, eligible: badgeEligibleCount(b) }))),
+  } : null;
 
   return `<div style="padding:14px">
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
@@ -7052,6 +7415,7 @@ function vMeuJogador() {
         ${!isSimulating && st.photos?.[myKey] ? `<button onclick="removePlayerPhoto('${myKey}')" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:0;margin-top:2px;text-decoration:underline;font-family:inherit">remover foto</button>` : ''}
       </div>
     </div>
+    ${newBadgesBanner()}
     <div style="margin-bottom:16px">${banner}</div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
       ${titlesCard}
@@ -7122,6 +7486,7 @@ function vMeuJogador() {
         <div class="card-hdr"><span class="card-lbl">Conquistas</span>
           <span style="display:flex;align-items:center;gap:8px">
             ${isAdmin()?`<button onclick="st.badgeShowAll=!st.badgeShowAll;render()" style="font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid ${st.badgeShowAll?'var(--accent)':'var(--border)'};background:${st.badgeShowAll?'var(--accent)18':'none'};color:${st.badgeShowAll?'var(--accent)':'var(--text3)'};cursor:pointer;font-family:inherit;font-weight:700">${st.badgeShowAll?'🔓 ver real':'🧪 ver todas'}</button>`:''}
+            ${st._mjShare ? `<button onclick="openMjBadges('all')" style="font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-family:inherit;font-weight:700">📤 Compartilhar</button>` : ''}
             <span style="font-size:12px;font-weight:700;color:var(--gold)">${earnedBadges.length}/${total}</span>
           </span>
         </div>
@@ -8400,6 +8765,11 @@ function getBadgeCache() {
 }
 
 function getBadgeHolders(badgeId) { return getBadgeCache().badgeHolders[badgeId]||[]; }
+// Quantos jogadores da liga PODEM ter a conquista (a base do "% dos elegíveis" da janela da conquista e da raridade nos cartões): as exclusivas de uma pessoa
+// só contam essa; as de linha não contam goleiros; as de goleiro só contam goleiros.
+function badgeEligibleCount(b) {
+  return (st.players || []).filter(p => b.specialFor ? b.specialFor.includes(p.name) : !(b.fieldOnly && p.goleiro) && !(b.gkOnly && !p.goleiro)).length;
+}
 
 function getPlayerRarestBadge(name) {
   const cache=getBadgeCache();
@@ -11038,14 +11408,9 @@ function mBadgeInfo() {
   const b = BADGE_CATALOG.find(x => x.id === m.id); if (!b) return '';
   const cache = getBadgeCache();
   const holders = cache.badgeHolders[b.id] || [];
-  const allP = (st.players||[]);
-  const eligible = allP.filter(p => {
-    if (b.specialFor) return b.specialFor.includes(p.name);
-    if (b.fieldOnly && p.goleiro) return false;
-    if (b.gkOnly && !p.goleiro) return false;
-    return true;
-  });
-  const pct = eligible.length > 0 ? Math.round(holders.length / eligible.length * 100) : 0;
+  const nEligible = badgeEligibleCount(b);
+  const pct = nEligible > 0 ? Math.round(holders.length / nEligible * 100) : 0;
+  const canShare = !!(m.earned && st._mjShare?.earned?.some(x => x.id === b.id)); // só no próprio perfil e para conquista que a pessoa já tem
   return `<div class="overlay" onclick="closeModal()">
     <div class="sheet" onclick="event.stopPropagation()" style="padding-bottom:24px">
       <div class="sheet-handle"></div>
@@ -11068,7 +11433,7 @@ function mBadgeInfo() {
           </div>`).join('')}
         </div>` : `<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px">Nenhum jogador conquistou ainda</div>`}
       </div>
-      <div style="text-align:center"><button class="btn btn-ghost" style="margin-top:6px" onclick="closeModal()">Fechar</button></div>
+      <div style="text-align:center">${canShare ? `<button class="btn btn-primary" style="margin-top:6px;margin-right:6px" onclick="closeModal();openMjBadge('${b.id}')">📤 Compartilhar conquista</button>` : ''}<button class="btn btn-ghost" style="margin-top:6px" onclick="closeModal()">Fechar</button></div>
     </div>
   </div>`;
 }
