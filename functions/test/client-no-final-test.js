@@ -583,6 +583,64 @@ const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s
     check('resumo para o grupo, liga sem final, só conquista da final: o bloco de conquistas some por inteiro', !/Badges conquistadas/.test(so) && !/Baggio/.test(so), so);
   }
 
+  // ══ 11b. CARDS E GRÁFICOS DA FINAL (Ranking, Stats e aba EU) ════════════════════════════════════
+  // Trechos REAIS das três telas, executados com dados de mentira: na liga sem final somem os cards, as linhas e os gráficos que só fazem sentido com final.
+  {
+    const iifeAround = anchor => {
+      const k = html.indexOf(anchor);
+      if (k < 0) throw new Error('âncora não encontrada: ' + anchor);
+      const a = html.lastIndexOf('(()=>{', k), end = '\n  })()';
+      return html.slice(a, html.indexOf(end, k) + end.length);
+    };
+    const ev = (expr, env) => new Function(...Object.keys(env), 'return (' + expr + ');')(...Object.values(env));
+    const escS = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const posC = ['#F0A500', '#C0C0C0', '#CD7F32'];
+    const fin = hasFinais => makeEnv({ hasFinais }).api.finalsEnabled;
+    const balanced = h => count(h, /<div[\s>]/g) === count(h, /<\/div>/g);
+
+    // Ranking: vices
+    const vicesCode = iifeAround('computeVices(_rankActiveSet)');
+    const vices = (hasFinais, list) => ev(vicesCode, { finalsEnabled: fin(hasFinais), computeVices: () => list, _rankActiveSet: null, posC, playerAvatar: () => '', esc: escS });
+    const vCom = vices(true, [['Ana', 3], ['Bia', 1]]);
+    check('Ranking, liga com final (como sempre): o card "🥈 Ranking de Vices" lista os vice-campeões', /🥈 Ranking de Vices/.test(vCom) && /Ana/.test(vCom) && /Bia/.test(vCom) && balanced(vCom), vCom.slice(0, 200));
+    check('Ranking, liga sem final: o card "Ranking de Vices" não aparece (não existe vice-campeão)', vices(false, [['Ana', 3]]) === '');
+    check('Ranking, liga com final e ninguém foi vice: nada aparece (como sempre)', vices(true, []) === '');
+
+    // Ranking: artilheiros e gols
+    const goalsCode = iifeAround('computeFinalsGoalTally(fd)');
+    const goals = hasFinais => ev(goalsCode, { finalsEnabled: fin(hasFinais), filteredDoneChamps: () => [{}], computeGoalsRanking: () => ({ tally: { Ana: 5, Bia: 3 }, artTitles: { Ana: 2 } }), computeFinalsGoalTally: () => ({ tally: { Ana: 2 }, finalsScored: { Ana: 1 } }), computeFinalsArtilheiroRanking: () => ({ Ana: 1 }), posC, playerAvatar: () => '', esc: escS });
+    const gCom = goals(true), gSem = goals(false);
+    check('Ranking, liga com final (como sempre): quatro cards (Artilheiro, Artilheiro da Final, Gols (total), Gols Finais), duas fileiras de 2 colunas',
+      ['🥇 Artilheiro<', '🏆 Artilheiro da Final', '⚽ Gols (total)', '⚽ Gols Finais'].every(t => gCom.includes(t)) && count(gCom, /grid-template-columns:1fr 1fr;/g) === 2 && count(gCom, /class="card"/g) === 4 && balanced(gCom), gCom.slice(0, 300));
+    check('Ranking, liga sem final: só Artilheiro e Gols (total), cada um ocupando a fileira inteira (1 coluna), sem nenhum card de final e com as tags fechadas',
+      gSem.includes('🥇 Artilheiro<') && gSem.includes('⚽ Gols (total)') && !/Final|Finais/.test(gSem) && count(gSem, /grid-template-columns:1fr;/g) === 2 && count(gSem, /grid-template-columns:1fr 1fr;/g) === 0 && count(gSem, /class="card"/g) === 2 && balanced(gSem), gSem.slice(0, 300));
+    check('Ranking, liga sem final: os dados dos cards que ficam continuam lá (Ana 5 gols e 2 artilharias, Bia 3 gols)', /Ana/.test(gSem) && />5</.test(gSem) && />2</.test(gSem) && /Bia/.test(gSem) && />3</.test(gSem));
+
+    // Stats: pênaltis perdidos em final e gráficos
+    const penCode = iifeAround('const pm=computePenaltyMisses();');
+    const pen = hasFinais => ev(penCode, { finalsEnabled: fin(hasFinais), computePenaltyMisses: () => [{ name: 'Ana', total: 2, lost: 1, won: 1 }], posC, esc: escS });
+    check('Stats, liga com final (como sempre): o card "😬 Pênaltis Perdidos em Final" lista quem errou', /😬 Pênaltis Perdidos em Final/.test(pen(true)) && /Ana/.test(pen(true)) && balanced(pen(true)));
+    check('Stats, liga sem final: o card de pênaltis perdidos em final não aparece', pen(false) === '');
+    const chartsStart = html.indexOf("[\n    {id:'art-chart'");
+    const chartsCode = html.slice(chartsStart, html.indexOf(".join('')", chartsStart) + ".join('')".length);
+    const charts = hasFinais => ev(chartsCode, { finalsEnabled: fin(hasFinais) });
+    const ids = h => (h.match(/<canvas id="([^"]+)"/g) || []).map(x => x.slice(12, -1));
+    check('Stats, liga com final (como sempre): os 4 gráficos, na ordem (Artilharia, Artilharia Final, Gols, Gols Finais)', ids(charts(true)).join() === 'art-chart,art-final-chart,goals-chart,goals-final-chart' && /Evolução Artilharia Final/.test(charts(true)) && /Evolução Gols Finais/.test(charts(true)), ids(charts(true)));
+    check('Stats, liga sem final: só os gráficos de Artilharia e de Gols (os dois da final somem, com tudo: cartão, legenda e balão)', ids(charts(false)).join() === 'art-chart,goals-chart' && !/Final|Finais|final/.test(charts(false)) && count(charts(false), /class="card"/g) === 2 && balanced(charts(false)), charts(false).slice(0, 200));
+
+    // aba EU: cards e recordes
+    const gridStart = html.indexOf('<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">\n      ${titlesCard}');
+    const gridCode = html.slice(gridStart, html.indexOf('\n    </div>', gridStart) + '\n    </div>'.length);
+    const grid = hasFinais => new Function('finalsEnabled', 'titlesCard', 'goalsCard', 'fGoalsCard', 'artCard', 'artFinCard', 'stat', 'champsPlayed', 'champsTotalCount', 'winRate', 'return `' + gridCode + '`;')(fin(hasFinais), '[Títulos]', '[Gols]', '[Gols em Finais]', '[Artilharia]', '[Art. de Finais]', (v, l) => '[' + l + ']', 4, 9, 0);
+    const compact = h => h.replace(/\s+/g, ' ').trim();
+    check('aba EU, liga com final (como sempre): 6 cards (Títulos, Gols, Gols em Finais, Artilharia, Art. de Finais, Campeonatos)', /\[Títulos\] \[Gols\] \[Gols em Finais\] \[Artilharia\] \[Art\. de Finais\] \[Campeonatos\]/.test(compact(grid(true))), compact(grid(true)));
+    check('aba EU, liga sem final: 4 cards (Títulos, Gols, Artilharia, Campeonatos), sem os dois da final: o grid fica 2x2', /\[Títulos\] \[Gols\] \[Artilharia\] \[Campeonatos\]/.test(compact(grid(false))) && !/Finais/.test(grid(false)), compact(grid(false)));
+    const rowLine = html.split('\n').find(l => /^\s*\(hasBaggio\+hasSalvoCompanheiros\)>0.*rowS\('Pênaltis perdidos em final'/.test(l));
+    const rec = (hasFinais, b, s) => ev(rowLine.trim().replace(/,$/, ''), { finalsEnabled: fin(hasFinais), hasBaggio: b, hasSalvoCompanheiros: s, rowS: (lbl, val, sub, color) => `[${lbl}|${val}|${sub}|${color}]` });
+    check('aba EU, liga com final (como sempre): a linha "Pênaltis perdidos em final" mostra o total e os detalhes quando há registro', rec(true, 1, 1) === '[Pênaltis perdidos em final|2|1× perdeu o título · 1× salvo pelos companheiros|#FF5C5C]' && rec(true, 2, 0) === '[Pênaltis perdidos em final|2|2× o título foi embora junto|#FF5C5C]' && rec(true, 0, 3) === '[Pênaltis perdidos em final|3|3× salvo pelos companheiros|#FF5C5C]', [rec(true, 1, 1), rec(true, 2, 0), rec(true, 0, 3)]);
+    check('aba EU: sem registro de pênalti perdido a linha não aparece (com ou sem final) e na liga sem final ela some mesmo com registro', rec(true, 0, 0) === '' && rec(false, 0, 0) === '' && rec(false, 1, 1) === '' && rec(false, 0, 3) === '');
+  }
+
   // ══ 12. TEXTOS E LIGAÇÕES NO APLICATIVO ═════════════════════════════════════════════════════════
   check('createChampionship grava noFinal só quando a liga não tem final', /\.\.\.\(finalsEnabled\(\) \? \{\} : \{ noFinal: true \}\)/.test(html));
   check('submitScore: as finais e semifinais automáticas só valem para campeonato COM final (2 guardas)', /if \(fmt===4 && !champ\.noFinal\) \{/.test(html) && /if \(fmt===5 && !champ\.noFinal\) \{/.test(html));
@@ -610,6 +668,13 @@ const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s
     check('manual, seção 11: avisa que na liga sem final não existe disputa de 3º lugar; seção 13: aviso das conquistas da final e a etiqueta "Só em liga com final" nos 3 grupos (Vice-Campeão, Artilharia de final, Pênaltis na final)',
       /Na liga <strong>sem final<\/strong> \(pontos corridos, ver a seção 03\) não existe disputa de 3º lugar/.test(manual) && /<div class="callout-label">Liga sem final<\/div>/.test(manual)
       && /<h3>Vice-Campeão <span class="tag">Só em liga com final<\/span><\/h3>/.test(manual) && /<h3>Artilharia de final <span class="tag">Linha de campo<\/span> <span class="tag">Só em liga com final<\/span><\/h3>/.test(manual) && /<h3>Pênaltis na final <span class="tag">Todos os jogadores<\/span> <span class="tag">Só em liga com final<\/span><\/h3>/.test(manual));
+    const escondidos = ['Gols em Finais', 'Art. de Finais', 'Pênaltis perdidos em final', '🥈 Ranking de Vices', '🏆 Artilheiro da Final', '⚽ Gols Finais', '😬 Pênaltis Perdidos em Final', 'Evolução Artilharia Final', 'Evolução Gols Finais'];
+    check('manual, seção 03: lista os cards e gráficos da final que ficam ocultos (aba EU, Ranking e Stats) e que voltam se a liga voltar a ter final', /Cards e gráficos da final também ficam ocultos\. Na aba EU ?:/.test(sec) && escondidos.every(n => sec.includes(n)) && /grid fica 2×2/.test(sec) && /passam a ocupar a linha inteira/.test(sec) && /Se a liga voltar a ter final, tudo reaparece/.test(sec), escondidos.filter(n => !sec.includes(n)));
+    check('manual: cada card, linha e gráfico citado como oculto existe mesmo no aplicativo (com esse nome)', escondidos.every(n => html.includes(n)), escondidos.filter(n => !html.includes(n)));
+    check('manual, seções 06, 09 e 13: avisam que na liga sem final os indicadores, os cards e as linhas da final não aparecem',
+      /Em liga <strong>sem final<\/strong> \(ver a seção 03\) os indicadores <strong>Gols em Finais<\/strong> e <strong>Artilharia de Finais<\/strong> não aparecem\./.test(manual)
+      && /Em liga <strong>sem final<\/strong> \(ver a seção 03\) os cards <strong>Gols em Finais<\/strong> e <strong>Art\. de Finais<\/strong> não aparecem e o grid fica 2×2\./.test(manual)
+      && /aparece quando o valor é maior que zero \(e a liga tem final\)\./.test(manual) && /Só aparece quando há pelo menos um registro e a liga tem final\./.test(manual));
   }
 
   console.log(fails ? `\n${fails} verificação(ões) FALHARAM` : '\nTodas as verificações passaram');

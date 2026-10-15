@@ -6052,6 +6052,7 @@ function vRanking() {
   </div>
 
   ${(()=>{
+    if(!finalsEnabled()) return ''; // liga sem final: não existe vice-campeão
     const vices=computeVices(_rankActiveSet);
     if(!vices.length) return '';
     return `<div class="card">
@@ -6086,24 +6087,24 @@ function vRanking() {
         <span style="font-weight:800;color:${color};font-size:15px">${val}</span>
       </div>`;
     return `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:${finalsEnabled()?'1fr 1fr':'1fr'};gap:10px;margin-bottom:10px">
       <div class="card">
         <div class="card-hdr"><span class="card-lbl">🥇 Artilheiro</span></div>
         ${byArt.length?byArt.map(([name,n],i)=>rowFmt(name,n,i,'var(--gold)')).join('')
         :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
       </div>
-      <div class="card">
+      ${finalsEnabled()?`<div class="card">
         <div class="card-hdr"><span class="card-lbl">🏆 Artilheiro da Final</span></div>
         ${byFinalsArt.length?byFinalsArt.map(([name,n],i)=>rowFmt(name,n,i,'var(--gold)')).join('')
         :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
-      </div>
+      </div>`:''}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="display:grid;grid-template-columns:${finalsEnabled()?'1fr 1fr':'1fr'};gap:10px">
       <div class="card">
         <div class="card-hdr"><span class="card-lbl">⚽ Gols (total)</span></div>
         ${byGoals.map(([name,g],i)=>rowFmt(name,g,i,'#4DB8FF')).join('')}
       </div>
-      <div class="card">
+      ${finalsEnabled()?`<div class="card">
         <div class="card-hdr"><span class="card-lbl">⚽ Gols Finais</span></div>
         ${byFinalGoals.length?byFinalGoals.map(([name,g],i)=>`
           <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--border2)">
@@ -6116,7 +6117,7 @@ function vRanking() {
             <span style="font-weight:800;color:#4DB8FF;font-size:15px">${g}</span>
           </div>`).join('')
         :`<p style="padding:12px;font-size:13px;color:var(--text3)">Nenhum</p>`}
-      </div>
+      </div>`:''}
     </div>`;
   })()}
 
@@ -7475,9 +7476,9 @@ function vMeuJogador() {
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
       ${titlesCard}
       ${goalsCard}
-      ${fGoalsCard}
+      ${finalsEnabled()?fGoalsCard:''}
       ${artCard}
-      ${artFinCard}
+      ${finalsEnabled()?artFinCard:''}
       ${stat(champsPlayed, 'Campeonatos', `de ${champsTotalCount} realizados${winRate > 0 ? ` · ${winRate}% títulos` : ''}`, '')}
     </div>
     ${myMatchesPlayed>0?`<div class="card" style="margin-top:0">
@@ -7518,7 +7519,7 @@ function vMeuJogador() {
         myGoalsPerChamp!==null?rowS('Média Gols/Campeonato',myGoalsPerChamp,`${totalGoals} gols em ${champsPlayedCutoff} camp.`,'#4DB8FF'):'',
         myGoalsPerGame!==null?rowS('Média Gols/Jogo',myGoalsPerGame,`${totalGoals} gols em ${myTeamGamesPlayed} jogo${myTeamGamesPlayed>1?'s':''}`,'#4DB8FF'):'',
         myGoalDrought>0?rowS('Jejum de Gols',String(myGoalDrought),myGoalDroughtStart?`desde ${fmtD(myGoalDroughtStart)}`:`${myGoalDrought} camp. sem marcar`,'#9EA7B3'):'',
-        (hasBaggio+hasSalvoCompanheiros)>0?rowS('Pênaltis perdidos em final',String(hasBaggio+hasSalvoCompanheiros),(hasBaggio>0&&hasSalvoCompanheiros>0)?`${hasBaggio}× perdeu o título · ${hasSalvoCompanheiros}× salvo pelos companheiros`:hasBaggio>0?`${hasBaggio}× o título foi embora junto`:`${hasSalvoCompanheiros}× salvo pelos companheiros`,'#FF5C5C'):'',
+        (hasBaggio+hasSalvoCompanheiros)>0&&finalsEnabled()?rowS('Pênaltis perdidos em final',String(hasBaggio+hasSalvoCompanheiros),(hasBaggio>0&&hasSalvoCompanheiros>0)?`${hasBaggio}× perdeu o título · ${hasSalvoCompanheiros}× salvo pelos companheiros`:hasBaggio>0?`${hasBaggio}× o título foi embora junto`:`${hasSalvoCompanheiros}× salvo pelos companheiros`,'#FF5C5C'):'',
       ].filter(Boolean);
       return rows.length?`<div class="card" style="margin-top:0"><div class="card-hdr"><span class="card-lbl">Recordes Pessoais</span></div>${rows.join('')}</div>`:'';
     })()}
@@ -9742,6 +9743,7 @@ function vStats() {
   })()}
 
   ${(()=>{
+    if(!finalsEnabled()) return '';
     const pm=computePenaltyMisses();
     if(!pm.length) return '';
     return `<div class="card">
@@ -9873,10 +9875,10 @@ function vStats() {
 
   ${[
     {id:'art-chart',    tip:'art-tooltip',    leg:'art-legend',    label:'🥇 Evolução Artilharia'},
-    {id:'art-final-chart', tip:'art-final-tooltip', leg:'art-final-legend', label:'🏆 Evolução Artilharia Final'},
+    {id:'art-final-chart', tip:'art-final-tooltip', leg:'art-final-legend', label:'🏆 Evolução Artilharia Final', final:true},
     {id:'goals-chart',  tip:'goals-tooltip',  leg:'goals-legend',  label:'⚽ Evolução Gols'},
-    {id:'goals-final-chart',tip:'goals-final-tooltip',leg:'goals-final-legend',label:'⚽ Evolução Gols Finais'},
-  ].map(({id,tip,leg,label})=>`<div class="card" style="margin-top:10px">
+    {id:'goals-final-chart',tip:'goals-final-tooltip',leg:'goals-final-legend',label:'⚽ Evolução Gols Finais', final:true},
+  ].filter(c=>!c.final||finalsEnabled()).map(({id,tip,leg,label})=>`<div class="card" style="margin-top:10px">
     <div class="card-hdr"><span class="card-lbl">${label}</span></div>
     <div style="padding:12px 14px 4px;overflow-x:auto;position:relative">
       <canvas id="${id}" height="180" style="display:block;width:100%;cursor:crosshair"></canvas>
