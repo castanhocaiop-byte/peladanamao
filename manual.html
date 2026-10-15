@@ -635,6 +635,50 @@ p strong {
 
       <h3>Ranking geral</h3>
       <p>O ranking de títulos usa o total acumulado (somando os pesos) de todos os campeonatos, sem restrição de data.</p>
+
+      <h3 id="liga-sem-final">Liga sem final (pontos corridos)</h3>
+      <p>A liga escolhe se os campeonatos têm final: na pergunta <strong>"Seus campeonatos têm final?"</strong> ao criar a liga, ou depois em <strong>Painel Admin → Formato dos campeonatos</strong> (<strong>🏆 Com final</strong> ou <strong>⚽ Sem final</strong>). Na liga <strong>sem final</strong> o campeonato vira <strong>pontos corridos</strong>: não existe final, semifinal nem disputa de 3º lugar, e o <strong>campeão é o time que somou mais pontos durante todo o campeonato</strong> (vitória vale 3 pontos, empate 1).</p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Times</th>
+            <th>Como é jogado</th>
+            <th>Quando surge o campeão</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>3 (vira)</td>
+            <td>Igual ao vira de sempre: quem ganha fica e a partida seguinte é criada sozinha.</td>
+            <td>Quando o admin toca em <strong>⏹ Encerrar Campeonato</strong> (o botão aparece depois de 3 jogos disputados e o app pergunta se tem certeza). O campeão é o líder da tabela naquele momento.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Todos contra todos em 2 turnos (12 jogos), sem final.</td>
+            <td>Ao registrar o <strong>último jogo</strong>, o app já abre a janela do time campeão: o líder da tabela.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Todos contra todos em 1 turno (10 jogos), sem semifinais e sem final.</td>
+            <td>Ao registrar o <strong>último jogo</strong>, igual aos 4 times.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p><strong>Encerrar antes da hora.</strong> Com 4 ou 5 times, depois de ao menos 2 jogos disputados e com jogos ainda por fazer, aparece o botão <strong>⏹ Encerrar Campeonato</strong>: os jogos que faltavam saem da lista e o líder da tabela naquele momento é o campeão.</p>
+      <p><strong>Desempate.</strong> Pontos, depois saldo de gols, depois gols marcados. Se dois ou mais times continuarem empatados em tudo no topo, o app abre a janela <strong>🤝 Empate no topo da tabela</strong> e o admin escolhe o campeão entre os times empatados. Se tocar em <em>Decidir depois</em>, o botão <strong>🏆 Registrar Jogadores Campeões</strong> (abaixo da tabela) abre a janela de novo.</p>
+      <p><strong>Registrar os campeões.</strong> Com o time definido, tudo segue como sempre: o admin registra os jogadores campeões (com o peso de cada um) e salva.</p>
+      <p><strong>Cenários.</strong> Nas duas últimas rodadas (4 e 5 times) o card <strong>🔍 Cenários — Título</strong> mostra quem já é campeão garantido, quem depende de resultados e quem não tem mais chance. Empate em pontos no topo não conta como título garantido, porque o saldo de gols ainda vai decidir.</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Conquistas da final ficam ocultas</div>
+        Na liga sem final, as conquistas que dependem da final deixam de aparecer: <strong>Pipoca</strong>, <strong>Artilheiro da Final</strong>, <strong>Decisivo</strong>, <strong>Sempre Decisivo</strong>, <strong>Decide Todas</strong>, <strong>Dia/Tarde/Noite Mágica</strong>, <strong>Gols, Glória e... Derrota!</strong>, <strong>Melhor que o Mbappé</strong>, <strong>Tafarel</strong>, <strong>Baggio</strong> e <strong>Salvo pelos companheiros</strong> (e as de ½ título). Elas saem da aba EU, do total de conquistas, da badge mais rara do elenco e do resumo para o grupo. Se a liga voltar a ter final, elas voltam, com tudo o que já estava registrado.
+      </div>
+      <div class="callout warn">
+        <div class="callout-label warn">Vale para os campeonatos novos</div>
+        A regra do campeonato é a do dia em que ele foi <strong>criado</strong>: o campeonato que já estava em andamento termina do jeito que começou, e os campeonatos antigos continuam no histórico como foram jogados. Já as conquistas ocultas seguem a configuração atual da liga.
+      </div>
     </section>
 
     <!-- 4. Sequências -->
@@ -1196,7 +1240,7 @@ p strong {
 
       <div class="callout">
         <div class="callout-label">Nota</div>
-        A disputa de 3º lugar não interfere no campeão nem nas estatísticas de título — serve apenas para registro histórico do resultado entre o 3º e 4º colocados.
+        A disputa de 3º lugar não interfere no campeão nem nas estatísticas de título — serve apenas para registro histórico do resultado entre o 3º e 4º colocados. Na liga <strong>sem final</strong> (pontos corridos, ver a seção 03) não existe disputa de 3º lugar: esses botões não aparecem.
       </div>
     </section>
 
@@ -1334,6 +1378,10 @@ p strong {
         <div class="callout-label">Visibilidade</div>
         Badges não conquistadas ficam visíveis (<strong>bloqueadas</strong>) apenas no próprio perfil do jogador. Ao visitar o perfil de outro jogador, todas as badges dele são visíveis — conquistadas e pendentes.
       </div>
+      <div class="callout">
+        <div class="callout-label">Liga sem final</div>
+        Em liga <strong>sem final</strong> (pontos corridos, ver a seção 03) as conquistas ligadas à final ficam <strong>ocultas</strong>: Vice-Campeão (Pipoca), Artilharia de final, Tafarel, Pênaltis na final (Baggio e Salvo pelos companheiros), Gols, Glória e... Derrota!, Melhor que o Mbappé e Dia/Tarde/Noite Mágica, além das de ½ título. Elas não entram no total de conquistas nem aparecem no elenco ou no resumo para o grupo.
+      </div>
       <h3>Presença</h3>
       <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
         <tr><td>⭐ Estreante</td><td>Participou do 1º campeonato</td></tr>
@@ -1366,7 +1414,7 @@ p strong {
         <tr><td>🃏 Coringa</td><td>5 meios títulos</td></tr>
         <tr><td>🤌 Só Meiotando</td><td>Tem mais meios títulos do que títulos inteiros</td></tr>
       </tbody></table>
-      <h3>Vice-Campeão</h3>
+      <h3>Vice-Campeão <span class="tag">Só em liga com final</span></h3>
       <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
         <tr><td>🍿 Pipoca</td><td>Vice-campeão em 3 campeonatos consecutivos — o time chegou à final mas perdeu 3 vezes seguidas</td></tr>
       </tbody></table>
@@ -1383,7 +1431,7 @@ p strong {
         <tr><td>🥈 Chuteira de Prata</td><td>Artilheiro em 10 campeonatos</td></tr>
         <tr><td>✨ Chuteira de Ouro</td><td>Artilheiro em 20 campeonatos</td></tr>
       </tbody></table>
-      <h3>Artilharia de final <span class="tag">Linha de campo</span></h3>
+      <h3>Artilharia de final <span class="tag">Linha de campo</span> <span class="tag">Só em liga com final</span></h3>
       <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
         <tr><td>🎯 Artilheiro da Final</td><td>Artilheiro em pelo menos 1 final (qualquer resultado)</td></tr>
         <tr><td>💡 Decisivo</td><td>Artilheiro da final <strong>e campeão</strong> em 3 campeonatos — só conta se o time do jogador ganhou</td></tr>
@@ -1423,7 +1471,7 @@ p strong {
         <tr><td>🧤 Paredão</td><td>70% ou mais de clean sheets (jogos sem sofrer gol) em ao menos 1 campeonato</td></tr>
         <tr><td>🙏 Tafarel</td><td>Campeão em uma final que terminou empatada (decidida nos pênaltis)</td></tr>
       </tbody></table>
-      <h3>Pênaltis na final <span class="tag">Todos os jogadores</span></h3>
+      <h3>Pênaltis na final <span class="tag">Todos os jogadores</span> <span class="tag">Só em liga com final</span></h3>
       <p>Estas badges dependem do registro de <strong>quem perdeu pênalti</strong> na disputa — um passo opcional que aparece logo após o admin selecionar o time vencedor nos pênaltis. O admin seleciona os jogadores que erraram; o sistema determina se o time deles venceu ou perdeu.</p>
       <table class="data-table"><thead><tr><th>Badge</th><th>Critério</th></tr></thead><tbody>
         <tr><td>😭 Baggio</td><td>Perdeu pênalti na final <strong>e</strong> o título foi embora junto — o time do jogador perdeu a disputa</td></tr>
