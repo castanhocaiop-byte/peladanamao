@@ -47,8 +47,10 @@ const CODE = [
   slice('function getPlayerRarestBadge(', 'function computeVices('),
   slice('function gerarResumoChamp(', 'function copyChampSummary('),
   slice('const BADGE_CATALOG = [', '/* ── championship logic (pure)'),
+  one(/^const rivalVisible = .*;$/m),                                           // a comparação com o rival também só conta as conquistas visíveis na liga
+  one(/^const rivalBadgeIds = .*;$/m),
 ].join('\n');
-const EXPORTS = 'FMT, T, genMatches, standings, next3, champion, showHalfTitles, finalsEnabled, titleRace, noFinalComplete, titleModalFor, fmtLabel, defPlayers, createChampionship, submitScore, endRegular, confirmEnd, openChampModal, mChampTie, pickChampionTie, standingsTable, renderChamp, analyzeClassification, getPlayerRarestBadge, gerarResumoChamp, BADGE_CATALOG';
+const EXPORTS = 'FMT, T, genMatches, standings, next3, champion, showHalfTitles, finalsEnabled, titleRace, noFinalComplete, titleModalFor, fmtLabel, defPlayers, createChampionship, submitScore, endRegular, confirmEnd, openChampModal, mChampTie, pickChampionTie, standingsTable, renderChamp, analyzeClassification, getPlayerRarestBadge, gerarResumoChamp, BADGE_CATALOG, rivalBadgeIds';
 
 // ── o aplicativo falso ───────────────────────────────────────────────────────────────────────────
 function makeEnv({ hasFinais = true, champs = [], admin = true, badgeCache = null, newBadges = {} } = {}) {
@@ -581,6 +583,15 @@ const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s
     check('resumo para o grupo, liga sem final: lista só a Estreante (a Baggio é da final e fica de fora)', !/Baggio/.test(sem) && /\*Estreante\*/.test(sem) && /Campeão: Azul/.test(sem), sem);
     const so = makeEnv({ ...opts(false), newBadges: { Ana: ['baggio'] } }).api.gerarResumoChamp('cX');
     check('resumo para o grupo, liga sem final, só conquista da final: o bloco de conquistas some por inteiro', !/Badges conquistadas/.test(so) && !/Baggio/.test(so), so);
+  }
+
+  // ══ 11a. A COMPARAÇÃO COM O RIVAL TAMBÉM ESCONDE AS CONQUISTAS DA FINAL ═════════════════════════
+  {
+    const cache = { playerBadges: { Ana: ['baggio', 'estreante', 'campeao'], Bia: ['finalista', 'estreante'] }, badgeHolders: {} };
+    const E = makeEnv({ hasFinais: true, badgeCache: cache });
+    check('rival, liga com final (como sempre): a comparação conta todas as conquistas dos dois, inclusive as da final', E.api.rivalBadgeIds('Ana').join() === 'baggio,estreante,campeao' && E.api.rivalBadgeIds('Bia').join() === 'finalista,estreante', [E.api.rivalBadgeIds('Ana'), E.api.rivalBadgeIds('Bia')]);
+    E.st.appCfg.hasFinais = false;
+    check('rival, liga sem final: a comparação NÃO conta as conquistas da final (Baggio e Artilheiro da Final), para os dois lados', E.api.rivalBadgeIds('Ana').join() === 'estreante,campeao' && E.api.rivalBadgeIds('Bia').join() === 'estreante', [E.api.rivalBadgeIds('Ana'), E.api.rivalBadgeIds('Bia')]);
   }
 
   // ══ 11b. CARDS E GRÁFICOS DA FINAL (Ranking, Stats e aba EU) ════════════════════════════════════
