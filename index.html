@@ -8914,20 +8914,23 @@ function badgeEligibleCount(b) {
   return (st.players || []).filter(p => b.specialFor ? b.specialFor.includes(p.name) : !(b.fieldOnly && p.goleiro) && !(b.gkOnly && !p.goleiro)).length;
 }
 
-// Maior sequência de campeonatos SEGUIDOS em que o jogador esteve no elenco e NÃO fez nenhum gol. `chron` vem do mais antigo para o mais novo e só com campeonatos
-// concluídos, fora do plano gratuito e a partir de 08/09/2026 (quando o registro de gols começou). Só conta campeonato com gols registrados: se ninguém marcou, o
-// admin provavelmente não lançou os gols e não dá para provar nada, então a sequência zera. Faltar a um campeonato, ou fazer um gol, também zera. Serve à aba EU e
-// ao cache de todos os jogadores (os dois calculam as estatísticas das conquistas).
+// Maior sequência de campeonatos SEGUIDOS, entre os que o jogador DISPUTOU, em que ele esteve no elenco e NÃO fez nenhum gol. `chron` vem do mais antigo para o mais novo e
+// só com campeonatos concluídos, fora do plano gratuito e a partir de 08/09/2026 (quando o registro de gols começou). Faltar a um campeonato (há elenco registrado, ele não está
+// em nenhum time e não fez gol) NÃO zera nem soma: o campeonato é ignorado (decisão do dono em 16/10/2026). Fazer um gol zera. Só conta campeonato com gols registrados: se ninguém
+// marcou, o admin provavelmente não lançou os gols e não dá para provar nada, então a sequência zera; sem elenco registrado também não dá para saber se ele esteve presente, então zera
+// do mesmo jeito (nesta conquista, na dúvida nunca se dá a badge). Serve à aba EU e ao cache de todos os jogadores (os dois calculam as estatísticas das conquistas).
 function goallessStreak(chron, name) {
   let best = 0, cur = 0;
   for (const c of chron) {
-    const played = !!c.teamRosters && Object.values(c.teamRosters).some(r => r.includes(name));
+    const rostersKnown = !!c.teamRosters && Object.keys(c.teamRosters).length > 0;
+    const played = rostersKnown && Object.values(c.teamRosters).some(r => r.includes(name));
     let anyGoal = false, mine = 0;
     for (const m of (c.matches || [])) {
       if (!m.played) continue;
       const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
       for (const g of gs) { anyGoal = true; if (g.player === name) mine++; }
     }
+    if (rostersKnown && !played && mine === 0) continue; // faltou a este campeonato: ele não entra na conta (não soma e não zera)
     if (played && anyGoal && mine === 0) { cur++; if (cur > best) best = cur; } else cur = 0;
   }
   return best;
