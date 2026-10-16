@@ -2208,6 +2208,11 @@ const MJ_KINDS = {
     file: { story: 'conquistas-pelada-na-mao-story.png', feed: 'conquistas-pelada-na-mao.png' }, draw: { feed: drawMjBadgesCard, story: drawMjBadgesStory },
     text: d => `${d.mode === 'new' ? 'Conquistas novas' : 'Minhas conquistas'} no Pelada na Mão 🏅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjBadgesCaption(d),
   },
+  rival: {
+    title: '📤 Eu × meu rival', busy: 'Montando a comparação…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Comparação de conquistas com o meu rival no Pelada na Mão', shareTitle: 'Eu x meu rival no Pelada na Mão',
+    file: { story: 'rival-pelada-na-mao-story.png', feed: 'rival-pelada-na-mao.png' }, draw: { feed: drawMjRivalCard, story: drawMjRivalStory },
+    text: d => `Eu ${d.myCount} x ${d.rivalCount} do meu rival em conquistas no Pelada na Mão ⚔️ Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalCaption(d),
+  },
 };
 const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
@@ -2271,6 +2276,29 @@ function mjBadgesData(s = {}) {
     count: Math.max(num(s.count), items.length), // quantas o jogador tem no total (no modo "novas" é mais do que as mostradas)
     total: num(s.total),                          // quantas existem para ele
   };
+}
+
+// Dados do cartão "Eu x Rival": as conquistas de cada lado separadas em "só eu", "só o rival" e "as duas" (cada uma com `holders` e `eligible`, que dão o nível de
+// raridade). Só leva o que a liga já mostra a todos os jogadores (nomes e conquistas); a foto é a de quem compartilha (a do rival nunca entra, só as iniciais). Pura.
+function mjRivalData(s = {}) {
+  const list = a => (Array.isArray(a) ? a : []).filter(b => b && b.emoji && b.label).slice(0, 200).map(b => ({ emoji: String(b.emoji), label: String(b.label), tier: mjTierOf(b.holders, b.eligible) }));
+  const ini = n => n.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+  const name = String(s.name || '').trim() || 'Jogador', rivalName = String(s.rivalName || '').trim() || 'Rival';
+  const mine = list(s.mine), theirs = list(s.theirs), both = list(s.both);
+  const myCount = mine.length + both.length, rivalCount = theirs.length + both.length, diff = myCount - rivalCount;
+  const status = diff > 0 ? 'ahead' : diff < 0 ? 'behind' : 'tie';
+  const tier = status === 'ahead' ? 'legendary' : status === 'behind' ? 'rare' : 'common'; // na frente dourado, atrás azul, empate verde
+  return {
+    name, league: String(s.league || '').trim(),
+    photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '',
+    initials: ini(name), rivalName, rivalInitials: ini(rivalName),
+    mine, theirs, both, myCount, rivalCount, diff, status, tier, tone: MJ_TIERS[tier],
+  };
+}
+// Quem está na frente, em primeira pessoa (o cartão e a legenda são de quem compartilha).
+function mjRivalVerdict(d) {
+  const n = Math.abs(d.diff), plural = n === 1 ? '' : 's';
+  return d.status === 'ahead' ? `Estou ${n} conquista${plural} na frente!` : d.status === 'behind' ? `Meu rival está ${n} conquista${plural} na frente` : 'Empatados!';
 }
 
 function mjRoundRect(ctx, x, y, w, h, r) {
@@ -2578,6 +2606,57 @@ function drawMjBadgesCard(ctx, c, photoImg, logoImg, opts = {}) {
   ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
 }
 
+// Cartão "Eu x Rival" (Feed 4:5): eu e meu rival lado a lado (iniciais do rival, nunca a foto dele), o placar de conquistas, quem está na frente e as conquistas em
+// três grupos (só eu, só o meu rival, as duas). Dourado quando estou na frente, azul quando o rival está e verde no empate.
+function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.common, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 400, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo e nome da liga
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
+  ctx.fillText('EU × MEU RIVAL', cx, 214);
+
+  // os dois lados: foto (ou iniciais), nome e o número de conquistas; quem está na frente (ou os dois, no empate) leva a cor do cartão
+  const sides = [
+    { x: 270, ini: c.initials, photo: photoImg, name: c.name, n: c.myCount, ring: accent, lead: c.diff >= 0 },
+    { x: 810, ini: c.rivalInitials, photo: null, name: c.rivalName, n: c.rivalCount, ring: MJ_MUTED, lead: c.diff <= 0 },
+  ];
+  for (const sd of sides) {
+    mjAvatar(ctx, { initials: sd.ini }, sd.photo, sd.x, 336, 84, sd.ring);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, sd.name.toUpperCase(), 440, 64, 34, MJ_HEAD, 400), sd.x, 488);
+    ctx.fillStyle = sd.lead ? accent : '#ffffff'; ctx.font = `400 150px ${MJ_HEAD}`; ctx.fillText(String(sd.n), sd.x, 640);
+    ctx.fillStyle = MJ_MUTED; ctx.font = `700 26px ${MJ_BODY}`; ctx.fillText(sd.n === 1 ? 'conquista' : 'conquistas', sd.x, 676);
+  }
+  ctx.fillStyle = MJ_MUTED; ctx.font = `400 120px ${MJ_HEAD}`; ctx.fillText('×', cx, 376);
+  ctx.fillStyle = accent; ctx.fillText(mjFitText(ctx, mjRivalVerdict(c), 900, 40, 26, MJ_BODY, 800), cx, 742);
+
+  // as conquistas em três grupos, até 9 ícones por grupo (acima disso o último vira "+N")
+  const rows = [['SÓ EU TENHO', c.mine], ['SÓ O MEU RIVAL TEM', c.theirs], ['AS DUAS TÊM', c.both]];
+  rows.forEach(([label, list], i) => {
+    const ly = 818 + i * 128, ey = ly + 48, n = list.length;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED; ctx.font = `800 24px ${MJ_BODY}`;
+    ctx.fillText(`${label} (${n})`, cx, ly);
+    ctx.textBaseline = 'middle';
+    if (!n) { ctx.fillStyle = MJ_MUTED; ctx.font = `600 36px ${MJ_BODY}`; ctx.fillText('—', cx, ey); return; }
+    const shown = n > 9 ? list.slice(0, 8) : list, cells = shown.length + (n > 9 ? 1 : 0), step = 86, x0 = cx - ((cells - 1) * step) / 2;
+    ctx.fillStyle = MJ_TEXT; ctx.font = `400 50px ${MJ_BODY}`;
+    shown.forEach((b, j) => ctx.fillText(b.emoji, x0 + j * step, ey));
+    if (n > 9) { ctx.fillStyle = accent; ctx.font = `800 36px ${MJ_BODY}`; ctx.fillText(`+${n - 8}`, x0 + shown.length * step, ey); }
+  });
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+function drawMjRivalStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjRivalCard, c, photoImg, logoImg, 400); }
+
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
 function mjLoadImage(url) {
   return new Promise(resolve => {
@@ -2725,6 +2804,9 @@ function mjBadgesCaption(d) {
   const line = isNew ? `${n} ${n === 1 ? 'conquista nova' : 'conquistas novas'} na minha pelada: ${d.items.slice(0, 6).map(b => b.emoji).join(' ')}`
     : `${n} ${n === 1 ? 'conquista desbloqueada' : 'conquistas desbloqueadas'} na minha pelada.`;
   return `${isNew ? 'Conquistas novas' : 'Minhas conquistas'} no Pelada na Mão 🏅\n${line}\nCrie a liga da sua: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjRivalCaption(d) {
+  return `Eu x meu rival no Pelada na Mão ⚔️\n${d.myCount} x ${d.rivalCount} em conquistas: ${mjRivalVerdict(d)}\nQuem tem mais na sua pelada? Crie a liga: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
 async function copyMjCaption() {
   if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
@@ -2998,6 +3080,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
+        ${li('<strong>Rival:</strong> se você escolher um rival para comparar conquistas, a escolha fica guardada só neste aparelho (nada é enviado ao servidor e o outro jogador não é avisado). A comparação usa as conquistas que a liga já mostra para todos os jogadores. Se você compartilhar a imagem da comparação, ela leva o nome do seu rival.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -7546,6 +7629,7 @@ function vMeuJogador() {
             <span style="font-size:12px;font-weight:700;color:var(--gold)">${earnedBadges.length}/${total}</span>
           </span>
         </div>
+        ${rivalStrip(isSimulating)}
         <div style="display:flex;flex-wrap:wrap;gap:8px;padding:14px">
           ${[...earnedBadges.map(b=>mkBadge(b,true)), ...lockedBadges.map(b=>mkBadge(b,false))].join('')}
         </div>
@@ -8290,7 +8374,7 @@ function render() {
   }
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mVote()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -8738,6 +8822,7 @@ function computePlayerBadgeStats(name) {
   const totalGoals=goalsByPlayer[name]||0,myArt=artMap[name]||0,myArtFin=artFinMap[name]||0,myArtFinChamp=artFinChampMap[name]||0;
   const champsPlayed=doneAll.filter(c=>c.date<RCUT||(c.teamRosters&&Object.values(c.teamRosters).some(pl=>pl.includes(name)))).length;
   const champsPlayedCutoff=done.filter(c=>c.teamRosters&&Object.values(c.teamRosters).some(pl=>pl.includes(name))).length;
+  const attendedChurrascoChamps=done.filter(c=>c.churrasco&&c.teamRosters&&Object.values(c.teamRosters).some(pl=>pl.includes(name))).length;
   const titlesFromCutoff=done.filter(c=>(c.champion_players||[]).some(p=>p.name.trim()===name)).length;
   const winRate=champsPlayedCutoff>0?Math.round(titlesFromCutoff/champsPlayedCutoff*100):0;
   const ent=((st.ranks||[]).find(r=>r.name===name)||{}).entries||[];
@@ -8782,7 +8867,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
+  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
 }
 
 function getBadgeCache() {
@@ -11556,6 +11641,144 @@ function mBadgeInfo() {
       <div style="text-align:center">${canShare ? `<button class="btn btn-primary" style="margin-top:6px;margin-right:6px" onclick="closeModal();openMjBadge('${b.id}')">📤 Compartilhar conquista</button>` : ''}<button class="btn btn-ghost" style="margin-top:6px" onclick="closeModal()">Fechar</button></div>
     </div>
   </div>`;
+}
+
+/* ── Rival ───────────────────────────────────────────────────────────────────────────────
+   Comparar as minhas conquistas com as de outro jogador da liga. A escolha do rival fica SÓ neste aparelho (localStorage, por conta e liga): nada vai ao servidor e o
+   rival não é avisado. A comparação usa o que a liga já mostra a todos (as conquistas de cada um, do cache das conquistas, com as mesmas regras para os dois lados) e só
+   aparece no PRÓPRIO perfil (nunca na simulação do admin). */
+const RIVAL_STORE = 'aceoma_rival';
+const rivalStoreKey = () => (st.authUser?.uid && st.leagueId ? `${st.authUser.uid}_${st.leagueId}` : '');
+function rivalGet() {
+  const k = rivalStoreKey();
+  if (!k) return '';
+  if (st._rival?.k === k) return st._rival.v;
+  let v = '';
+  try { const all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); if (all && typeof all === 'object' && !Array.isArray(all) && typeof all[k] === 'string') v = all[k]; } catch(_) {}
+  st._rival = { k, v };
+  return v;
+}
+function rivalSet(v) {
+  const k = rivalStoreKey();
+  if (!k) return;
+  st._rival = { k, v };
+  try {
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); } catch(_) {} // guardado estragado: recomeça do zero em vez de nunca mais gravar
+    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
+    if (v) all[k] = v; else delete all[k];
+    localStorage.setItem(RIVAL_STORE, JSON.stringify(all));
+  } catch(_) {}
+}
+// Quem pode ser rival: os outros jogadores ativos da liga.
+function rivalCandidates() { return (st.players || []).filter(p => p.active !== false && playerKey(p.name) !== st.userDoc?.playerKey); }
+// O rival escolhido, se ele ainda existe na liga (renomeado, anonimizado ou removido: some e é só escolher de novo).
+function rivalPlayer() {
+  const key = rivalGet();
+  return key ? rivalCandidates().find(p => playerKey(p.name) === key) || null : null;
+}
+// Conquistas que a liga mostra no painel (as escondidas pela configuração da liga não entram na conta, para os dois lados).
+const rivalVisible = id => { const b = BADGE_CATALOG.find(x => x.id === id); return !!b && (!b.visible || b.visible()); };
+const rivalBadgeIds = name => (getBadgeCache().playerBadges[name] || []).filter(rivalVisible);
+function rivalDiff(mine, theirs) {
+  const a = new Set(mine), b = new Set(theirs);
+  return { onlyMine: mine.filter(x => !b.has(x)), onlyTheirs: theirs.filter(x => !a.has(x)), both: mine.filter(x => b.has(x)) };
+}
+// A comparação pronta: placar e os três grupos (da mais rara para a mais comum). Null sem rival, sem jogador vinculado ou na simulação do admin.
+function rivalCompare() {
+  const r = rivalPlayer(), myKey = st.userDoc?.playerKey;
+  if (!r || !myKey || (st.mjPreviewKey && st.mjPreviewKey !== myKey)) return null;
+  const me = (st.players || []).find(p => playerKey(p.name) === myKey), myName = me?.name || myKey;
+  const cache = getBadgeCache();
+  const info = id => { const b = BADGE_CATALOG.find(x => x.id === id); return { id, emoji: b.emoji, label: b.label, desc: b.desc, holders: (cache.badgeHolders[id] || []).length, eligible: badgeEligibleCount(b) }; };
+  const mineIds = rivalBadgeIds(myName), theirIds = rivalBadgeIds(r.name), d = rivalDiff(mineIds, theirIds), pack = ids => mjByRarity(ids.map(info));
+  return { me: myName, rival: r.name, mine: pack(d.onlyMine), theirs: pack(d.onlyTheirs), both: pack(d.both), myCount: mineIds.length, rivalCount: theirIds.length, diff: mineIds.length - theirIds.length };
+}
+const rivalInitials = n => String(n).trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+// A faixa dentro do card Conquistas da aba EU: convite para escolher o rival ou o placar e o botão Comparar.
+function rivalStrip(isSimulating) {
+  if (isSimulating || !st.players?.length || !st.userDoc?.playerKey) return '';
+  const btn = 'flex-shrink:0;padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+  const row = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border2)';
+  const c = rivalCompare();
+  if (!c) return `<div style="${row}"><span style="font-size:18px">⚔️</span><span style="flex:1;font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas com as de um rival da liga.</span><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
+  const mc = c.diff > 0 ? 'var(--accent)' : 'var(--text)', rc = c.diff < 0 ? '#4db8ff' : 'var(--text)';
+  return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
+}
+function openRival() {
+  const myKey = st.userDoc?.playerKey;
+  if (!myKey || (st.mjPreviewKey && st.mjPreviewKey !== myKey)) return;
+  st.modal = { type: 'rival', picking: !rivalPlayer() };
+  render();
+}
+function rivalPick(key) {
+  if (!rivalCandidates().some(p => playerKey(p.name) === key)) return;
+  rivalSet(key);
+  st.modal = { type: 'rival', picking: false };
+  render();
+}
+function rivalChange() { if (st.modal?.type === 'rival') { st.modal.picking = true; render(); } }
+function rivalRemove() { rivalSet(''); st.modal = { type: 'rival', picking: true }; render(); }
+// A busca da lista de jogadores só esconde e mostra as linhas (não redesenha a janela).
+function rivalFilter(q) {
+  const t = String(q || '').trim().toLowerCase();
+  document.querySelectorAll('#rival-list [data-rname]').forEach(el => { el.style.display = !t || el.dataset.rname.includes(t) ? '' : 'none'; });
+}
+// O cartão "Eu x meu rival" para compartilhar (Story e Feed, a mesma janela das conquistas). Fecha a janela do rival antes.
+function openMjRival() {
+  const c = rivalCompare();
+  if (!c) return;
+  const myKey = st.userDoc?.playerKey;
+  st.modal = null; render();
+  return openMjShare('rival', mjRivalData({ name: c.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: c.rival, mine: c.mine, theirs: c.theirs, both: c.both }));
+}
+function mRival() {
+  const m = st.modal;
+  if (m?.type !== 'rival' || !st.userDoc?.playerKey) return '';
+  const shell = body => `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-height:92dvh;display:flex;flex-direction:column;padding-bottom:20px">
+      <div class="sheet-handle"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:17px;font-weight:800">⚔️ Seu rival</div>
+        <button onclick="closeModal()" aria-label="Fechar" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;font-size:16px;line-height:1">×</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding-right:6px">${body}</div>
+    </div></div>`;
+  const avatar = (name, color) => `<div style="width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:#161b22;border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${color}">${esc(rivalInitials(name))}</div>`;
+  const c = m.picking ? null : rivalCompare();
+  if (!c) {
+    const rows = rivalCandidates().map(p => {
+      const n = rivalBadgeIds(p.name).length;
+      return `<button data-rname="${esc(p.name.toLowerCase())}" onclick="rivalPick('${playerKey(p.name)}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
+        <span style="width:34px;height:34px;border-radius:50%;background:#161b22;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent);flex-shrink:0">${esc(rivalInitials(p.name))}</span>
+        <span style="flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</span>
+        <span style="font-size:12px;color:var(--text3);flex-shrink:0">${n} conquista${n === 1 ? '' : 's'}</span></button>`;
+    }).join('');
+    return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas. A escolha fica só neste aparelho e o outro jogador não é avisado.</div>
+      ${rows ? `<input type="search" placeholder="Buscar jogador" oninput="rivalFilter(this.value)" aria-label="Buscar jogador" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit">
+      <div id="rival-list" style="display:flex;flex-direction:column;gap:6px">${rows}</div>` : '<div style="padding:20px 0;text-align:center;font-size:13px;color:var(--text3)">Ainda não há outros jogadores na liga para virar seu rival.</div>'}
+      ${rivalPlayer() ? '<button onclick="st.modal.picking=false;render()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">← Voltar para a comparação</button>' : ''}`);
+  }
+  const n = Math.abs(c.diff), plural = n === 1 ? '' : 's';
+  const verdict = c.diff > 0 ? `Você está ${n} conquista${plural} na frente!` : c.diff < 0 ? `${esc(c.rival)} está ${n} conquista${plural} na frente` : 'Empate!';
+  const vcol = c.diff > 0 ? 'var(--accent)' : c.diff < 0 ? '#4db8ff' : 'var(--text2)';
+  const chip = b => { const t = mjTierOf(b.holders, b.eligible); return `<span title="${esc(b.desc || '')}" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;background:var(--s2);border:1px solid ${t === 'common' ? 'var(--border)' : MJ_TIERS[t].color};font-size:11px;font-weight:700;color:var(--text2)">${b.emoji} ${esc(b.label)}</span>`; };
+  const group = (title, list) => `<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">${title} (${list.length})</div>${list.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(chip).join('')}</div>` : '<div style="font-size:12px;color:var(--text3)">Nenhuma</div>'}</div>`;
+  const side = (name, label, count, color) => `<div style="text-align:center;min-width:0">${avatar(name, color)}<div style="font-size:12px;font-weight:700;color:var(--text2);overflow-wrap:anywhere">${label}</div><div style="font-size:34px;font-weight:800;line-height:1.1;color:${color}">${count}</div></div>`;
+  const myCol = c.diff >= 0 ? '#00d67f' : '#e6edf3', rvCol = c.diff <= 0 ? '#4db8ff' : '#e6edf3'; // quem está na frente (ou os dois, no empate) leva a cor
+  return shell(`<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
+      ${side(c.me, 'Você', c.myCount, myCol)}
+      <div style="font-size:22px;color:var(--text3);font-weight:800">×</div>
+      ${side(c.rival, esc(c.rival), c.rivalCount, rvCol)}
+    </div>
+    <div style="text-align:center;font-size:14px;font-weight:800;color:${vcol};margin-bottom:4px">${verdict}</div>
+    ${group('Só você tem', c.mine)}${group('Só ' + esc(c.rival) + ' tem', c.theirs)}${group('Os dois têm', c.both)}
+    <button onclick="openMjRival()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar comparação</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="rivalChange()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Trocar rival</button>
+      <button onclick="rivalRemove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Remover rival</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem mostra o nome do seu rival: compartilhe só se ele topar a brincadeira. A escolha do rival fica só neste aparelho e ele não é avisado.</div>`);
 }
 
 function closeModal() { st.modal=null; render(); }
