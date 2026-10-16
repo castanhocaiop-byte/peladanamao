@@ -2958,11 +2958,11 @@ p strong {
           <tr><td>⏳ App travado na abertura</td><td>Em 20 segundos o app não ficou pronto. O relato diz até onde chegou: <em>sem-firebase</em> (o Firebase nem carregou), <em>inicio</em>, <em>main</em>, <em>init</em>, <em>auth</em> (entrada), <em>user</em> (dados da conta) ou <em>listeners</em> (dados da liga).</td></tr>
           <tr><td>🔌 Dados não carregaram</td><td>Uma das listas em tempo real (campeonatos, ranking, elenco, financeiro, configurações, fotos, contatos) deu erro, por exemplo índice faltando ou cota do banco estourada. Sair da liga ("permissão negada") é normal e não conta.</td></tr>
           <tr><td>🔑 Falha ao entrar</td><td>A conta não carregou ao abrir o app e ele caiu na liga padrão.</td></tr>
-          <tr><td>🖥️ Falha no servidor</td><td>Uma função do servidor respondeu com erro interno ou demorou demais (a pessoa só viu "tente de novo").</td></tr>
-          <tr><td>📶 Rede</td><td>Falha de conexão ("Failed to fetch"). Aparece no painel, mas não conta como defeito nem entra no e-mail.</td></tr>
+          <tr><td>🖥️ Falha no servidor</td><td>Uma função do servidor respondeu com erro interno (<em>INTERNAL</em>) ou demorou demais (a pessoa só viu "tente de novo"). O e-mail e o painel dizem qual função falhou.</td></tr>
+          <tr><td>📶 Rede</td><td>Falha de conexão ("Failed to fetch") e também o <em>internal</em> em minúscula, que é como o Firebase avisa que o pedido a uma função do servidor nem chegou a ter resposta (sem sinal, rede móvel instável, bloqueador, VPN). Aparece no painel, mas não conta como defeito nem entra no e-mail.</td></tr>
         </tbody>
       </table>
-      <p>Não são relatados: o aviso inofensivo do navegador sobre redimensionamento, erros de extensões do navegador, a janela de login fechada pela própria pessoa, o cancelamento da janela de compartilhar e as falhas de rede de quem está sem internet.</p>
+      <p>Não são relatados: o aviso inofensivo do navegador sobre redimensionamento, erros de extensões do navegador, erros do navegador interno do Instagram e do Facebook (o script dele perde a "ponte" com o aplicativo quando a pessoa fecha a janela: <em>Java object is gone</em>, <em>_AutofillCallbackHandler</em>), a janela de login fechada pela própria pessoa, o cancelamento da janela de compartilhar e as falhas de rede de quem está sem internet.</p>
 
       <div class="callout gold" id="app-nao-abre">
         <div class="callout-label gold">Quando o app não consegue abrir</div>
@@ -2972,11 +2972,11 @@ p strong {
       <h3>Onde ver</h3>
       <ul>
         <li><strong>Painel 📊</strong> (só o dono): a seção <em>Erros do app (14 dias)</em> mostra os relatos de hoje e de 7 dias e os tipos de erro. Cada tipo abre com um gráfico de 14 dias, telas, navegadores, sistemas, versões do app, códigos, onde aconteceu e o trecho do código. O botão <strong>📋 Copiar relatório</strong> copia tudo em texto simples: é só colar na conversa com o Claude para investigar.</li>
-        <li><strong>E-mail diário</strong> (9h20, só para o dono): só quando há erro <strong>novo</strong> (primeiro relato nas últimas 36 horas) ou uma <strong>alta repentina</strong> (5 ou mais relatos entre ontem e hoje, e pelo menos 3 vezes a média diária dos 7 dias antes). Em dia calmo, nenhum e-mail. Falha de rede nunca entra.</li>
+        <li><strong>E-mail diário</strong> (9h20, só para o dono): só quando há erro <strong>novo</strong> (primeiro relato nas últimas 36 horas) ou uma <strong>alta repentina</strong> (5 ou mais relatos entre ontem e hoje, e pelo menos 3 vezes a média diária dos 7 dias antes). Em dia calmo, nenhum e-mail. Falha de rede nunca entra. Cada erro traz a mensagem, quantos relatos, as telas, os navegadores e as versões e, quando existem, a <strong>função do servidor</strong> (ou a lista do banco) envolvida e os 4 primeiros trechos do código: dá para investigar só com o e-mail.</li>
       </ul>
 
       <h3>Como os erros são agrupados</h3>
-      <p>Erros do mesmo tipo, com a mesma mensagem e no mesmo trecho do código, viram <strong>um grupo só</strong>, mesmo vindo de aparelhos, versões e linhas diferentes (números e códigos mudam de um relato para outro e são ignorados na comparação). O painel mostra a <strong>versão do app</strong>, que é a hora em que o arquivo foi publicado (sem precisar lembrar de trocar número nenhum): assim dá para ver se um erro começou numa publicação específica.</p>
+      <p>Erros do mesmo tipo, com a mesma mensagem e no mesmo trecho do código, viram <strong>um grupo só</strong>, mesmo vindo de aparelhos, versões e linhas diferentes (números e códigos mudam de um relato para outro e são ignorados na comparação). O painel mostra a <strong>versão do app</strong>, que é a hora em que a Vercel guardou o arquivo no cache da região (perto da hora da publicação, sem precisar lembrar de trocar número nenhum, mas pode variar um pouco de uma região para outra; aparece <em>x</em> quando o arquivo acabou de ser guardado, nos primeiros 2 minutos): serve para ver se um erro começou numa publicação, não para marcar o minuto exato.</p>
 
       <div class="callout gold">
         <div class="callout-label gold">Privacidade (LGPD)</div>

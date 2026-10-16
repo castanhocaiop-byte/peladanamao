@@ -92,13 +92,38 @@ for (const [rotulo, raw] of [
   ['pilha de extensão', { m: 'boom', s: 'Error: boom\n    at x (chrome-extension://abcdef/content.js:1:1)' }],
   ['extensão do Firefox', { m: 'boom', s: 'x@moz-extension://abcdef/c.js:1:1' }],
   ['mensagem cita extensão', { m: 'falhou em safari-web-extension://abc/x.js' }],
+  // navegador interno do Instagram/Facebook: o script DELE (iabjs://) perde a "ponte" com o aplicativo quando a pessoa fecha a janela
+  ['ponte do navegador interno do Instagram (Android), com pilha do iabjs://', { m: 'Error: Error invoking postMessage: Java object is gone', s: 'Error: Error invoking postMessage: Java object is gone\n    at sendDataToNative (iabjs://pagina:1:2345)' }],
+  ['…a mesma mensagem, sem pilha nenhuma', { m: 'Error invoking postMessage: Java object is gone', s: '' }],
+  ['…só "Java object is gone"', { m: 'Java object is gone' }],
+  ['…só "Error invoking postMessage", com outro final', { m: 'Error: Error invoking postMessage: Attempt to invoke virtual method on a null object reference' }],
+  ['…em letras minúsculas', { m: 'error invoking postmessage: java object is gone' }],
+  ['ponte do navegador interno no iPhone (_AutofillCallbackHandler)', { m: "ReferenceError: Can't find variable: _AutofillCallbackHandler" }],
+  ['erro qualquer com o script iabjs:// no topo da pilha', { m: 'boom', s: 'Error: boom\n    at x (iabjs://abc:1:1)' }],
+  ['mensagem que cita iabjs://', { m: 'falhou em iabjs://abc/x.js' }],
 ]) {
   const r = P(raw);
   check(`ruído ignorado: ${rotulo}`, !r.ok && r.reason === 'ignored', r);
 }
 check('erro do app com extensão só no fundo da pilha NÃO é ignorado (só os primeiros trechos contam)', P({ s: 'at a (https://peladanamao.com.br/:1:1)\nat b (https://peladanamao.com.br/:2:2)\nat c (https://peladanamao.com.br/:3:3)\nat d (chrome-extension://x/y.js:1:1)' }).ok);
+check('…nem o do app com o script iabjs:// só no fundo da pilha, nem erro nosso que fala de "postMessage" sem ser a ponte do Instagram', P({ s: 'at a (https://peladanamao.com.br/:1:1)\nat b (https://peladanamao.com.br/:2:2)\nat c (https://peladanamao.com.br/:3:3)\nat d (iabjs://x:1:1)' }).ok && P({ m: 'TypeError: postMessage is not a function' }).ok && P({ m: 'DataCloneError: Failed to execute postMessage' }).ok);
 check('falha de rede: "error" e "rejection" viram o tipo "network" (e ficam fora das contas de defeito)', ['TypeError: Failed to fetch', 'TypeError: Load failed', 'NetworkError when attempting to fetch resource.', 'Firebase: Error (auth/network-request-failed).'].every(m => P({ m, s: '' }).report.kind === 'network') && P({ k: 'rejection', m: 'TypeError: Failed to fetch' }).report.kind === 'network' && P({ m: 'x', x: { code: 'unavailable' } }).report.kind === 'network');
 check('…mas arquivo que não carregou, travamento da abertura e falha de função não viram "rede"', P({ k: 'resource', m: 'Failed to fetch script' }).report.kind === 'resource' && P({ k: 'boot', m: 'não terminou: failed to fetch' }).report.kind === 'boot' && P({ k: 'callable', m: 'failed to fetch' }).report.kind === 'callable');
+// O SDK do Firebase Functions diz "internal" (minúscula) quando o pedido nem teve resposta (sem sinal, bloqueador, VPN…)
+const noAnswer = { k: 'callable', m: 'FirebaseError: internal', s: '', x: { code: 'internal', fn: 'listMembers' } };
+check('função do servidor que diz "internal" em minúscula (o SDK avisa assim que o pedido nem teve resposta) vira "network": fica no painel, fora das contas de defeito e do e-mail', P(noAnswer).ok && P(noAnswer).report.kind === 'network' && P({ ...noAnswer, x: { code: 'internal', fn: 'checkSubscriptionStatus' } }).report.kind === 'network', P(noAnswer));
+check('…o nome da função continua no relato (cada função forma o seu grupo)', P(noAnswer).report.x.fn === 'listMembers' && P(noAnswer).report.fp !== P({ ...noAnswer, x: { code: 'internal', fn: 'joinLeague' } }).report.fp);
+check('…mas defeito de verdade do servidor continua "callable": "INTERNAL" (maiúscula), outra mensagem, outro código ou sem código', [
+  { ...noAnswer, m: 'FirebaseError: INTERNAL' },
+  { ...noAnswer, m: 'FirebaseError: internal error' },
+  { ...noAnswer, m: 'FirebaseError: Response is not valid JSON object.' },
+  { ...noAnswer, m: 'Error: internal' },
+  { ...noAnswer, m: 'MyFirebaseError: internal' },
+  { ...noAnswer, x: { code: 'unknown', fn: 'listMembers' } },
+  { ...noAnswer, x: { code: 'deadline-exceeded', fn: 'listMembers' } },
+  { ...noAnswer, x: { fn: 'listMembers' } },
+].every(o => P(o).report.kind === 'callable'), [{ ...noAnswer, m: 'FirebaseError: INTERNAL' }].map(o => P(o).report.kind));
+check('…e a regra só vale para o tipo "callable" (o mesmo texto vindo de erro no código segue como erro no código)', P({ ...noAnswer, k: 'error' }).report.kind === 'error' && P({ ...noAnswer, k: 'rejection' }).report.kind === 'rejection');
 
 // ═══ o grupo do erro (impressão digital) ═════════════════════════════════════════════════════════════════════════
 const fp = o => P(o).report.fp;
@@ -214,6 +239,20 @@ check('e-mail: sem nenhum erro novo, o assunto fala do erro repetido e do númer
 const manyPicks = ce.digestPicks(Array.from({ length: 12 }, (_, i) => dg('p' + i, { firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: i + 1 } })), NOW);
 const mailMany = ce.digestEmail(manyPicks, { appUrl: 'https://x/', escape: esc, now: NOW });
 check('e-mail: no máximo 8 grupos', (mailMany.text.match(/^\d+\. \[/gm) || []).length === 8 && mailMany.subject === '8 erro(s) novo(s) no app', mailMany.subject);
+// Detalhes (função do servidor, lista, etapa) e primeiros trechos do código: quem investiga não precisa abrir o painel
+const richStack = 'FirebaseError: INTERNAL\nat callFn ((página):1288)\nat async refreshAdminBadge ((página):1507)\nat HTMLButtonElement.onclick ((página):1:1)\nat quarto ((página):4:4)\nat quinto ((página):5:5)';
+const richPicks = ce.digestPicks([dg('rico', { kind: 'callable', message: 'FirebaseError: INTERNAL', stack: richStack, extra: { fn: 'listMembers', col: 'championships', step: 'auth' }, firstSeen: new Date(NOW - H).toISOString(), count: 2, days: { [df(0)]: 2 } })], NOW);
+const richMail = ce.digestEmail(richPicks, { appUrl: 'https://x/', escape: esc, now: NOW });
+check('e-mail: diz de qual função do servidor veio a falha, de qual lista e em que etapa da abertura (texto e HTML)', /Detalhes: chamada ao servidor listMembers · lista championships · etapa da abertura auth/.test(richMail.text) && /Detalhes: chamada ao servidor listMembers · lista championships · etapa da abertura auth/.test(richMail.html), richMail.text);
+const stackPart = richMail.text.split('Pilha:\n')[1].split('\n\n')[0];
+check('e-mail: mostra os 4 primeiros trechos do código, recuados, sem repetir a linha da mensagem e sem o quinto', stackPart.split('\n').length === 4 && stackPart.split('\n').every(l => /^ {5}at /.test(l)) && /callFn/.test(stackPart) && /HTMLButtonElement\.onclick/.test(stackPart) && /quarto/.test(stackPart) && !/quinto|FirebaseError/.test(stackPart), stackPart);
+check('e-mail: o HTML também traz os trechos do código (uma linha cada)', /at callFn[^<]*<br>at async refreshAdminBadge[^<]*<br>at HTMLButtonElement[^<]*<br>at quarto/.test(richMail.html) && !/quinto/.test(richMail.html), richMail.html.slice(-900));
+check('e-mail: trechos com espaços na frente (pilha guardada com recuo) saem sem eles, e o HTML de quem não tem trechos não ganha o bloco da pilha', ce.digestEmail(ce.digestPicks([dg('rec', { stack: 'x\n    at callFn ((página):1288)\n      at outro ((página):5:5)', firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: 1 } })], NOW), { appUrl: 'https://x/', escape: esc, now: NOW }).text.includes('Pilha:\n     at callFn ((página):1288)\n     at outro ((página):5:5)') && !/font-size:11px/.test(mail.html) && /font-size:11px/.test(richMail.html), mail.html.slice(-500));
+const ffPicks = ce.digestPicks([dg('ff', { kind: 'error', message: 'x', stack: 'x\nrenderChamp@(página):1234\nrender@(página):99', firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: 1 } })], NOW);
+check('e-mail: pilha no formato do Firefox/Safari ("função@arquivo") também aparece', /Pilha:\n {5}renderChamp@\(página\):1234\n {5}render@\(página\):99/.test(ce.digestEmail(ffPicks, { appUrl: 'https://x/', escape: esc, now: NOW }).text));
+check('e-mail: grupo sem detalhes e sem trechos de código (pilha vazia ou só a mensagem) não ganha as linhas "Detalhes" nem "Pilha"', !/Detalhes:|Pilha:/.test(mail.text) && !/Detalhes:/.test(mail.html) && !/Detalhes:|Pilha:/.test(ce.digestEmail(ce.digestPicks([dg('vazio', { stack: '', extra: null, firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: 1 } }), dg('vazio2', { stack: undefined, extra: { fn: '', col: '', step: '' }, firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: 1 } })], NOW), { appUrl: 'https://x/', escape: esc, now: NOW }).text));
+const evilRich = ce.digestEmail(ce.digestPicks([dg('mau', { stack: 'at <img src=x onerror=alert(1)> ((página):1:1)', extra: { fn: '<b>f</b>', col: '"c"', step: "'s'" }, firstSeen: new Date(NOW - H).toISOString(), days: { [df(0)]: 1 } })], NOW), { appUrl: 'https://x/', escape: esc, now: NOW });
+check('e-mail: detalhes e trechos do código vindos de fora saem ESCAPADOS no HTML (nada executa)', !/<img|<b>f/.test(evilRich.html) && /&lt;img src=x onerror=alert\(1\)&gt;/.test(evilRich.html) && /&lt;b&gt;f&lt;\/b&gt;/.test(evilRich.html), evilRich.html.slice(0, 900));
 
 // ═══ constantes que protegem o custo ═════════════════════════════════════════════════════════════════════════════
 // ═══ chave de propriedade na mensagem do erro: nome de gente sai ═════════════════════════════════════════════════

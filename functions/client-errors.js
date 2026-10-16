@@ -114,14 +114,24 @@ const NOISE = [
   /^script error\.?$/i,                                     // erro de outro endereço, sem detalhe nenhum (extensões, anúncios)
   /popup-closed-by-user|cancelled-popup-request|user-cancelled/i, // a pessoa fechou a janela de login
   /\bAbortError\b|The (?:user|operation) (?:aborted|was aborted)/i, // a pessoa cancelou (ex.: janela de compartilhar)
+  // Navegador interno do Instagram/Facebook: ele injeta um script próprio (iabjs://) que fala com o aplicativo por uma "ponte".
+  // Quando a pessoa fecha a janela, a ponte some e o script DELE dá erro dentro da nossa página. Não é código do app.
+  /Error invoking postMessage|Java object is gone/i,        // Android
+  /_AutofillCallbackHandler/,                               // iPhone ("Can't find variable: _AutofillCallbackHandler")
 ];
 const NETWORK_MESSAGE = /failed to fetch|load failed|networkerror|network request failed|network-request-failed|err_internet_disconnected|err_network|network connection was lost|fetch failed/i;
 const NETWORK_CODES = new Set(["unavailable", "auth/network-request-failed"]);
+// O SDK do Firebase Functions responde "internal" (minúscula, sem mais nada) quando o pedido NÃO CHEGOU a ter resposta do
+// servidor: sem sinal, rede móvel instável, bloqueador, VPN, ou uma instância que caiu sem nem mandar os cabeçalhos do CORS.
+// Defeito de verdade da nossa função chega como "INTERNAL" (maiúscula) ou com a mensagem que ela mesma escreveu.
+const SDK_NO_ANSWER = /^FirebaseError: internal$/;
 
-// Erro que veio de extensão do navegador (nos primeiros trechos da pilha) não é do app
+// Erro que veio de código de fora da página (extensão do navegador, script do navegador interno do Instagram/Facebook) nos
+// primeiros trechos da pilha não é do app
+const FOREIGN_FRAME = /(?:extension|iabjs):\/\//i;
 function fromExtension(rawStack) {
   const top = String(rawStack || "").split("\n").map(l => l.trim()).filter(Boolean).slice(0, 3);
-  return top.some(l => /extension:\/\//i.test(l));
+  return top.some(l => FOREIGN_FRAME.test(l));
 }
 
 const cleanVersion = v => (typeof v === "string" && /^\d{8}\.\d{4}$/.test(v) ? v : "x");
@@ -160,12 +170,13 @@ function parseReport(raw) {
   const message = sanitizeText(rawMsg, LIMIT.message);
   if (!message) return { ok: false, reason: "invalid" };
   const rawStack = typeof raw.s === "string" ? raw.s : "";
-  if (NOISE.some(re => re.test(message)) || fromExtension(rawStack) || /extension:\/\//i.test(rawMsg)) return { ok: false, reason: "ignored" };
+  if (NOISE.some(re => re.test(message)) || fromExtension(rawStack) || FOREIGN_FRAME.test(rawMsg)) return { ok: false, reason: "ignored" };
   const stack = sanitizeStack(rawStack);
   const top = topFrame(stack);
   const x = cleanExtra(raw.x);
   let kind = raw.k;
   if ((kind === "error" || kind === "rejection") && (NETWORK_MESSAGE.test(message) || NETWORK_CODES.has(x.code))) kind = "network";
+  if (kind === "callable" && x.code === "internal" && SDK_NO_ANSWER.test(message)) kind = "network"; // o pedido nem teve resposta: conexão, não defeito
   const report = {
     kind, message, stack, fn: top.fn, loc: top.loc,
     version: cleanVersion(raw.v), view: cleanView(raw.w),
@@ -313,6 +324,18 @@ function digestPicks(groups, now) {
 const fmtTops = (map, rename) => topOf(map, 3, rename).map(t => `${t.name} (${t.count})`).join(", ") || "—";
 const dayBR = iso => (Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }).format(new Date(iso)) : "?");
 
+// O que o e-mail diz além da mensagem, para quem for investigar não precisar abrir o painel: de qual função do servidor veio a
+// falha, qual lista do banco, até onde a abertura chegou (campos já validados: só letras, números, "_" e "-"), e os primeiros
+// trechos do código (a pilha já foi limpa ao gravar). Pilha do Firefox/Safari ("função@arquivo") e do Chrome ("at função (arquivo)").
+const EMAIL_STACK_LINES = 4;
+function detailsOf(g) {
+  const x = g.extra && typeof g.extra === "object" ? g.extra : {};
+  return [x.fn ? `chamada ao servidor ${x.fn}` : "", x.col ? `lista ${x.col}` : "", x.step ? `etapa da abertura ${x.step}` : ""].filter(Boolean).join(" · ");
+}
+function stackFramesOf(g) {
+  return String(g.stack || "").split("\n").map(l => l.trim()).filter(l => /^at\s|@/.test(l)).slice(0, EMAIL_STACK_LINES);
+}
+
 // E-mail do resumo diário: texto simples e HTML; tudo escapado (a mensagem veio de fora).
 function digestEmail(picks, { appUrl, escape, now }) {
   const shown = picks.slice(0, 8);
@@ -321,11 +344,14 @@ function digestEmail(picks, { appUrl, escape, now }) {
   const lines = shown.map((p, i) => {
     const g = p.g;
     const where = [g.fn ? `função ${g.fn}` : "", g.loc].filter(Boolean).join(" · ");
+    const details = detailsOf(g), frames = stackFramesOf(g);
     return [
       `${i + 1}. [${KIND_LABEL[g.kind] || g.kind}] ${g.message}${p.isNew ? "  (NOVO)" : "  (em alta)"}`,
       `   ${p.recent} relato(s) em ontem e hoje · ${num(g.count)} no total · primeiro em ${dayBR(g.firstSeen)}`,
       `   Telas: ${fmtTops(g.views)} · Navegadores: ${fmtTops(g.browsers)} · Versões: ${fmtTops(g.versions, versionOf)}${g.codes ? ` · Códigos: ${fmtTops(g.codes)}` : ""}`,
+      ...(details ? [`   Detalhes: ${details}`] : []),
       ...(where ? [`   Onde: ${where}`] : []),
+      ...(frames.length ? [`   Pilha:`, ...frames.map(f => `     ${f}`)] : []),
     ].join("\n");
   });
   const intro = `Resumo dos relatos de erro do app (ontem e hoje até agora, ${dayKeySP(now)}). Mostro só o que é novo ou subiu de repente; todos os grupos ficam no painel 📊 do app.`;
@@ -337,10 +363,12 @@ function digestEmail(picks, { appUrl, escape, now }) {
     ...shown.map((p, i) => {
       const g = p.g;
       const where = [g.fn ? `função ${g.fn}` : "", g.loc].filter(Boolean).join(" · ");
+      const details = detailsOf(g), frames = stackFramesOf(g);
       return `<div style="margin:0 0 14px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;line-height:1.5">
 <div><strong>${i + 1}. ${esc(KIND_LABEL[g.kind] || g.kind)}</strong> ${p.isNew ? "🆕" : "📈"}</div>
 <div style="font-family:monospace;font-size:13px;margin:4px 0;word-break:break-word">${esc(g.message)}</div>
-<div style="color:#6b7280;font-size:12px">${p.recent} relato(s) em ontem e hoje · ${num(g.count)} no total · primeiro em ${esc(dayBR(g.firstSeen))}<br>Telas: ${esc(fmtTops(g.views))} · Navegadores: ${esc(fmtTops(g.browsers))} · Versões: ${esc(fmtTops(g.versions, versionOf))}${g.codes ? ` · Códigos: ${esc(fmtTops(g.codes))}` : ""}${where ? `<br>Onde: ${esc(where)}` : ""}</div></div>`;
+<div style="color:#6b7280;font-size:12px">${p.recent} relato(s) em ontem e hoje · ${num(g.count)} no total · primeiro em ${esc(dayBR(g.firstSeen))}<br>Telas: ${esc(fmtTops(g.views))} · Navegadores: ${esc(fmtTops(g.browsers))} · Versões: ${esc(fmtTops(g.versions, versionOf))}${g.codes ? ` · Códigos: ${esc(fmtTops(g.codes))}` : ""}${details ? `<br>Detalhes: ${esc(details)}` : ""}${where ? `<br>Onde: ${esc(where)}` : ""}</div>${frames.length ? `
+<div style="font-family:monospace;font-size:11px;color:#6b7280;margin-top:6px;word-break:break-word">${frames.map(f => esc(f)).join("<br>")}</div>` : ""}</div>`;
     }),
     `<p style="margin:0 0 14px;color:#6b7280;font-size:12px;line-height:1.5">${esc(outro)}</p>`,
     `<p style="margin:18px 0"><a href="${esc(appUrl)}" style="background:#00d67f;color:#000;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:8px;display:inline-block">Abrir o Pelada na Mão</a></p>`,

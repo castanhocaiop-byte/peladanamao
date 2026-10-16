@@ -165,6 +165,14 @@ const reset = () => { store.clear(); logs.length = 0; fetchCalls.length = 0; wri
   check('corpo vazio → 400', r.statusCode === 400);
   r = await post({ k: 'error', m: 'ResizeObserver loop limit exceeded' });
   check('ruído conhecido (ResizeObserver) → 204 (o navegador não precisa saber) e NADA é gravado', r.statusCode === 204 && store.size === 0, store.size);
+  r = await post({ k: 'error', m: 'Error: Error invoking postMessage: Java object is gone', s: 'Error: Error invoking postMessage: Java object is gone\n    at sendDataToNative (iabjs://pagina:1:2345)', b: 'Instagram 451', i: true });
+  check('ponte do navegador interno do Instagram (script iabjs://) → 204 e NADA é gravado (não é código do app)', r.statusCode === 204 && store.size === 0 && logs.length === 0, [store.size, logs.length]);
+  r = await post({ k: 'callable', m: 'FirebaseError: internal', s: '', x: { code: 'internal', fn: 'listMembers' }, b: 'Samsung 30' });
+  const netGroups = groupDocs().map(([, d]) => d);
+  check('função do servidor que diz "internal" em minúscula (pedido sem resposta) → 204 e grava como "network", com o nome da função e o código', r.statusCode === 204 && netGroups.length === 1 && netGroups[0].kind === 'network' && netGroups[0].extra.fn === 'listMembers' && netGroups[0].codes.internal === 1, netGroups);
+  r = await post({ k: 'callable', m: 'FirebaseError: INTERNAL', s: '', x: { code: 'internal', fn: 'listMembers' }, b: 'Samsung 30' });
+  check('…já "INTERNAL" (maiúscula: o servidor quebrou de verdade) grava como "callable", num grupo à parte', groupDocs().length === 2 && groupDocs().some(([, d]) => d.kind === 'callable' && d.message === 'FirebaseError: INTERNAL'), groupDocs().map(([, d]) => [d.kind, d.message]));
+  reset();
   r = mkRes(); await fns.reportClientError({ method: 'POST', headers: { origin: PROD, 'x-forwarded-for': newIp() }, body: { ...BASE } }, r);
   check('corpo já lido como objeto (content-type JSON) também funciona', r.statusCode === 204 && groupDocs().length === 1, r);
   reset();
