@@ -143,7 +143,7 @@ const mutating = w => w.calls.filter(c => c[0] !== 'getUserByEmail');
   r = await go(w, [...PROD, '--aplicar'], { answers: ['outro@x.com'] });
   check('aplicar: e-mail novo digitado errado cancela e não muda nada', r.code === 1 && /Cancelado/.test(r.out) && mutating(w).length === 0 && r.asked.length === 1, r);
   w = seed();
-  r = await go(w, [...PROD, '--aplicar'], { answers: ['ana.nova@x.com', 'N'] });
+  r = await go(w, [...PROD, '--aplicar'], { answers: ['ana.nova@x.com', 'N', 'TROCAR'] });
   check('aplicar na PRODUÇÃO: sem confirmar por outro canal cancela', r.code === 1 && /Cancelado/.test(r.out) && mutating(w).length === 0, r);
   w = seed();
   r = await go(w, [...PROD, '--aplicar'], { answers: ['ana.nova@x.com', 'S', 'talvez'] });

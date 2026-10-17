@@ -99,6 +99,7 @@ const tick = () => new Promise(r => setImmediate(r));
   const pp = api.passwordChangeProblem;
   check('senha: atual vazia, nova curta, grande demais, repetição diferente e igual à atual são recusadas, cada uma com seu motivo', /senha atual/.test(pp('', 'abcdef', 'abcdef')) && /pelo menos 6/.test(pp('x', 'abc', 'abc')) && /pelo menos 6/.test(pp('x', '', '')) && /grande demais/.test(pp('x', 'a'.repeat(129), 'a'.repeat(129))) && /não são iguais/.test(pp('x', 'abcdef', 'abcdeg')) && /diferente da atual/.test(pp('abcdef', 'abcdef', 'abcdef')));
   check('senha: 6 caracteres e repetição igual passam', pp('velha1', 'nova123', 'nova123') === '' && pp('x', 'abcdef', 'abcdef') === '');
+  check('senha: 5 caracteres ainda é curta (o limite é 6 exatos)', /pelo menos 6/.test(pp('x', 'abcde', 'abcde')) && pp('x', 'abcdef', 'abcdef') === '');
 
   const em = api.accountErrMsg;
   check('mensagens de erro: tudo em português e nenhum código técnico aparece', ['app/empty-password', 'auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-email', 'auth/weak-password', 'auth/too-many-requests', 'auth/network-request-failed', 'auth/user-token-expired', 'auth/internal-error', undefined, ''].every(c => { const m = em(c); return /[a-zà-ú]/.test(m) && !/auth\//.test(m) && !/firebase/i.test(m); }));
@@ -120,7 +121,7 @@ const tick = () => new Promise(r => setImmediate(r));
   t = makeEnv({ providers: ['google.com'], email: 'ana@gmail.com' });
   t.api.openMyAccount();
   root = t.dom['acct-root'];
-  check('quem entra SÓ com o Google não vê formulário: vê a explicação e o e-mail do suporte', /entra com o <strong>Google<\/strong>/.test(root.innerHTML) && /controlado pelo Google/.test(root.innerHTML) && /mailto:suporte@peladanamao\.com\.br/.test(root.innerHTML) && !t.dom['acct-newmail'] && !t.dom['acct-pw-cur'] && !t.dom['acct-mail-go'], root.innerHTML.slice(0, 300));
+  check('quem entra SÓ com o Google não vê formulário: vê a explicação e o e-mail do suporte', /controlado pelo <strong>Google<\/strong>/.test(root.innerHTML) && /não dá para trocá-lo por aqui/.test(root.innerHTML) && /mailto:suporte@peladanamao\.com\.br/.test(root.innerHTML) && !t.dom['acct-newmail'] && !t.dom['acct-pw-cur'] && !t.dom['acct-mail-go'], root.innerHTML.slice(0, 300));
   check('Google: promete que o suporte muda "sem você perder suas ligas"', /sem você perder suas ligas/.test(root.innerHTML));
   t = makeEnv({ providers: ['password', 'google.com'] });
   t.api.openMyAccount();
@@ -236,6 +237,12 @@ const tick = () => new Promise(r => setImmediate(r));
   await pw;
   check('senha certa: confirma a senha atual e depois troca pela nova, nessa ordem', t.calls.reauth.length === 1 && t.calls.reauth[0].e === 'ana@x.com' && t.calls.reauth[0].p === 'velha1' && t.calls.updatePw.length === 1 && t.calls.updatePw[0] === 'nova123', t.calls);
   check('depois de trocar: campos limpos, mensagem verde e aviso dos outros aparelhos', t.dom['acct-pw-cur'].value === '' && t.dom['acct-pw-new'].value === '' && t.dom['acct-pw-rep'].value === '' && /Senha trocada/.test(textOf(msgOf(t, 'pw'))) && /outros aparelhos/.test(textOf(msgOf(t, 'pw'))) && msgOf(t, 'pw').style.color === 'var(--accent)' && t.dom['acct-pw-go'].disabled === false);
+  const t2 = makeEnv({ email: 'ana@x.com' });
+  t2.api.openMyAccount();
+  t2.dom['acct-pw-cur'].value = 'velha1'; t2.dom['acct-pw-new'].value = 'nova123'; t2.dom['acct-pw-rep'].value = 'nova123';
+  const pa = t2.api.submitPasswordChange(), pb = t2.api.submitPasswordChange();   // segundo toque no meio da troca
+  await pa; await pb;
+  check('toque repetido no meio da troca de senha é ignorado (uma confirmação e uma troca só)', t2.calls.reauth.length === 1 && t2.calls.updatePw.length === 1, t2.calls);
   t.dom['acct-pw-cur'].value = 'velha1'; t.dom['acct-pw-new'].value = 'nova456'; t.dom['acct-pw-rep'].value = 'nova456';
   t.user.failReauth.push('auth/wrong-password');
   await t.api.submitPasswordChange();
@@ -275,6 +282,9 @@ const tick = () => new Promise(r => setImmediate(r));
   t.api.syncAccountEmail({ uid: 'u1', email: 'ana.nova@x.com' });
   await tick();
   check('servidor diz que nada mudou: o cadastro em memória não é mexido', t.env.st.userDoc.email === 'ana@x.com');
+  t.api.syncAccountEmail({ uid: 'u1', email: 'ana.nova@x.com' });
+  await tick();
+  check('…e mesmo com o cadastro em memória ainda velho, a correção é pedida uma vez só por sessão (não insiste a cada entrada)', t.calls.callFn.length === 1, t.calls.callFn);
   t = makeEnv({ email: 'ana.nova@x.com', userDocEmail: 'ana@x.com' });
   t.env.st.authUser = { uid: 'outra', email: 'outra@x.com' };   // trocou de conta enquanto a resposta vinha
   t.api.syncAccountEmail({ uid: 'u1', email: 'ana.nova@x.com' });
@@ -312,7 +322,7 @@ const tick = () => new Promise(r => setImmediate(r));
   const sec = plainM(manual.slice(secStart, manual.indexOf('</section>', secStart)));
   check('manual: tem a seção "Minha conta" (#minha-conta)', manual.indexOf('id="minha-conta"') > 0, null);
   check('manual: explica o e-mail novo com link, que a troca só vale depois de tocar no link, que as ligas e o vínculo continuam e que os aparelhos pedem login de novo', /link/.test(sec) && /só vale depois/.test(sec) && /ligas/.test(sec) && /vínculo/.test(sec) && /pedem login de novo/.test(sec), sec.slice(0, 400));
-  check('manual: explica o que fazer se o link não chegar (o e-mail novo já tem conta) e quem entra só com o Google', /não chegar/.test(sec) && /já tem uma conta/.test(sec) && /Google/.test(sec) && /suporte@peladanamao\.com\.br/.test(sec), sec.slice(0, 400));
+  check('manual: explica o que fazer se o link não chegar (o e-mail novo já tem conta) e quem entra só com o Google', /não chegar/.test(sec) && /Quase sempre é porque o e-mail novo já tem uma conta/.test(sec) && /Firebase não avisa quando isso acontece/.test(sec) && /Google/.test(sec) && /suporte@peladanamao\.com\.br/.test(sec), sec.slice(0, 400));
   check('manual: a tabela diz que o dono do sistema e quem entra só com o Google NÃO trocam o e-mail pelo app, e a senha também se troca em Minha conta', /Dono do sistema Não: o e-mail dele está fixo no código/.test(sec) && /Só com o Google Não: o e-mail dessa conta é controlado pelo Google/.test(sec) && /Trocar a senha Em ✉️ Minha conta/.test(sec) && /a senha atual/.test(sec), sec.slice(0, 400));
   check('manual: tem o passo a passo do dono (script trocar-email.js, simulação antes, repetir com --aplicar, chave de administrador, apagar a chave depois)', /trocar-email\.js/.test(sec) && /Simule primeiro/.test(sec) && /repita o comando com --aplicar/.test(sec) && /chave de administrador/.test(sec) && /Apague o arquivo da chave/.test(sec), sec.slice(0, 600));
 

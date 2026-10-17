@@ -3297,7 +3297,7 @@ function myAccountHtml() {
   if (isSystemOwner()) {
     body = p('Este é o e-mail do <strong>dono do sistema</strong>: ele está fixo no código do app, das regras e das funções. Para trocá-lo é preciso mudar o código junto, então o app não faz isso por aqui.');
   } else if (!how.password) {
-    body = p(`Você entra com o <strong>Google</strong>. O e-mail dessa conta é controlado pelo Google, então não dá para trocá-lo por aqui. Se precisar usar outro e-mail, escreva para <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent)">${SUPPORT_EMAIL}</a>: o suporte consegue mudar sem você perder suas ligas.`);
+    body = p(`O e-mail dessa conta é controlado pelo <strong>Google</strong>, então não dá para trocá-lo por aqui. Se precisar usar outro e-mail, escreva para <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent)">${SUPPORT_EMAIL}</a>: o suporte consegue mudar sem você perder suas ligas.`);
   } else {
     body = `${h('Trocar o e-mail')}
       ${p('Digite o e-mail novo. Vamos mandar um link para ele, e a troca só vale depois que você tocar no link. Suas ligas, seu vínculo com o jogador e seus convites continuam como estão. Quando a troca valer, todos os seus aparelhos pedem login de novo, com o e-mail novo.')}
@@ -3323,7 +3323,7 @@ function myAccountHtml() {
       <div style="font-size:17px;font-weight:800">✉️ Minha conta</div>
       <button onclick="closeMyAccount()" aria-label="Fechar" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:14px;flex-shrink:0">✕</button>
     </div>
-    <div style="overflow-y:auto;flex:1">
+    <div style="overflow-y:auto;flex:1;padding-right:8px">
       <div style="font-size:13px;color:var(--text2);line-height:1.6">Seu e-mail de login: <strong style="color:var(--text);word-break:break-all">${esc(u?.email || '')}</strong><br>Você entra com: ${esc(how.label)}.</div>
       ${body}
     </div>

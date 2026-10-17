@@ -47,8 +47,9 @@ function refOf(p) {
 }
 let failCommitsFrom = Infinity;   // nº do commit (1, 2, …) a partir do qual batch.commit() falha
 let commitCount = 0;
+const docPaths = [];   // caminhos pedidos ao banco com doc() (para conferir que nenhum caminho fora do lugar é lido)
 const fakeDb = {
-  doc: p => refOf(p),
+  doc: p => { docPaths.push(p); return refOf(p); },
   recursiveDelete: async ref => { for (const k of [...store.keys()]) if (k === ref.path || k.startsWith(ref.path + '/')) store.delete(k); },
   batch: () => {
     const ops = [];
@@ -744,8 +745,9 @@ const reset = () => {
   seedMail();
   store.set('users/ana', { ...user('ana'), leagues: { 'a/b': { role: 'player' }, '../x': { role: 'admin' }, L: { role: 'player' } } });
   const chavesAntes = [...store.keys()].filter(k => !k.startsWith('rate_limits/')).sort().join('|');
+  docPaths.length = 0;
   r = await sm({}, authOf('ana'));
-  check('mail: ligas com nome estranho no cadastro são ignoradas (nenhum caminho fora do lugar é lido ou criado)', r.changed === true && [...store.keys()].filter(k => !k.startsWith('rate_limits/')).sort().join('|') === chavesAntes, [...store.keys()]);
+  check('mail: ligas com nome estranho no cadastro são ignoradas (nenhum caminho fora do lugar é lido ou criado)', r.changed === true && [...store.keys()].filter(k => !k.startsWith('rate_limits/')).sort().join('|') === chavesAntes && !docPaths.some(p => /a\/b|\.\./.test(p)) && docPaths.some(p => p === 'leagues/L/link_requests/ana'), [docPaths, [...store.keys()]]);
 
   seedMail();
   let limite = 'ok';
