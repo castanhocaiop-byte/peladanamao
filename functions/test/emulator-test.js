@@ -989,6 +989,105 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
   }
 
+  // ═════════════ TROCAR O E-MAIL DO LOGIN: a função syncMyEmail e o atalho do dono ═════════════
+  {
+    console.log('\n── trocar o e-mail do login');
+    const admin = require('firebase-admin');
+    const adminApp = admin.initializeApp({ projectId: PROJECT }, 'troca-email');   // fala com os emuladores (FIREBASE_AUTH_EMULATOR_HOST e FIRESTORE_EMULATOR_HOST)
+    const adminAuth = adminApp.auth(), adminDb = adminApp.firestore();
+    const tool = require('../../scripts/trocar-email.js');
+    await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
+    const mk = async (email, extra = {}) => {   // conta de login + cadastro no banco, como o app cria
+      const u = await newUser(email);
+      await db.set('owner', 'users/' + u.uid, { email, displayName: email.split('@')[0], role: 'pending', createdAt: NOW, leagues: {}, ...extra });
+      return u;
+    };
+    const googleUser = async email => {         // conta que entra SÓ com o Google (login simulado do emulador)
+      const idToken = JSON.stringify({ sub: 'g-' + email, email, email_verified: true, name: 'Pessoa Google' });
+      const r = await http('POST', `${AUTH_URL}/accounts:signInWithIdp?key=fake`, null, { postBody: `id_token=${encodeURIComponent(idToken)}&providerId=google.com`, requestUri: 'http://localhost', returnIdpCredential: true, returnSecureToken: true });
+      if (r.status !== 200) throw new Error('signInWithIdp falhou ' + JSON.stringify(r.json));
+      const u = { uid: r.json.localId, token: r.json.idToken, email };
+      await db.set('owner', 'users/' + u.uid, { email, displayName: 'google', role: 'pending', createdAt: NOW, leagues: { la: { role: 'player', joinedAt: NOW } } });
+      return u;
+    };
+    const dataOf = async path => docData(await db.get('owner', path));
+    const notFound = async p => { try { await p; return false; } catch (e) { return e.code === 'auth/user-not-found'; } };
+
+    // ── a função syncMyEmail (o app chama na primeira entrada com o e-mail novo) ──
+    const T1 = await mk('troca1@teste.invalid', { leagues: { la: { role: 'player', playerKey: 'pl_t1', joinedAt: NOW }, lb: { role: 'pending', joinedAt: NOW } }, fcmTokens: ['tokT1'], notifEnabled: true });
+    await db.set('owner', 'leagues/lb/link_requests/' + T1.uid, { uid: T1.uid, email: T1.email, displayName: 'T1', status: 'pending', requestedAt: NOW, whatsapp: '11999990009' });
+    await db.set('owner', 'leagues/lc/link_requests/' + T1.uid, { uid: T1.uid, email: T1.email, status: 'pending' });   // liga que não está no cadastro dela
+    let rs = await callFn('syncMyEmail', null, {});
+    check('syncMyEmail sem login → não autenticado', rs.status === 401, rs.raw);
+    rs = await callFn('syncMyEmail', T1.token, {});
+    check('syncMyEmail com a cópia já igual ao login → ok, changed=false', rs.status === 200 && rs.result.ok === true && rs.result.changed === false, rs.raw);
+    await adminAuth.updateUser(T1.uid, { email: 'troca1-nova@teste.invalid' });   // o Firebase trocou o e-mail do login (depois do link no e-mail novo)
+    rs = await callFn('syncMyEmail', T1.token, { email: 'invasor@teste.invalid' });   // o token ainda carrega o e-mail velho; o que o app manda é ignorado
+    const u1 = await dataOf('users/' + T1.uid);
+    check('syncMyEmail depois da troca → changed=true e o cadastro passa a ter o e-mail NOVO do login (não o do token, nem o enviado)', rs.status === 200 && rs.result.changed === true && u1.email === 'troca1-nova@teste.invalid', [rs.raw, u1]);
+    check('…o resto do cadastro fica como estava (ligas, papel, vínculo, notificações, nome)', u1.leagues.la.role === 'player' && u1.leagues.la.playerKey === 'pl_t1' && u1.leagues.lb.role === 'pending' && u1.fcmTokens[0] === 'tokT1' && u1.notifEnabled === true && u1.displayName === 'troca1' && u1.role === 'pending', u1);
+    check('…o pedido de vínculo pendente de uma liga dela troca o e-mail e mantém o resto', (r => r.email === 'troca1-nova@teste.invalid' && r.whatsapp === '11999990009' && r.status === 'pending')(await dataOf('leagues/lb/link_requests/' + T1.uid)));
+    check('…pedido numa liga que não está no cadastro dela não é tocado', (await dataOf('leagues/lc/link_requests/' + T1.uid)).email === 'troca1@teste.invalid');
+    check('…o e-mail antigo não sobra no cadastro nem no pedido de vínculo', !JSON.stringify([u1, await dataOf('leagues/lb/link_requests/' + T1.uid)]).includes('troca1@teste.invalid'));
+    rs = await callFn('syncMyEmail', T1.token, {});
+    check('syncMyEmail de novo → changed=false (nada a corrigir)', rs.status === 200 && rs.result.changed === false, rs.raw);
+    const Tx = await mk('troca-outra@teste.invalid');
+    rs = await callFn('syncMyEmail', Tx.token, { uid: T1.uid });
+    check('syncMyEmail de outra conta não mexe na conta alheia (só a de quem chamou)', rs.status === 200 && rs.result.changed === false && (await dataOf('users/' + T1.uid)).email === 'troca1-nova@teste.invalid' && (await dataOf('users/' + Tx.uid)).email === 'troca-outra@teste.invalid', rs.raw);
+    check('o app continua sem poder gravar o e-mail direto no cadastro (as regras barram)', no(await db.update(T1.token, 'users/' + T1.uid, { email: 'x@y.z' })), '');
+
+    // ── o atalho do dono (scripts/trocar-email.js) com o Admin SDK de verdade ──
+    const go = async (argv, answers = []) => {
+      const out = [], err = [], q = [...answers];
+      const code = await tool.run(argv, { isTTY: true, ask: async () => (q.length ? q.shift() : ''), connect: async () => ({ auth: adminAuth, db: adminDb }), out: s => out.push(s), err: s => err.push(s) });
+      return { code, out: out.join('\n'), err: err.join('\n') };
+    };
+    const ARG = (a, b, ...mais) => [a, b, '--projeto', 'seriebaceoma-staging', ...mais];
+    const signIn = (email, pw = PASSWORD) => http('POST', `${AUTH_URL}/accounts:signInWithPassword?key=fake`, null, { email, password: pw, returnSecureToken: true });
+
+    const T2 = await mk('troca2@teste.invalid', { leagues: { la: { role: 'player', playerKey: 'pl_t2', joinedAt: NOW }, lb: { role: 'pending', joinedAt: NOW } }, fcmTokens: ['tokT2'] });
+    await db.set('owner', 'leagues/lb/link_requests/' + T2.uid, { uid: T2.uid, email: T2.email, status: 'pending', requestedAt: NOW });
+    const antesDaTroca = Date.now();
+    let g = await go(ARG('troca2@teste.invalid', 'troca2-nova@teste.invalid'));
+    check('atalho: simulação mostra a conta e o plano, e NÃO muda nada (login nem banco)', g.code === 0 && /SIMULAÇÃO/.test(g.out) && /uid /.test(g.out) && (await adminAuth.getUser(T2.uid)).email === 'troca2@teste.invalid' && (await dataOf('users/' + T2.uid)).email === 'troca2@teste.invalid', g);
+    g = await go(ARG('troca2@teste.invalid', 'troca2-nova@teste.invalid', '--aplicar'), ['troca2-nova@teste.invalid', 'TROCAR']);
+    const after = await adminAuth.getUser(T2.uid);
+    check('atalho: troca o e-mail do login da MESMA conta (mesmo uid), ainda não verificado', g.code === 0 && after.email === 'troca2-nova@teste.invalid' && after.emailVerified === false, [g, after.email]);
+    check('atalho: entra com o e-mail novo e a MESMA senha, na mesma conta; com o antigo não entra mais', (r => r.status === 200 && r.json.localId === T2.uid)(await signIn('troca2-nova@teste.invalid')) && (await signIn('troca2@teste.invalid')).status === 400);
+    // (o emulador não recusa o refresh token antigo, então confere o pedido: o horário a partir do qual os tokens valem passa a ser o da troca)
+    check('atalho: pede ao Firebase para encerrar as sessões abertas (tokens só valem a partir do momento da troca)', !!after.tokensValidAfterTime && new Date(after.tokensValidAfterTime).getTime() >= antesDaTroca - 1000, after.tokensValidAfterTime);
+    const u2 = await dataOf('users/' + T2.uid);
+    check('atalho: cadastro e pedido de vínculo ganham o e-mail novo; ligas, papel, vínculo e notificações ficam', u2.email === 'troca2-nova@teste.invalid' && u2.leagues.la.playerKey === 'pl_t2' && u2.leagues.la.role === 'player' && u2.fcmTokens[0] === 'tokT2' && (await dataOf('leagues/lb/link_requests/' + T2.uid)).email === 'troca2-nova@teste.invalid', u2);
+
+    // e-mail novo ocupado por uma conta vazia (só pedido pendente): precisa de --apagar-conta-vazia
+    const T3 = await mk('troca3@teste.invalid', { leagues: { lb: { role: 'pending', joinedAt: NOW } } });
+    await db.set('owner', 'leagues/lb/link_requests/' + T3.uid, { uid: T3.uid, email: T3.email, status: 'pending' });
+    const T4 = await mk('troca4@teste.invalid', { leagues: { la: { role: 'admin', joinedAt: NOW } } });
+    g = await go(ARG('troca4@teste.invalid', 'troca3@teste.invalid', '--aplicar'), ['troca3@teste.invalid', 'TROCAR']);
+    check('atalho: e-mail novo com conta vazia, sem --apagar-conta-vazia → recusa e não muda nada', g.code === 1 && /está vazia/.test(g.err) && (await adminAuth.getUser(T4.uid)).email === 'troca4@teste.invalid' && (await adminAuth.getUser(T3.uid)).email === 'troca3@teste.invalid', g);
+    g = await go(ARG('troca4@teste.invalid', 'troca3@teste.invalid', '--aplicar', '--apagar-conta-vazia'), ['troca3@teste.invalid', 'TROCAR']);
+    check('atalho: com --apagar-conta-vazia apaga a conta vazia (login, cadastro e pedido) e a conta da pessoa fica com o e-mail', g.code === 0 && await notFound(adminAuth.getUser(T3.uid)) && (await adminAuth.getUser(T4.uid)).email === 'troca3@teste.invalid' && (await db.get('owner', 'users/' + T3.uid)).status === 404 && (await db.get('owner', 'leagues/lb/link_requests/' + T3.uid)).status === 404, g);
+    check('atalho: a liga e o papel de admin da conta trocada continuam', (await dataOf('users/' + T4.uid)).leagues.la.role === 'admin' && (await dataOf('users/' + T4.uid)).email === 'troca3@teste.invalid');
+
+    // e-mail novo de uma conta que já participa de liga: recusa
+    const T5 = await mk('troca5@teste.invalid', { leagues: { la: { role: 'player', joinedAt: NOW } } });
+    const T6 = await mk('troca6@teste.invalid');
+    g = await go(ARG('troca6@teste.invalid', 'troca5@teste.invalid', '--aplicar', '--apagar-conta-vazia'), ['troca5@teste.invalid', 'TROCAR']);
+    check('atalho: e-mail novo de conta que já é jogadora de uma liga → recusa e não apaga nada', g.code === 1 && /já participa de la/.test(g.err) && (await adminAuth.getUser(T5.uid)).email === 'troca5@teste.invalid' && (await adminAuth.getUser(T6.uid)).email === 'troca6@teste.invalid', g);
+
+    // conta que entra só com o Google
+    const G1 = await googleUser('google1@teste.invalid');
+    const gl = (await adminAuth.getUser(G1.uid)).providerData.map(p => p.providerId);
+    g = await go(ARG('google1@teste.invalid', 'google1-nova@teste.invalid', '--aplicar'), ['google1-nova@teste.invalid', 'TROCAR']);
+    check('atalho: conta só com Google, sem --desvincular-google → recusa e não muda nada', gl.length === 1 && gl[0] === 'google.com' && g.code === 1 && /SÓ com o Google/.test(g.err) && (await adminAuth.getUser(G1.uid)).email === 'google1@teste.invalid', [gl, g]);
+    g = await go(ARG('google1@teste.invalid', 'google1-nova@teste.invalid', '--aplicar', '--desvincular-google'), ['google1-nova@teste.invalid', 'TROCAR']);
+    const ga = await adminAuth.getUser(G1.uid);
+    check('atalho: com --desvincular-google troca o e-mail e tira o login Google da conta (mesmo uid)', g.code === 0 && ga.email === 'google1-nova@teste.invalid' && !ga.providerData.some(p => p.providerId === 'google.com'), [g, ga.providerData]);
+    check('atalho: depois disso "Esqueci minha senha" funciona para o e-mail novo (o Firebase aceita o pedido)', (await http('POST', `${AUTH_URL}/accounts:sendOobCode?key=fake`, null, { requestType: 'PASSWORD_RESET', email: 'google1-nova@teste.invalid' })).status === 200);
+
+    await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
+  }
+
   console.log(`\n${passes} verificações ok, ${fails} falha(s)`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERRO NO TESTE', e); process.exit(1); });

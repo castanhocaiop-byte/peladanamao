@@ -109,16 +109,25 @@ const fakeDb = {
 class HttpsError extends Error { constructor(code, message, details) { super(message); this.code = code; this.details = details; } }
 const authDeleted = [];
 let authDeleteError = null;   // código de erro simulado ao apagar o login
+const authRecords = {};       // cadastro do login (Firebase Auth) simulado: o e-mail ATUAL de cada conta
+const authGetCalls = [];      // de quais contas o servidor leu o cadastro do login
 const callableOpts = [];
 const logs = [];
 const admin = {
   initializeApp() {},
   firestore: Object.assign(() => fakeDb, { FieldValue, FieldPath }),
   messaging: () => ({}),
-  auth: () => ({ deleteUser: async uid => {
-    if (authDeleteError) { const e = new Error('erro simulado'); e.code = authDeleteError; throw e; }
-    authDeleted.push(uid);
-  } }),
+  auth: () => ({
+    deleteUser: async uid => {
+      if (authDeleteError) { const e = new Error('erro simulado'); e.code = authDeleteError; throw e; }
+      authDeleted.push(uid);
+    },
+    getUser: async uid => {
+      authGetCalls.push(uid);
+      if (!(uid in authRecords)) { const e = new Error('sem cadastro de login'); e.code = 'auth/user-not-found'; throw e; }
+      return { uid, email: authRecords[uid].email };
+    },
+  }),
 };
 
 // Mínimo para o módulo carregar: nenhum teste deste arquivo exercita o fluxo de pagamento
@@ -174,7 +183,7 @@ const reset = () => {
 
 (async () => {
   // opções das funções
-  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 19 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
+  check('todas as callables ficam em us-east1 com limite de instâncias', callableOpts.length === 20 && callableOpts.every(o => o.region === 'us-east1' && o.maxInstances > 0), callableOpts);
 
   // ───────── joinLeague ─────────
   reset();
@@ -671,6 +680,92 @@ const reset = () => {
   store.set('users/adm2', { email: 'adm2@x.com', role: 'pending', playerKey: 'ana', leagues: { L: { role: 'admin', playerKey: 'ana' } } });
   const arAdm = await am({ liga: 'L' }, authOf('adm2'));
   check('anon: admin também pode anonimizar o próprio nome', arAdm.ok === true && arAdm.newKey.startsWith('jogador_anonimo_'), arAdm);
+
+  // ───────── syncMyEmail (trocar o e-mail do login: o servidor corrige as cópias) ─────────
+  const sm = (data, auth) => call(fns.syncMyEmail, data, auth);
+  const dados = () => [...store.entries()].filter(([k]) => !k.startsWith('rate_limits/'));   // tudo, menos os contadores de limite
+  const seedMail = () => {
+    reset();
+    for (const k of Object.keys(authRecords)) delete authRecords[k];
+    authGetCalls.length = 0; logs.length = 0;
+    store.set('users/ana', { email: 'ana@x.com', role: 'pending', displayName: 'Ana', fcmTokens: ['tk1'], notifEnabled: true, playerKey: 'ana', leagues: { L: { role: 'player', playerKey: 'ana', joinedAt: '2026-09-01' }, B: { role: 'pending' } } });
+    store.set('leagues/B/link_requests/ana', { uid: 'ana', email: 'ana@x.com', displayName: 'Ana', status: 'pending', whatsapp: '11999990000' });
+    store.set('leagues/C/link_requests/ana', { uid: 'ana', email: 'ana@x.com', status: 'pending' });   // liga que NÃO está no cadastro dela
+    authRecords.ana = { email: 'ana.nova@x.com' };                                                     // o login já tem o e-mail novo
+  };
+
+  seedMail();
+  check('mail: sem login', await codeOf(sm({}, null)) === 'unauthenticated');
+  check('mail: sem login não lê o cadastro do login nem grava nada', authGetCalls.length === 0 && user('ana').email === 'ana@x.com');
+
+  seedMail();
+  const antes = JSON.parse(JSON.stringify(user('ana')));
+  r = await sm({}, authOf('ana', { email: 'ana@x.com' }));   // o token ainda traz o e-mail velho (vale até 1 hora)
+  check('mail: devolve ok e changed=true quando a cópia estava diferente do login', r.ok === true && r.changed === true, r);
+  check('mail: grava o e-mail do LOGIN (Firebase Auth), não o do token', user('ana').email === 'ana.nova@x.com', user('ana'));
+  check('mail: só o e-mail mudou no cadastro (papel, ligas, jogador, notificações e nome intactos)', JSON.stringify({ ...user('ana'), email: 'X' }) === JSON.stringify({ ...antes, email: 'X' }), user('ana'));
+  check('mail: o pedido de vínculo pendente de uma liga dela também troca o e-mail, e o resto do pedido fica', store.get('leagues/B/link_requests/ana').email === 'ana.nova@x.com' && store.get('leagues/B/link_requests/ana').whatsapp === '11999990000' && store.get('leagues/B/link_requests/ana').status === 'pending', store.get('leagues/B/link_requests/ana'));
+  check('mail: pedido numa liga que não está no cadastro dela não é tocado', store.get('leagues/C/link_requests/ana').email === 'ana@x.com', store.get('leagues/C/link_requests/ana'));
+  check('mail: lê só o login de quem chamou', authGetCalls.length === 1 && authGetCalls[0] === 'ana', authGetCalls);
+  check('mail: outras contas não foram tocadas', user('adm').email === 'adm@x.com' && user('pend').email === 'pend@x.com' && user('dono').email === 'dono@x.com');
+  check('mail: o e-mail antigo não sobra no cadastro nem no pedido de vínculo desta conta', !JSON.stringify([user('ana'), store.get('leagues/B/link_requests/ana')]).includes('ana@x.com'));
+  const info = logs.filter(l => l.m === 'syncMyEmail: cópias do e-mail atualizadas');
+  check('mail: registra o que foi corrigido sem escrever nenhum e-mail no registro', info.length === 1 && info[0].d.cadastro === true && info[0].d.pedidosDeVinculo === 1 && !JSON.stringify(logs).includes('@'), logs);
+
+  const fotoAntes = JSON.stringify(dados());
+  r = await sm({}, authOf('ana'));
+  check('mail: chamar de novo (cópia já igual ao login) não muda nada e devolve changed=false', r.ok === true && r.changed === false && JSON.stringify(dados()) === fotoAntes, r);
+
+  seedMail();
+  r = await sm({ email: 'invasor@x.com', uid: 'adm', liga: 'L' }, authOf('ana'));
+  check('mail: ignora qualquer dado enviado pelo app: ninguém escolhe o e-mail que será gravado nem a conta que será corrigida', user('ana').email === 'ana.nova@x.com' && user('adm').email === 'adm@x.com' && !JSON.stringify(dados()).includes('invasor'), user('ana'));
+
+  seedMail();
+  authRecords.ana = { email: 'Ana.Nova@X.com' };
+  await sm({}, authOf('ana'));
+  check('mail: grava o e-mail exatamente como o login o tem (sem mexer em maiúsculas)', user('ana').email === 'Ana.Nova@X.com', user('ana'));
+
+  seedMail();
+  authRecords.ana = { email: '' };
+  r = await sm({}, authOf('ana'));
+  check('mail: login sem e-mail: não apaga nem troca a cópia', r.ok === true && r.changed === false && user('ana').email === 'ana@x.com', r);
+  authRecords.ana = { email: undefined };
+  r = await sm({}, authOf('ana'));
+  check('mail: login com e-mail indefinido: também não mexe', r.changed === false && user('ana').email === 'ana@x.com', r);
+
+  seedMail();
+  check('mail: conta sem cadastro de login (apagada no Firebase): não-encontrada, nada é gravado', await codeOf(sm({}, authOf('fantasma'))) === 'not-found' && JSON.stringify(dados()).includes('ana@x.com'));
+
+  seedMail();
+  authRecords.nova2 = { email: 'nova2@x.com' };
+  r = await sm({}, authOf('nova2'));
+  check('mail: login existe mas o cadastro do app ainda não (conta nova): não cria cadastro', r.ok === true && r.changed === false && !store.has('users/nova2'), r);
+
+  seedMail();
+  store.set('users/ana', { ...user('ana'), leagues: { 'a/b': { role: 'player' }, '../x': { role: 'admin' }, L: { role: 'player' } } });
+  const chavesAntes = [...store.keys()].filter(k => !k.startsWith('rate_limits/')).sort().join('|');
+  r = await sm({}, authOf('ana'));
+  check('mail: ligas com nome estranho no cadastro são ignoradas (nenhum caminho fora do lugar é lido ou criado)', r.changed === true && [...store.keys()].filter(k => !k.startsWith('rate_limits/')).sort().join('|') === chavesAntes, [...store.keys()]);
+
+  seedMail();
+  let limite = 'ok';
+  for (let i = 0; i < 20; i++) limite = await codeOf(sm({}, authOf('ana')));
+  check('mail: as primeiras 20 chamadas no minuto passam', limite === 'ok', limite);
+  check('mail: a 21ª chamada no minuto é barrada (limite de tentativas)', await codeOf(sm({}, authOf('ana'))) === 'resource-exhausted');
+  check('mail: o limite é por conta: outra conta continua passando', (authRecords.adm = { email: 'adm@x.com' }, await codeOf(sm({}, authOf('adm')))) === 'ok');
+
+  const accountEmail = require('../account-email');
+  const semUid = async u => { try { await accountEmail.syncEmailCopies(fakeDb, u, 'a@x.com'); return 'ok'; } catch (e) { return 'erro'; } };
+  check('mail (módulo): uid vazio, com barra ou de tipo errado é recusado', await semUid('') === 'erro' && await semUid('a/b') === 'erro' && await semUid(null) === 'erro' && await semUid({}) === 'erro');
+  const semEmail = async e => { try { await accountEmail.syncEmailCopies(fakeDb, 'ana', e); return 'ok'; } catch (_) { return 'erro'; } };
+  check('mail (módulo): e-mail vazio ou de tipo errado é recusado (nunca apaga a cópia)', await semEmail('') === 'erro' && await semEmail('   ') === 'erro' && await semEmail(null) === 'erro' && await semEmail(5) === 'erro');
+  seedMail();
+  const rm = await accountEmail.syncEmailCopies(fakeDb, 'ana', 'ana.nova@x.com');
+  check('mail (módulo): devolve o resumo do que corrigiu: cadastro e 1 pedido de vínculo', rm.userDoc === true && rm.changed === true && rm.linkRequests === 1, rm);
+  const rm2 = await accountEmail.syncEmailCopies(fakeDb, 'ana', 'ana.nova@x.com');
+  check('mail (módulo): repetir não corrige nada de novo', rm2.changed === false && rm2.linkRequests === 0, rm2);
+  const rm3 = await accountEmail.syncEmailCopies(fakeDb, 'ninguem', 'a@x.com');
+  check('mail (módulo): conta sem cadastro: userDoc=false e nada criado', rm3.userDoc === false && !store.has('users/ninguem'), rm3);
 
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

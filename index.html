@@ -1587,6 +1587,7 @@ function initFirebase() {
         const snap = await DB.doc(`users/${user.uid}`).get();
         if (snap.exists) {
           st.userDoc = snap.data();
+          syncAccountEmail(user); // e-mail do login trocado: o servidor corrige a cópia do cadastro
 
           // Processa invite na URL antes de rotear (vale para usuários com ou sem ligas)
           const invParam  = new URLSearchParams(location.search).get('invite');
@@ -3010,6 +3011,7 @@ let _delAcc = { busy: false, reauth: '', erased: false };
 
 function deleteAccountLink() {
   return `<div style="text-align:center;margin:26px 0 8px;display:flex;flex-direction:column;gap:10px">
+    <button onclick="openMyAccount()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">✉️ Minha conta</button>
     <button onclick="openDeleteAccount()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🗑️ Excluir minha conta</button>
     <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">🔒 Privacidade</button>
     <a href="/termos.html" target="_blank" rel="noopener" style="color:var(--text3);font-size:12px;text-decoration:underline;font-family:inherit">📄 Termos de Uso</a>
@@ -3097,11 +3099,12 @@ function openPrivacyPolicy() {
       ${h3('Seus direitos')}
       ${p('Você pode, a qualquer momento e sem pedir para o admin:')}
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
+        ${li('<strong>Trocar o e-mail do login e a senha</strong> — em ✉️ Minha conta, no fim das telas da conta. O e-mail novo só vale depois que você tocar no link enviado a ele. O e-mail antigo deixa de ser usado: é trocado no seu cadastro, nos pedidos de vinculação pendentes e nos avisos do app. As cópias de segurança diárias do sistema não são editadas e podem guardá-lo enquanto existirem.')}
         ${li('<strong>Trocar ou remover sua foto</strong> — em Meu Craque.')}
         ${li('<strong>Anonimizar seu nome no histórico</strong> — troca seu nome real, em todo o histórico da liga, por um identificador anônimo, e apaga sua foto.')}
         ${li('<strong>Excluir sua conta</strong> — apaga seu login, seu cadastro, sua foto e seu WhatsApp. O nome no histórico esportivo permanece, a menos que você também anonimize antes.')}
       </ul>
-      ${p('Ambas as opções ficam no fim da aba <strong>Meu Craque</strong>. Se quiser tirar seu nome de campeonatos específicos ou sair da liga, fale com o admin.')}
+      ${p('Essas opções ficam no fim da aba <strong>Meu Craque</strong> (a troca de e-mail e senha também fica nas telas sem liga). Se quiser tirar seu nome de campeonatos específicos ou sair da liga, fale com o admin.')}
 
       ${h3('Responsável pelos seus dados')}
       ${p('Cada liga é administrada de forma independente pelo seu admin, que decide quem participa e é o contato para dúvidas sobre os dados daquela liga. Quem criou a liga pode encerrá-la a qualquer momento: isso apaga, de forma definitiva, o elenco, os resultados, o financeiro, as fotos e os contatos daquela liga, e todos os membros perdem o acesso a ela.')}
@@ -3227,6 +3230,230 @@ async function finishAccountDeletion() {
   } catch(_) {}
   await signOutUser();
   toast('Conta excluída. Seus dados pessoais foram apagados.', 'ok');
+}
+
+/* ── Minha conta: trocar o e-mail do login e a senha ─────────────────────────────────────────────────────
+   Camada solta no <body>, como a de excluir a conta: funciona em qualquer tela, inclusive nas sem liga, e o render() não a apaga. A conta é
+   identificada pelo uid do Firebase, não pelo e-mail: trocar o e-mail da MESMA conta mantém ligas, papéis, vínculo com o jogador e convites.
+   A troca em si é do Firebase (verifyBeforeUpdateEmail): ele manda um link ao e-mail NOVO e o login só muda depois de a pessoa tocar nele;
+   nesse momento o Firebase encerra as sessões de todos os aparelhos. Se o e-mail novo já tem conta, o Firebase não manda nada e não avisa
+   (proteção contra descobrir quem tem cadastro), por isso o texto diz o que fazer se o link não chegar. As cópias do e-mail no banco são
+   corrigidas pelo servidor (syncMyEmail), na primeira entrada com o e-mail novo. Quem entra só com o Google não troca o e-mail por aqui (ele
+   é do Google) e o e-mail do dono do sistema é fixo no código. */
+const SUPPORT_EMAIL = 'suporte@peladanamao.com.br';
+let _acct = { busy: '', reauth: false };
+let _emailSyncTried = '';
+
+// Como a pessoa entra. O link por e-mail também é do tipo "password" no Firebase (só que ela não tem senha).
+function accountSignIn() {
+  const ids = (AUTH?.currentUser?.providerData || []).map(p => p.providerId);
+  const password = ids.includes('password'), google = ids.includes('google.com');
+  return { password, google, label: [password ? 'e-mail e senha ou link por e-mail' : '', google ? 'Google' : ''].filter(Boolean).join(' + ') || 'outro método' };
+}
+
+function emailChangeProblem(typed, current) {
+  const t = String(typed || '').trim();
+  if (!t) return 'Digite o e-mail novo.';
+  if (t.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return 'Este não parece um e-mail. Confira e tente de novo.';
+  if (t.toLowerCase() === String(current || '').trim().toLowerCase()) return 'Este já é o seu e-mail de login.';
+  return '';
+}
+
+function passwordChangeProblem(cur, nw, rep) {
+  if (!cur) return 'Digite a sua senha atual.';
+  if (!nw || nw.length < 6) return 'A senha nova precisa ter pelo menos 6 caracteres.';
+  if (nw.length > 128) return 'A senha nova é grande demais.';
+  if (nw !== rep) return 'A senha nova e a repetição não são iguais.';
+  if (nw === cur) return 'A senha nova precisa ser diferente da atual.';
+  return '';
+}
+
+function accountErrMsg(code) {
+  switch (code) {
+    case 'app/empty-password': return 'Digite a sua senha.';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential': return 'Senha incorreta. Se você entra pelo link do e-mail e não tem senha, saia da conta, entre de novo pelo link e repita.';
+    case 'auth/invalid-email': return 'Este não parece um e-mail. Confira e tente de novo.';
+    case 'auth/weak-password': return 'Senha muito fraca (mínimo 6 caracteres).';
+    case 'auth/too-many-requests': return 'Muitas tentativas. Tente mais tarde.';
+    case 'auth/network-request-failed': return 'Sem conexão com a internet. Confira a rede e tente de novo.';
+    case 'auth/user-token-expired':
+    case 'auth/user-disabled':
+    case 'auth/user-not-found': return 'Sua sessão acabou. Saia da conta, entre de novo e repita.';
+    default: return 'Não foi possível concluir agora. Tente de novo.';
+  }
+}
+
+function myAccountHtml() {
+  const u = AUTH?.currentUser;
+  const how = accountSignIn();
+  const field = `width:100%;box-sizing:border-box;padding:12px 14px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:inherit;outline:none`;
+  const lab = t => `<span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:6px">${t}</span>`;
+  const h = t => `<div style="font-size:13px;font-weight:800;color:var(--text);margin:20px 0 6px">${t}</div>`;
+  const p = t => `<p style="margin:0 0 10px;font-size:13px;color:var(--text2);line-height:1.6">${t}</p>`;
+  const msg = id => `<div id="${id}" role="status" style="min-height:18px;margin:4px 0 10px;font-size:13px;line-height:1.5;color:var(--danger)"></div>`;
+  const btn = (id, fn, label) => `<button id="${id}" onclick="${fn}" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">${label}</button>`;
+  let body;
+  if (isSystemOwner()) {
+    body = p('Este é o e-mail do <strong>dono do sistema</strong>: ele está fixo no código do app, das regras e das funções. Para trocá-lo é preciso mudar o código junto, então o app não faz isso por aqui.');
+  } else if (!how.password) {
+    body = p(`Você entra com o <strong>Google</strong>. O e-mail dessa conta é controlado pelo Google, então não dá para trocá-lo por aqui. Se precisar usar outro e-mail, escreva para <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent)">${SUPPORT_EMAIL}</a>: o suporte consegue mudar sem você perder suas ligas.`);
+  } else {
+    body = `${h('Trocar o e-mail')}
+      ${p('Digite o e-mail novo. Vamos mandar um link para ele, e a troca só vale depois que você tocar no link. Suas ligas, seu vínculo com o jogador e seus convites continuam como estão. Quando a troca valer, todos os seus aparelhos pedem login de novo, com o e-mail novo.')}
+      <label style="display:block;margin-bottom:10px">${lab('E-mail novo')}<input id="acct-newmail" type="email" autocomplete="email" inputmode="email" autocapitalize="none" maxlength="254" style="${field}"></label>
+      <div id="acct-pass" hidden style="margin-bottom:10px">
+        ${lab('Sua senha')}
+        <input id="acct-password" type="password" autocomplete="current-password" style="${field}">
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Entra pelo link do e-mail e não tem senha? Saia da conta, entre de novo pelo link e repita a troca logo em seguida.</div>
+      </div>
+      ${msg('acct-mail-msg')}
+      ${btn('acct-mail-go', 'submitEmailChange()', 'Enviar link de confirmação')}
+      ${h('Trocar a senha')}
+      ${p('Digite a senha atual e a senha nova. Nos outros aparelhos você vai precisar entrar de novo com a senha nova. Entra pelo link do e-mail e nunca criou uma senha? Use “Esqueci minha senha” na tela de entrada para criar uma.')}
+      <label style="display:block;margin-bottom:10px">${lab('Senha atual')}<input id="acct-pw-cur" type="password" autocomplete="current-password" style="${field}"></label>
+      <label style="display:block;margin-bottom:10px">${lab('Senha nova (mínimo 6 caracteres)')}<input id="acct-pw-new" type="password" autocomplete="new-password" style="${field}"></label>
+      <label style="display:block;margin-bottom:10px">${lab('Repita a senha nova')}<input id="acct-pw-rep" type="password" autocomplete="new-password" style="${field}"></label>
+      ${msg('acct-pw-msg')}
+      ${btn('acct-pw-go', 'submitPasswordChange()', 'Trocar senha')}`;
+  }
+  return `<div class="sheet" onclick="event.stopPropagation()" style="max-height:88dvh;display:flex;flex-direction:column">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:17px;font-weight:800">✉️ Minha conta</div>
+      <button onclick="closeMyAccount()" aria-label="Fechar" style="background:var(--s2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:14px;flex-shrink:0">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">Seu e-mail de login: <strong style="color:var(--text);word-break:break-all">${esc(u?.email || '')}</strong><br>Você entra com: ${esc(how.label)}.</div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+function openMyAccount() {
+  if (!AUTH?.currentUser) return;
+  _acct = { busy: '', reauth: false };
+  closeMyAccount();
+  const root = document.createElement('div');
+  root.id = 'acct-root';
+  root.className = 'overlay';
+  root.onclick = closeMyAccount;
+  root.innerHTML = myAccountHtml();
+  document.body.appendChild(root);
+  document.getElementById('acct-newmail')?.focus();
+}
+
+function closeMyAccount() {
+  if (_acct.busy) return; // não fecha no meio de um pedido
+  document.getElementById('acct-root')?.remove();
+}
+
+function _acctMsg(which, text, ok, html) {
+  const el = document.getElementById('acct-' + which + '-msg');
+  if (!el) return;
+  el.style.color = ok ? 'var(--accent)' : 'var(--danger)';
+  if (html) el.innerHTML = text; else el.textContent = text || '';
+}
+
+function _acctRefresh() {
+  const mail = document.getElementById('acct-mail-go');
+  if (mail) {
+    mail.disabled = !!_acct.busy;
+    mail.style.opacity = _acct.busy ? '.6' : '1';
+    mail.textContent = _acct.busy === 'mail' ? 'Enviando…' : _acct.reauth ? 'Confirmar senha e enviar o link' : 'Enviar link de confirmação';
+  }
+  const pw = document.getElementById('acct-pw-go');
+  if (pw) {
+    pw.disabled = !!_acct.busy;
+    pw.style.opacity = _acct.busy ? '.6' : '1';
+    pw.textContent = _acct.busy === 'pw' ? 'Trocando…' : 'Trocar senha';
+  }
+}
+
+// O Firebase pediu um login recente: mostra o campo da senha (a pessoa toca no botão de novo).
+function _acctNeedsReauth() {
+  _acct.reauth = true;
+  const box = document.getElementById('acct-pass');
+  if (box) box.hidden = false;
+  document.getElementById('acct-password')?.focus();
+  _acctMsg('mail', 'Por segurança, confirme que é você: digite a sua senha e toque no botão de novo.', false);
+}
+
+async function _acctReauthenticate() {
+  const u = AUTH.currentUser;
+  const pass = document.getElementById('acct-password')?.value || '';
+  if (!pass) throw Object.assign(new Error('Digite a sua senha.'), { code: 'app/empty-password' });
+  await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, pass));
+}
+
+// Manda o link de confirmação ao e-mail novo. O endereço de volta para o app pode não estar autorizado num ambiente (ex.: site de teste):
+// nesse caso manda sem ele, e o Firebase mostra a página dele mesmo.
+async function sendEmailChangeLink(u, newEmail) {
+  try {
+    await u.verifyBeforeUpdateEmail(newEmail, { url: location.origin + '/' });
+  } catch (e) {
+    if (e?.code === 'auth/unauthorized-continue-uri' || e?.code === 'auth/invalid-continue-uri') await u.verifyBeforeUpdateEmail(newEmail);
+    else throw e;
+  }
+}
+
+function _acctMailSent(email) {
+  _acctMsg('mail', `Enviamos um link para <strong>${esc(email)}</strong>. Abra o e-mail (olhe também o spam) e toque no link: a troca só vale depois disso, e então todos os seus aparelhos pedem login de novo, com o e-mail novo.<br><br>Se o link não chegar em alguns minutos, esse e-mail provavelmente já tem uma conta. Entre nela, use “Excluir minha conta” (ela está vazia) e volte aqui.`, true, true);
+}
+
+async function submitEmailChange() {
+  const u = AUTH?.currentUser;
+  if (!u || _acct.busy) return;
+  const typed = (document.getElementById('acct-newmail')?.value || '').trim();
+  const bad = emailChangeProblem(typed, u.email);
+  if (bad) { _acctMsg('mail', bad, false); return; }
+  _acct.busy = 'mail'; _acctMsg('mail', '', false); _acctRefresh();
+  try {
+    if (_acct.reauth) await _acctReauthenticate();
+    await sendEmailChangeLink(u, typed);
+    _acct.reauth = false;
+    const box = document.getElementById('acct-pass');
+    if (box) box.hidden = true;
+    const pw = document.getElementById('acct-password');
+    if (pw) pw.value = '';
+    _acctMailSent(typed);
+  } catch (e) {
+    if (e?.code === 'auth/requires-recent-login') _acctNeedsReauth();
+    else _acctMsg('mail', accountErrMsg(e?.code), false);
+  }
+  _acct.busy = ''; _acctRefresh();
+}
+
+async function submitPasswordChange() {
+  const u = AUTH?.currentUser;
+  if (!u || _acct.busy) return;
+  const val = id => document.getElementById(id)?.value || '';
+  const cur = val('acct-pw-cur'), nw = val('acct-pw-new'), rep = val('acct-pw-rep');
+  const bad = passwordChangeProblem(cur, nw, rep);
+  if (bad) { _acctMsg('pw', bad, false); return; }
+  _acct.busy = 'pw'; _acctMsg('pw', '', false); _acctRefresh();
+  try {
+    await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, cur));
+    await u.updatePassword(nw);
+    for (const id of ['acct-pw-cur', 'acct-pw-new', 'acct-pw-rep']) { const el = document.getElementById(id); if (el) el.value = ''; }
+    _acctMsg('pw', 'Senha trocada. Nos outros aparelhos você vai precisar entrar de novo com a senha nova.', true);
+  } catch (e) {
+    _acctMsg('pw', accountErrMsg(e?.code), false);
+  }
+  _acct.busy = ''; _acctRefresh();
+}
+
+// Depois da troca do e-mail do login, o cadastro (users/{uid}) ainda guarda o e-mail antigo, e só o servidor pode corrigi-lo. Na entrada: se o e-mail
+// do login já não é o da cópia, pede ao servidor para corrigir (ele lê o e-mail do login no Firebase, não deste aparelho). Falha em silêncio e tenta
+// de novo na próxima entrada.
+function syncAccountEmail(user) {
+  const now = String(user?.email || '').trim().toLowerCase();
+  const copy = String(st.userDoc?.email || '').trim().toLowerCase();
+  if (!user?.uid || !now || now === copy || _emailSyncTried === user.uid) return;
+  _emailSyncTried = user.uid;
+  callFn('syncMyEmail').then(r => {
+    if (r?.changed && st.userDoc && st.authUser?.uid === user.uid) st.userDoc = { ...st.userDoc, email: user.email };
+  }).catch(() => { _emailSyncTried = ''; });
 }
 
 /* ── Encerrar a liga ──────────────────────────────────────────────────────────────────────

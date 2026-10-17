@@ -466,6 +466,7 @@ p strong {
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador e das Conquistas (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
       <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
+      <li><a href="#minha-conta"><span class="num">32</span> Minha Conta (trocar e-mail e senha)</a></li>
     </ul>
   </nav>
 
@@ -504,6 +505,7 @@ p strong {
       <li><a href="#cartao-jogador"><span class="num">29</span> Cartão do Jogador e das Conquistas (compartilhar)</a></li>
       <li><a href="#apresentacao"><span class="num">30</span> Página de Apresentação (visitantes)</a></li>
       <li><a href="#monitor-erros"><span class="num">31</span> Erros do App (monitor de travamentos)</a></li>
+      <li><a href="#minha-conta"><span class="num">32</span> Minha Conta (trocar e-mail e senha)</a></li>
     </ul>
   </nav>
 
@@ -2992,6 +2994,79 @@ p strong {
         <div class="callout-label warn">Como funciona por dentro <span class="tag">Técnico</span></div>
         O monitor é um pequeno bloco no <code>&lt;head&gt;</code> do <code>index.html</code>, escrito em ES5 de propósito (precisa rodar até em navegador velho, onde o app mais quebra, e antes de qualquer outro script). Só fala nos endereços de verdade (produção e teste); em <code>localhost</code> e nas prévias da Vercel fica quieto. Envia por <code>sendBeacon</code> (texto simples, sem pré-voo do CORS), com <code>XMLHttpRequest</code> de reserva, para a função HTTP <code>reportClientError</code> (só <code>POST</code> vindo do próprio site). O servidor (<code>functions/client-errors.js</code>) valida o formato, limpa o texto, calcula o grupo e soma contadores em <code>client_errors/{grupo}</code> e <code>client_errors_meta/AAAA-MM-DD</code> (fechadas ao navegador pelas regras do banco). Funções: <code>getClientErrors</code> (só o dono, 20 por minuto) e <code>notifyClientErrors</code> (diária, 9h20 de São Paulo; também apaga o que passou do prazo). O app avisa sozinho os erros que ele esconde da pessoa (listas que não carregaram, função do servidor com defeito, entrada que falhou) e marca até onde a abertura chegou (<code>__pnmStage</code> e <code>__pnmBooted</code>). Testes: <code>client-errors-test.js</code> (regras), <code>client-errors-functions-test.js</code> (servidor), <code>client-errors-app-test.js</code> (app e painel, com uma comparação de 400 textos sorteados que mostra que a limpeza do app e a do servidor dão o mesmo resultado) e os emuladores.
       </div>
+    </section>
+
+    <!-- 32. Minha conta -->
+    <section class="section" id="minha-conta">
+      <h2 class="section-title"><span class="sn">32</span> Minha Conta (trocar e-mail e senha)</h2>
+      <p>Quem entra com <strong>e-mail e senha</strong> (ou pelo <strong>link enviado ao e-mail</strong>) pode trocar o <strong>e-mail do login</strong> e a <strong>senha</strong> sozinho, sem pedir ao admin e <strong>sem refazer o convite</strong>. A opção <strong>✉️ Minha conta</strong> fica no fim da aba <strong>EU</strong> e também nas telas da conta (escolha de liga, sem liga e "aguardando aprovação"), logo acima de <strong>🗑️ Excluir minha conta</strong> (seção 21).</p>
+
+      <div class="callout gold">
+        <div class="callout-label gold">Nada se perde na troca</div>
+        A conta é identificada por um código interno, não pelo e-mail. Trocar o e-mail da <strong>mesma conta</strong> mantém as ligas, o papel (jogador ou admin), o vínculo com o jogador, a liga que a pessoa criou, a foto, o WhatsApp, os convites e as notificações. Só o e-mail do login muda. Quem criasse outra conta com o e-mail novo teria de ser convidado e vinculado de novo: por isso a troca é o caminho certo.
+      </div>
+
+      <h3>Trocar o e-mail</h3>
+      <ol>
+        <li>Toque em <strong>✉️ Minha conta</strong> e digite o <strong>e-mail novo</strong>.</li>
+        <li>Toque em <strong>Enviar link de confirmação</strong>. Se o seu último login for antigo, o app pede a senha antes (quem entra pelo link do e-mail, sem senha, é orientado a sair e entrar de novo pelo link, e repetir a troca logo em seguida).</li>
+        <li>Abra o e-mail novo (olhe também o spam) e toque no link. <strong>A troca só vale depois disso.</strong></li>
+        <li>Entre de novo com o e-mail novo (e a mesma senha). Quando a troca vale, o Firebase encerra as sessões abertas: <strong>todos os aparelhos pedem login de novo</strong>, no máximo em cerca de uma hora.</li>
+      </ol>
+
+      <div class="callout warn">
+        <div class="callout-label warn">Se o link não chegar em alguns minutos</div>
+        Quase sempre é porque o <strong>e-mail novo já tem uma conta</strong> (por exemplo, a pessoa entrou com ele e ficou "aguardando aprovação"). Por segurança o Firebase não avisa quando isso acontece: simplesmente não manda nada. Nesse caso: entre nessa outra conta, toque em <strong>🗑️ Excluir minha conta</strong> (ela está vazia, só com o pedido pendente) e volte à conta antiga para trocar o e-mail. Se a conta do e-mail novo já tem ligas, escreva para <a href="mailto:suporte@peladanamao.com.br" style="color: var(--accent)">suporte@peladanamao.com.br</a>.
+      </div>
+
+      <h3>Quem troca o e-mail pelo app</h3>
+      <table class="data-table">
+        <thead><tr><th>Como a pessoa entra</th><th>Troca o e-mail pelo app?</th></tr></thead>
+        <tbody>
+          <tr><td>E-mail e senha</td><td>Sim.</td></tr>
+          <tr><td>Link enviado ao e-mail (sem senha)</td><td>Sim. Se o login for antigo, o app pede para sair e entrar de novo pelo link antes de repetir a troca.</td></tr>
+          <tr><td>Só com o Google</td><td>Não: o e-mail dessa conta é controlado pelo Google. A tela explica e manda escrever para o suporte; o dono troca sem a pessoa perder as ligas (ver "Atendimento do dono" abaixo).</td></tr>
+          <tr><td>Dono do sistema</td><td>Não: o e-mail dele está fixo no código do app, das regras e das funções. Para trocá-lo é preciso mudar o código junto.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Trocar a senha</h3>
+      <p>Em <strong>✉️ Minha conta</strong>, digite a <strong>senha atual</strong>, a <strong>senha nova</strong> (mínimo de 6 caracteres) e repita a senha nova. O app confere a senha atual antes de trocar. Nos outros aparelhos a pessoa vai precisar entrar de novo com a senha nova. Quem entra só pelo link do e-mail e nunca criou uma senha usa <strong>Esqueci minha senha</strong> na tela de entrada para criar uma (seção 20).</p>
+
+      <h3>Mensagens que podem aparecer</h3>
+      <table class="data-table">
+        <thead><tr><th>Mensagem</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td>Digite o e-mail novo. / Este não parece um e-mail. / Este já é o seu e-mail de login.</td><td>O campo do e-mail novo está vazio, mal escrito ou igual ao que já vale.</td></tr>
+          <tr><td>Enviamos um link para … Abra o e-mail e toque no link.</td><td>O pedido foi aceito. A troca só vale quando a pessoa tocar no link do e-mail novo.</td></tr>
+          <tr><td>Por segurança, confirme que é você: digite a sua senha e toque no botão de novo.</td><td>O último login é antigo. Digite a senha e toque de novo para enviar o link.</td></tr>
+          <tr><td>Senha incorreta. Se você entra pelo link do e-mail e não tem senha, saia da conta, entre de novo pelo link e repita.</td><td>A senha digitada não confere, ou a pessoa nunca criou uma senha.</td></tr>
+          <tr><td>A senha nova precisa ter pelo menos 6 caracteres. / A senha nova e a repetição não são iguais. / A senha nova precisa ser diferente da atual.</td><td>Conferências do formulário da senha, feitas antes de falar com o servidor.</td></tr>
+          <tr><td>Sua sessão acabou. Saia da conta, entre de novo e repita.</td><td>O login venceu (por exemplo, a troca de e-mail foi confirmada em outro aparelho).</td></tr>
+          <tr><td>Muitas tentativas. Tente mais tarde. / Sem conexão com a internet.</td><td>Limite do Firebase para tentativas seguidas, ou rede fora do ar.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Como funciona por dentro <span class="tag">Técnico</span></h3>
+      <ul>
+        <li>A troca é do Firebase: <code>verifyBeforeUpdateEmail</code> manda o link ao e-mail novo. O <code>updateEmail</code> não funciona com a proteção contra descobrir quem tem cadastro, que está ligada. O endereço de volta para o app vai junto; se o ambiente não o autoriza (site de teste), o app manda sem ele.</li>
+        <li>O app guarda <strong>cópias</strong> do e-mail: o cadastro (<code>users/{uid}.email</code>) e os pedidos de vinculação pendentes. Delas dependem a lista de membros do admin, os e-mails de cobrança, o aviso de liga abandonada e o e-mail do pagador nas assinaturas <strong>novas</strong> do Mercado Pago. As regras do Firestore só deixam o servidor gravá-las. Ligas, papéis, vínculo, dono da liga, fotos e convites são por <code>uid</code> e não mudam com o e-mail.</li>
+        <li>Na primeira entrada com o e-mail novo, o app vê que a cópia está diferente e chama a função <code>syncMyEmail</code>. Ela lê o e-mail direto do cadastro do Firebase (o token carrega o e-mail velho por até 1 hora), corrige as cópias, não recebe nenhum dado do app, aceita 20 chamadas por minuto por conta e não escreve e-mail no registro. Até essa primeira entrada as cópias continuam com o e-mail antigo.</li>
+        <li>A assinatura mensal que já existe no Mercado Pago continua com o e-mail com que foi criada; o e-mail novo vale para as próximas. As cópias de segurança diárias do sistema não são editadas e podem guardar o e-mail antigo enquanto existirem (a política de privacidade do app diz isso).</li>
+      </ul>
+
+      <h3>Atendimento do dono: quem perdeu o acesso ao e-mail antigo <span class="tag warn">Só o dono</span></h3>
+      <p>Se a pessoa não tem mais o e-mail antigo (ou entra só com o Google e quer outro e-mail), o dono troca pelo computador, com o atalho <code>scripts/trocar-email.js</code>. <strong>Não existe nenhuma função na internet que troque o e-mail de outra pessoa.</strong></p>
+      <ol>
+        <li><strong>Confirme quem é a pessoa por outro canal</strong> (WhatsApp, pessoalmente) e <strong>como o e-mail novo se escreve</strong>: quem for dono do e-mail novo consegue pedir a senha da conta.</li>
+        <li>Baixe a <strong>chave de administrador</strong> do projeto (Console do Firebase → Configurações do projeto → Contas de serviço → Gerar nova chave privada) e guarde como <code>serviceAccountKey.json</code> na pasta do app (o Git ignora esse nome) ou aponte o arquivo com <code>--chave</code>.</li>
+        <li><strong>Simule primeiro</strong>: <code>node scripts/trocar-email.js antigo@exemplo.com novo@exemplo.com --projeto seriebaceoma</code>. Sem <code>--aplicar</code> o atalho só mostra a conta, as ligas e o que faria, e não muda nada.</li>
+        <li><strong>Aplique</strong>: repita o comando com <code>--aplicar</code>. Ele pede o e-mail novo de novo, a confirmação de que você falou com a pessoa por outro canal (na produção) e a palavra <code>TROCAR</code>. Depois troca o login, encerra as sessões e corrige as cópias do e-mail.</li>
+        <li>Se o e-mail novo já tem uma conta vazia (só pedido pendente), acrescente <code>--apagar-conta-vazia</code>. Se a conta antiga entra só com o Google, acrescente <code>--desvincular-google</code> (a pessoa passa a entrar com e-mail e senha). O atalho recusa o e-mail do dono do sistema e qualquer conta nova que já participe de uma liga como jogador ou admin.</li>
+        <li><strong>Avise a pessoa</strong>: entrar com o e-mail novo; se não lembra a senha (ou entrava só com o Google), tocar em <strong>Esqueci minha senha</strong>, que manda o link ao e-mail novo.</li>
+        <li><strong>Apague o arquivo da chave</strong> e, no Console, a chave que você criou só para isso.</li>
+      </ol>
+      <p>Para testar sem risco, use <code>--projeto seriebaceoma-staging</code> com a chave do projeto de teste. O atalho confere que a chave é do mesmo projeto pedido em <code>--projeto</code> e nunca mostra a chave.</p>
     </section>
 
   </main>

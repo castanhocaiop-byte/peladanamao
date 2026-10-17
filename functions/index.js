@@ -11,6 +11,7 @@ const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
+const { syncEmailCopies } = require("./account-email");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -946,6 +947,31 @@ exports.deleteMyAccount = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
   }
   logger.info("deleteMyAccount concluída", { ligas: ligas.length, loginApagadoNoServidor: authDeleted });
   return { ok: true, authDeleted };
+});
+
+// ── Trocar o e-mail do login ─────────────────────────────────────────────────
+//
+// O e-mail do login mora no Firebase Auth (a fonte da verdade) e a troca em si é do Firebase: a pessoa pede pelo app
+// (verifyBeforeUpdateEmail), recebe um link no e-mail NOVO e só depois de tocar nele o login muda. O app guarda CÓPIAS do
+// e-mail (o cadastro users/{uid} e os pedidos de vínculo pendentes) que alimentam o painel do admin, os e-mails de cobrança,
+// o aviso de liga abandonada e o pagador do Mercado Pago, e que só o servidor grava (as regras não deixam o app mexer no campo
+// "email"). O app chama esta função na primeira entrada com o e-mail novo (e só quando a cópia está diferente do login).
+// Ela lê o e-mail direto do cadastro do Firebase — NÃO do token, que fica com o e-mail velho por até 1 hora depois da
+// troca — e corrige as cópias. Não recebe nada do app (ninguém escolhe o e-mail que será gravado) e não guarda o e-mail antigo.
+exports.syncMyEmail = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "syncMyEmail", 20);
+  let email = "";
+  try {
+    email = String((await admin.auth().getUser(auth.uid)).email || "").trim();
+  } catch (e) {
+    if (e?.code === "auth/user-not-found") throw fail("not-found", "Conta não encontrada.");
+    throw e;
+  }
+  if (!email) return { ok: true, changed: false };
+  const result = await syncEmailCopies(db, auth.uid, email);
+  if (result.changed || result.linkRequests) logger.info("syncMyEmail: cópias do e-mail atualizadas", { cadastro: result.changed, pedidosDeVinculo: result.linkRequests }); // sem o e-mail no log
+  return { ok: true, changed: result.changed };
 });
 
 // ── Anonimizar meu nome no histórico (direito de anonimização, LGPD) ─────────
