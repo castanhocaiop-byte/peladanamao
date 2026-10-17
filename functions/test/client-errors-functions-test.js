@@ -173,6 +173,10 @@ const reset = () => { store.clear(); logs.length = 0; fetchCalls.length = 0; wri
   r = await post({ k: 'callable', m: 'FirebaseError: INTERNAL', s: '', x: { code: 'internal', fn: 'listMembers' }, b: 'Samsung 30' });
   check('…já "INTERNAL" (maiúscula: o servidor quebrou de verdade) grava como "callable", num grupo à parte', groupDocs().length === 2 && groupDocs().some(([, d]) => d.kind === 'callable' && d.message === 'FirebaseError: INTERNAL'), groupDocs().map(([, d]) => [d.kind, d.message]));
   reset();
+  r = await post({ k: 'rejection', m: 'UnknownError: Database deleted by request of the user', s: '', b: 'Instagram 451', i: true });
+  const idbGroups = groupDocs().map(([, d]) => d);
+  check('falha do armazenamento do navegador (IndexedDB, comum no navegador do Instagram) → 204 e grava como "network" (painel sim, e-mail não)', r.statusCode === 204 && idbGroups.length === 1 && idbGroups[0].kind === 'network' && idbGroups[0].message === 'UnknownError: Database deleted by request of the user', idbGroups);
+  reset();
   r = mkRes(); await fns.reportClientError({ method: 'POST', headers: { origin: PROD, 'x-forwarded-for': newIp() }, body: { ...BASE } }, r);
   check('corpo já lido como objeto (content-type JSON) também funciona', r.statusCode === 204 && groupDocs().length === 1, r);
   reset();
