@@ -2283,7 +2283,7 @@ function mjBadgesData(s = {}) {
   };
 }
 
-// Dados do cartão "Eu x Rival": as conquistas de cada lado separadas em "só eu", "só o rival" e "as duas" (cada uma com `holders` e `eligible`, que dão o nível de
+// Dados do cartão "Eu x Rival": as conquistas de cada lado separadas em "só eu", "só o rival" e "os dois" (cada uma com `holders` e `eligible`, que dão o nível de
 // raridade). Só leva o que a liga já mostra a todos os jogadores (nomes e conquistas); a foto é a de quem compartilha (a do rival nunca entra, só as iniciais). Pura.
 function mjRivalData(s = {}) {
   const list = a => (Array.isArray(a) ? a : []).filter(b => b && b.emoji && b.label).slice(0, 200).map(b => ({ emoji: String(b.emoji), label: String(b.label), tier: mjTierOf(b.holders, b.eligible) }));
@@ -2637,7 +2637,7 @@ function drawMjBadgesCard(ctx, c, photoImg, logoImg, opts = {}) {
 }
 
 // Cartão "Eu x Rival" (Feed 4:5): eu e meu rival lado a lado (iniciais do rival, nunca a foto dele), o placar de conquistas, quem está na frente e as conquistas em
-// três grupos (só eu, só o meu rival, as duas). Dourado quando estou na frente, azul quando o rival está e verde no empate.
+// três grupos (só eu, só o meu rival, os dois). Dourado quando estou na frente, azul quando o rival está e verde no empate.
 function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
   const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.common, accent = tone.color;
   if (!opts.noBg) drawMjBackground(ctx, c, W, H, 400, 500);
@@ -2668,7 +2668,7 @@ function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
   ctx.fillStyle = accent; ctx.fillText(mjFitText(ctx, mjRivalVerdict(c), 900, 40, 26, MJ_BODY, 800), cx, 742);
 
   // as conquistas em três grupos, até 9 ícones por grupo (acima disso o último vira "+N")
-  const rows = [['SÓ EU TENHO', c.mine], ['SÓ O MEU RIVAL TEM', c.theirs], ['AS DUAS TÊM', c.both]];
+  const rows = [['SÓ EU TENHO', c.mine], ['SÓ O MEU RIVAL TEM', c.theirs], ['OS DOIS TÊM', c.both]];
   rows.forEach(([label, list], i) => {
     const ly = 818 + i * 128, ey = ly + 48, n = list.length;
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED; ctx.font = `800 24px ${MJ_BODY}`;
