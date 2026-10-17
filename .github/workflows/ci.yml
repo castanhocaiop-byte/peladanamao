@@ -199,6 +199,10 @@ jobs:
         working-directory: functions
         run: node test/client-rival-test.js
 
+      - name: Testes do app (comparar os números com o rival - conta dos jogos, tabela, abas da janela e cartão Meus números x rival)
+        working-directory: functions
+        run: node test/client-rival-numbers-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
