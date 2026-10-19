@@ -1046,7 +1046,7 @@ p strong {
       </div>
 
       <h3>⭐ Sortudos &amp; Azarados — Estrelas do Elenco</h3>
-      <p>Mesmo critério, mas usando as <strong>estrelas atuais dos companheiros</strong> como proxy de qualidade. As estrelas são uma avaliação de nível do jogador e não mudam retroativamente, então refletem o peso técnico do elenco em cada edição. O próprio jogador também é excluído do cálculo.</p>
+      <p>Mesmo critério, mas usando as <strong>estrelas atuais dos companheiros</strong> como proxy de qualidade. As estrelas são uma avaliação de nível do jogador e não mudam retroativamente, então refletem o peso técnico do elenco em cada edição. O próprio jogador também é excluído do cálculo. Com a opção <strong>⭐ Estrelas pela média do grupo</strong> ligada, vale a estrela que está valendo no momento, a média do grupo quando ela já vale (seção 14).</p>
 
       <div class="example">
         <div class="ex-label">Exemplo</div>
@@ -1161,7 +1161,7 @@ p strong {
 
       <h3>Sorteio de times — equilíbrio por média</h3>
       <p>A aba <strong>Novo</strong> tem dois botões no topo — <strong>⚖️ Sortear Times</strong> e <strong>✋ Montar Manualmente</strong> — que alternam o conteúdo do mesmo card; o sorteio vem selecionado por padrão. Um só existe quando há jogador elegível para sortear; sem nenhum, a aba mostra direto a montagem manual.</p>
-      <p>O sorteio distribui os jogadores presentes nos times usando um algoritmo que minimiza a diferença de <strong>média de estrelas</strong> entre equipes, não a diferença total. Isso evita que um time fique desequilibrado por ter mais jogadores que outro.</p>
+      <p>O sorteio distribui os jogadores presentes nos times usando um algoritmo que minimiza a diferença de <strong>média de estrelas</strong> entre equipes, não a diferença total. Isso evita que um time fique desequilibrado por ter mais jogadores que outro. A estrela de cada jogador é a que vale no momento: a do admin ou, com a opção <strong>⭐ Estrelas pela média do grupo</strong> ligada, a média das notas do grupo, em número exato (seção 14).</p>
 
       <table class="data-table">
         <thead><tr><th>Regra</th><th>Detalhe</th></tr></thead>
@@ -1646,6 +1646,46 @@ p strong {
         <li><strong style="color: var(--text)">iOS Safari</strong> — acesse <em>Ajustes → Apps → Safari → Configurações de site → Notificações</em> ou pelo botão de compartilhamento do site</li>
       </ul>
       <p>Após reativar no sistema, reabra o app e as notificações serão registradas automaticamente.</p>
+
+      <h3 id="estrelas-do-grupo">⭐ Estrelas pela média do grupo</h3>
+      <p>Por padrão, quem dá as estrelas é só o admin, na aba <strong>Elenco</strong>. Em <strong>Configurações da liga</strong> (Painel Admin) o admin pode ligar a opção <strong>⭐ Estrelas pela média do grupo</strong>: ela vem <strong>desligada</strong>, e desligada nada muda. Ligada, cada jogador dá de 1 a 5 estrelas aos outros e o sorteio equilibrado passa a usar a <strong>média exata</strong> das notas (por exemplo 3,6) no lugar da estrela do admin. Vale em qualquer plano, inclusive no gratuito.</p>
+
+      <h3>Como avaliar</h3>
+      <p>Com a opção ligada, a aba <strong>Elenco</strong> mostra o botão <strong>Avaliar o elenco</strong> para quem tem a conta ligada a um jogador. A janela lista os outros jogadores que jogam (ativos e fora do "só churrasco"; ninguém avalia a si mesmo), cada um com 5 estrelas: um toque dá a nota, um toque de novo na mesma estrela tira a nota e um toque em outra estrela troca. Dá para pular quem a pessoa não conhece e mudar as notas quando quiser, sem prazo. <strong>Salvar avaliações</strong> manda só o que mudou. Quem está em "👁 Ver como" outro jogador não vê o botão.</p>
+
+      <h3>Qual estrela vale</h3>
+      <table class="data-table">
+        <thead><tr><th>Situação do jogador</th><th>Estrela usada no sorteio e nas telas</th></tr></thead>
+        <tbody>
+          <tr><td>Opção desligada</td><td>Só a estrela que o admin deu, como sempre.</td></tr>
+          <tr><td>Ainda sem votos suficientes</td><td>A estrela que o admin deu. A linha do Elenco diz quantos votos faltam ("3 votos de 8 para a média do grupo valer"). Quem não tem nenhuma estrela do admin vale 3 no sorteio, como sempre.</td></tr>
+          <tr><td>Com votos suficientes</td><td>A <strong>média do grupo</strong> (a linha diz "média do grupo 3,7 · 9 votos"). Votos suficientes = <strong>metade do elenco que joga</strong> (ativos, fora do "só churrasco"), <strong>no mínimo 3</strong>: com 10 jogadores são 5 votos; com 20, são 10.</td></tr>
+          <tr><td>O admin fixou a estrela (📌)</td><td>A estrela do admin, mesmo que já haja média ("📌 estrela fixada pelo admin").</td></tr>
+        </tbody>
+      </table>
+      <p>As telas mostram uma casa decimal só quando a nota não é inteira ("3,7") e acendem a nota arredondada; o sorteio usa o valor exato, e a soma de cada time aparece com uma casa ("20,6★"). Avulsos continuam valendo 2 estrelas. Os totais de estrelas dos elencos (seção 11) e o quadro Sortudos &amp; Azarados (seção 10) também usam a estrela que vale no momento.</p>
+
+      <div class="callout">
+        <div class="callout-label">📌 Fixar a estrela de um jogador</div>
+        Com a opção ligada, o admin vê o botão <strong>📌</strong> em cada linha do Elenco. Ele fixa a estrela do admin para aquele jogador (a média do grupo é ignorada para ele) e, tocado de novo, volta a usar a média. Se a média já estiver valendo e o admin tocar numa estrela, o app pergunta se ele quer <strong>fixar</strong> aquele número; enquanto a média vale não existe "zerar". Serve para brincadeira ou abuso nas notas.
+      </div>
+
+      <h3>Notas anônimas</h3>
+      <p>As notas são <strong>anônimas</strong>: pelo app, ninguém (nem o admin da liga) vê quem deu qual nota, e cada pessoa vê só as que ela mesma deu. Os outros jogadores veem apenas a média de cada um e quantas pessoas votaram, e a média só é publicada a partir de <strong>3 votos</strong> (com menos, ela entregaria a nota de cada pessoa).</p>
+      <div class="callout warn">
+        <div class="callout-label warn">O que o anonimato não cobre</div>
+        A média muda a cada voto. Quem acompanhar a média em tempo real e souber a hora em que alguém votou consegue deduzir aquela nota. É por isso que a média só aparece com 3 votos ou mais, mas o aviso vale principalmente para grupos pequenos.
+      </div>
+      <p>As notas que uma conta deu somem quando ela <strong>sai da liga</strong>, <strong>é recusada ou removida pelo admin</strong>, <strong>é ligada a outro jogador</strong> ou <strong>exclui a conta</strong> (seção 21); a média dos outros é refeita sem elas. Se o admin remove um jogador do elenco, as notas dele deixam de valer; se o admin renomeia o jogador (ou ele anonimiza o nome, seção 22), as notas que ele deu e as que recebeu acompanham a nova identidade. A média que o grupo deu a um jogador fica no elenco como as estrelas do admin: não some quando a conta dele é excluída.</p>
+
+      <h3>Como o servidor faz <span class="tag">Técnico</span></h3>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">Onde ficam as notas</strong> — <code>leagues/{liga}/star_votes/{uid}</code> guarda <code>{ voterKey, ratings: { chave do jogador: 1 a 5 }, updatedAt }</code>, um documento por conta. O id é o uid da conta, e não a chave do jogador, para o admin não conseguir ligar a própria conta ao jogador de outra pessoa e ler as notas dela. As regras do Firestore deixam cada conta ler só o próprio documento e <strong>ninguém grava</strong> nele.</li>
+        <li><strong style="color: var(--text)">Quem grava</strong> — a função <code>ratePlayers</code> (só membro da liga, com a opção ligada e a conta ligada a um jogador do elenco). Ela valida (nota de 1 a 5, até 200 jogadores por chamada; a nota em si mesmo e em quem saiu do elenco é ignorada), guarda as notas e recalcula a média numa <strong>transação</strong>, então votos ao mesmo tempo não se perdem. Duas contas ligadas ao mesmo jogador valem um voto só (vale o mais recente). Limite de 30 chamadas por minuto.</li>
+        <li><strong style="color: var(--text)">A média no elenco</strong> — o servidor escreve no cadastro do jogador (<code>player_registry</code>) <code>starsAvg</code> (2 casas, só a partir de 3 votos) e <code>starsVotes</code> (quantas pessoas votaram); as regras do Firestore não deixam o app gravar esses dois campos. O app decide se a média já vale (metade de quem joga, mínimo 3) e se o admin fixou a estrela (<code>starsPinned</code>).</li>
+        <li><strong style="color: var(--text)">Quando o elenco muda</strong> — <code>syncStarVotes</code> (só admin) refaz a média e leva as notas para a chave nova quando um jogador é renomeado; o app a chama depois de renomear ou de remover um jogador. As funções de sair da liga, recusar ou ligar uma conta a outro jogador, excluir a conta e anonimizar o nome também acertam as notas.</li>
+        <li><strong style="color: var(--text)">O sorteio</strong> — usa pesos em centésimos de estrela, em número inteiro (as somas ficam exatas, sem erro de ponto flutuante); com estrelas inteiras sorteia exatamente como antes.</li>
+      </ul>
     </section>
 
     <!-- 16. Previsão do Tempo -->
@@ -2317,6 +2357,7 @@ p strong {
           <tr><td>Pedido de vinculação de perfil</td><td>Apagado.</td></tr>
           <tr><td>Foto e WhatsApp do jogador ligado à conta</td><td>Apagados, com tentativa de apagar também o arquivo da foto no Cloudinary (ver seção 20). Se outra conta estiver ligada ao mesmo jogador, ficam para ela.</td></tr>
           <tr><td>Convites que a conta criou ou usou</td><td>Perdem só o identificador da conta; o convite em si continua.</td></tr>
+          <tr><td>Notas de estrelas que a conta deu aos outros jogadores (só nas ligas que usam a opção ⭐ Estrelas pela média do grupo, seção 14)</td><td>Apagadas, e a média dos outros jogadores é refeita sem elas. A média que o grupo deu ao jogador ligado à conta continua no elenco, como as estrelas do admin.</td></tr>
         </tbody>
       </table>
 
@@ -2383,6 +2424,7 @@ p strong {
           <tr><td>Foto de perfil</td><td><strong>Removida</strong> — uma foto identifica a pessoa, então não é levada adiante.</td></tr>
           <tr><td>WhatsApp</td><td>Continua guardado (só o admin vê), só muda de "endereço" — o grupo continua se organizando normalmente.</td></tr>
           <tr><td>Estrelas, situação ativo/inativo e convocações futuras</td><td>Continuam normalmente: a pessoa segue jogando, só sem o nome real no histórico.</td></tr>
+          <tr><td>Notas de estrelas que a pessoa deu e recebeu (⭐ Estrelas pela média do grupo, seção 14)</td><td>Acompanham o novo nome anônimo: as notas que ela deu continuam valendo e a média que o grupo deu a ela continua no elenco.</td></tr>
         </tbody>
       </table>
 
@@ -2454,7 +2496,7 @@ p strong {
 
       <div class="callout" id="elenco-celular">
         <div class="callout-label">Elenco no celular</div>
-        Na aba <strong>Elenco</strong>, cada jogador ocupa uma linha com a foto, o nome e a nota em estrelas; o admin vê, na mesma linha, os botões <strong>Ativo/Inativo</strong>, <strong>🍖</strong>, <strong>🧤</strong>, <strong>✏️</strong> e <strong>✕</strong>. Num celular não cabe tudo ao lado do nome, então o nome fica sozinho na <strong>primeira linha</strong> (inteiro, sem nada por cima) e as <strong>estrelas e os botões descem juntos para a segunda linha</strong>; em telas muito estreitas os botões ainda se dividem em duas fileiras. No computador e no tablet, onde cabe, tudo continua <strong>numa linha só</strong>. Quem não é admin vê só as estrelas ao lado do nome. Antes de 14/10/2026 o nome ficava por baixo das estrelas no celular do admin.
+        Na aba <strong>Elenco</strong>, cada jogador ocupa uma linha com a foto, o nome e a nota em estrelas; o admin vê, na mesma linha, os botões <strong>Ativo/Inativo</strong>, <strong>🍖</strong>, <strong>🧤</strong>, <strong>✏️</strong> e <strong>✕</strong>. Num celular não cabe tudo ao lado do nome, então o nome fica sozinho na <strong>primeira linha</strong> (inteiro, sem nada por cima) e as <strong>estrelas e os botões descem juntos para a segunda linha</strong>; em telas muito estreitas os botões ainda se dividem em duas fileiras. No computador e no tablet, onde cabe, tudo continua <strong>numa linha só</strong>. Quem não é admin vê só as estrelas ao lado do nome. Antes de 14/10/2026 o nome ficava por baixo das estrelas no celular do admin. Com a opção <strong>⭐ Estrelas pela média do grupo</strong> ligada (seção 14), embaixo do nome aparece uma frase miúda (a média do grupo, os votos que faltam ou "estrela fixada pelo admin"), todos veem o botão <strong>Avaliar o elenco</strong> no alto do cartão e o admin ganha o botão <strong>📌</strong> na linha.
       </div>
     </section>
 
@@ -2490,6 +2532,7 @@ p strong {
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
         <li style="margin-bottom:4px">Criar novos campeonatos, com ou sem convocação prévia</li>
         <li style="margin-bottom:4px">Sortear times em qualquer modalidade (equilibrado, aleatório ou manual)</li>
+        <li style="margin-bottom:4px">Dar estrelas ao elenco: a do admin e, se a liga ligar, a média das notas do grupo (<a href="#estrelas-do-grupo" style="color: var(--accent)">⭐ Estrelas pela média do grupo</a>, seção 14)</li>
         <li style="margin-bottom:4px">Registrar o placar das partidas, inclusive da final</li>
         <li style="margin-bottom:4px">Ver todo o histórico, conquistas e ranking de antes do trial acabar — nada some</li>
       </ul>

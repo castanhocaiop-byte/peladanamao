@@ -919,6 +919,121 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     check('…consultar de novo o mesmo pagamento não soma título em dobro', r.status === 200 && (await ti('lq', 'ana')).titles === 6);
   }
 
+  // ═════════════ ESTRELAS PELA MÉDIA DO GRUPO (item 35) ═════════════
+  console.log('── estrelas pela média do grupo: regras do banco e funções de verdade (ratePlayers, syncStarVotes)');
+  await seed();
+  {
+    const S = (p, d) => db.set('owner', p, d);
+    const reg = k => db.get('owner', 'leagues/la/player_registry/' + k).then(docData);
+    const vote = uid => db.get('owner', 'leagues/la/star_votes/' + uid).then(docData);
+    const rate = (tok, ratings, liga = 'la') => callFn('ratePlayers', tok, { liga, ratings });
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
+    await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+
+    // regras: ninguém grava nem lê as notas dos outros direto no banco
+    for (const [quem, u] of [['jogador', U.pl1], ['admin da liga', U.admA], ['dono do sistema', U.owner], ['quem é de fora', U.outsider]]) {
+      check(`estrelas/regras: ${quem} NÃO grava notas direto no banco (nem no próprio uid, nem no de outra pessoa) → recusado`, no(await db.set(u.token, 'leagues/la/star_votes/' + u.uid, { voterKey: 'pl_um', ratings: { caio: 5 } })) && no(await db.set(u.token, 'leagues/la/star_votes/' + U.pl2.uid, { voterKey: 'x', ratings: { caio: 5 } })));
+    }
+    check('estrelas/regras: nada foi gravado pelas tentativas', (await vote(U.pl1.uid)) === undefined && (await vote(U.admA.uid)) === undefined);
+
+    // funções: quem pode votar
+    let r = await callFn('ratePlayers', null, { liga: 'la', ratings: { caio: 5 } });
+    check('estrelas: sem login → não autenticado', r.status === 401, r.raw);
+    r = await rate(U.outsider.token, { caio: 5 });
+    check('estrelas: quem é de fora da liga → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await rate(U.pend.token, { caio: 5 });
+    check('estrelas: quem está pendente → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await rate(U.pl2.token, { caio: 5 });
+    check('estrelas: conta sem jogador ligado → pré-condição falhou', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /vinculada/.test(r.error.message), r.raw);
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: false });
+    r = await rate(U.pl1.token, { caio: 5 });
+    check('estrelas: opção desligada na liga → pré-condição falhou, nada gravado', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /desligada/.test(r.error.message) && (await vote(U.pl1.uid)) === undefined, r.raw);
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    r = await rate(U.pl1.token, { caio: 7 });
+    check('estrelas: nota 7 → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // votar
+    r = await rate(U.pl1.token, { caio: 5, ana: 4, pl_um: 3 });
+    check('estrelas: jogador vota (a nota em si mesmo é ignorada)', r.status === 200 && r.result.ok === true && r.result.saved === 2 && r.result.total === 2 && r.result.ignored.join() === 'pl_um', r.raw);
+    const dv = await vote(U.pl1.uid);
+    check('estrelas: o documento fica no uid da conta, com a chave do jogador e as notas', dv && dv.voterKey === 'pl_um' && dv.ratings.caio === 5 && dv.ratings.ana === 4 && !('pl_um' in dv.ratings), dv);
+    check('estrelas: 1 voto → o cadastro ganha a contagem e NÃO a média', (c => c.starsVotes === 1 && !('starsAvg' in c) && c.name === 'Caio')(await reg('caio')));
+
+    // regras: só a dona lê as próprias notas
+    check('estrelas/regras: a dona lê as próprias notas → permitido', okW(await db.get(U.pl1.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: outro jogador NÃO lê as notas dela → recusado', no(await db.get(U.pl2.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: o ADMIN da liga NÃO lê as notas dela → recusado (anonimato vale também para ele)', no(await db.get(U.admA.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: o dono do sistema (e-mail verificado) também não lê direto → recusado', no(await db.get(U.owner.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: quem é de fora não lê → recusado', no(await db.get(U.outsider.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: ninguém lista as notas da liga → recusado', no(await db.list(U.pl1.token, 'leagues/la/star_votes')) && no(await db.list(U.admA.token, 'leagues/la/star_votes')));
+    check('estrelas/regras: o admin não consegue ler as notas de outra pessoa nem ligando a PRÓPRIA conta ao jogador dela (o documento é do uid, não da chave)', await (async () => {
+      await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'pl_um' });
+      const lido = await db.get(U.admA.token, 'leagues/la/star_votes/' + U.pl1.uid);
+      await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+      return no(lido);
+    })());
+    check('estrelas/regras: a dona das notas, depois de sair da liga, não lê mais → recusado', await (async () => {
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'rejected' });
+      const lido = await db.get(U.pl1.token, 'leagues/la/star_votes/' + U.pl1.uid);
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'player' });
+      return no(lido);
+    })());
+
+    // média: 3 votos em "caio"
+    await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
+    r = await rate(U.pl2.token, { caio: 3 });
+    check('estrelas: o 2º voto em caio ainda não publica média', r.status === 200 && (c => c.starsVotes === 2 && !('starsAvg' in c))(await reg('caio')), r.raw);
+    r = await rate(U.admA.token, { caio: 4 });
+    const caio3 = await reg('caio');
+    check('estrelas: o 3º voto publica a média (5, 3 e 4 → 4) e a contagem; o resto do cadastro não muda', r.status === 200 && caio3.starsVotes === 3 && caio3.starsAvg === 4 && caio3.name === 'Caio', caio3);
+    check('estrelas: o jogador lê a média no cadastro do elenco (é pública na liga, as notas não)', (d => d.starsAvg === 4 && d.starsVotes === 3)(docData(await db.get(U.pl2.token, 'leagues/la/player_registry/caio'))));
+
+    // regras do cadastro: a média só o servidor escreve
+    const caioPath = 'leagues/la/player_registry/caio';
+    check('estrelas/regras: admin altera a estrela e a fixa (o cadastro já tem média) → permitido', okW(await db.update(U.admA.token, caioPath, { stars: 5 })) && okW(await db.update(U.admA.token, caioPath, { starsPinned: true })));
+    check('estrelas/regras: admin ALTERA a média no cadastro → recusado', no(await db.update(U.admA.token, caioPath, { starsAvg: 1 })));
+    check('estrelas/regras: admin ALTERA a contagem de votos → recusado', no(await db.update(U.admA.token, caioPath, { starsVotes: 99 })));
+    check('estrelas/regras: admin escreve a mesma média que já estava (sem mudar) → permitido', okW(await db.update(U.admA.token, caioPath, { starsAvg: 4 })));
+    check('estrelas/regras: admin substitui o cadastro com outra média → recusado', no(await db.set(U.admA.token, caioPath, { name: 'Caio', starsAvg: 1, starsVotes: 3 })));
+    check('estrelas/regras: admin CRIA cadastro já com média ou contagem → recusado', no(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo9', { name: 'N', starsAvg: 5 })) && no(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo8', { name: 'N', starsVotes: 3 })));
+    check('estrelas/regras: admin cria cadastro normal e já fixado → permitido', okW(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo7', { name: 'N7', stars: 4, starsPinned: true })));
+    check('estrelas/regras: jogador comum não escreve nada do cadastro (média, fixar) → recusado', no(await db.update(U.pl1.token, caioPath, { starsAvg: 5 })) && no(await db.update(U.pl1.token, caioPath, { starsPinned: false })));
+    check('estrelas/regras: as tentativas recusadas não mexeram na média', (c => c.starsAvg === 4 && c.starsVotes === 3 && c.stars === 5 && c.starsPinned === true)(await reg('caio')));
+
+    // syncStarVotes
+    r = await callFn('syncStarVotes', null, { liga: 'la' });
+    check('estrelas/sync: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('syncStarVotes', tok, { liga: 'la' });
+      check(`estrelas/sync: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    await db.del('owner', 'leagues/la/player_registry/ana'); // o admin tirou "ana" (jogadora da conta pl2) do elenco
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la' });
+    const caio2 = await reg('caio');
+    check('estrelas/sync: tirar uma jogadora do elenco e sincronizar → as notas DELA deixam de valer (caio cai para 2 votos e a média some)', r.status === 200 && r.result.changed === true && caio2.starsVotes === 2 && !('starsAvg' in caio2), [r.raw, caio2]);
+    await S('leagues/la/player_registry/pl_novo', { name: 'Pl Novo', active: true });
+    await db.del('owner', 'leagues/la/player_registry/pl_um');
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la', rename: { from: 'pl_um', to: 'pl_novo' } });
+    const dv2 = await vote(U.pl1.uid);
+    check('estrelas/sync: renomear o jogador leva as notas que ele deu para a chave nova', r.status === 200 && dv2.voterKey === 'pl_novo' && dv2.ratings.caio === 5 && (await reg('caio')).starsVotes === 2, [r.raw, dv2]);
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la', rename: { from: 'pl_novo', to: 'pl_novo' } });
+    check('estrelas/sync: trocar de chave para a mesma chave → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // três votos ao MESMO tempo, com transações de verdade: nenhum se perde
+    await seed();
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
+    await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+    await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
+    const par = await Promise.all([[U.pl1, 5], [U.pl2, 3], [U.admA, 4]].map(([u, n]) => rate(u.token, { caio: n })));
+    const cp = await reg('caio');
+    check('estrelas: 3 votos ao mesmo tempo (transação de verdade) → todos contam: 3 votos e média 4', par.every(x => x.status === 200) && cp.starsVotes === 3 && cp.starsAvg === 4, [par.map(x => x.status), cp]);
+    const par2 = await Promise.all([[U.pl1, 1], [U.pl2, 1], [U.admA, 1]].map(([u, n]) => rate(u.token, { caio: n })));
+    const cp2 = await reg('caio');
+    check('estrelas: 3 trocas ao mesmo tempo → a média acompanha todas (1, 1 e 1 → 1)', par2.every(x => x.status === 200) && cp2.starsVotes === 3 && cp2.starsAvg === 1, [par2.map(x => x.status), cp2]);
+  }
+
   // ═════════════ MONITOR DE TRAVAMENTOS DO NAVEGADOR ═════════════
   console.log('── monitor de travamentos: função HTTP, regras do banco e painel do dono (Firestore e funções de verdade)');
   await seed();

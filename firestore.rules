@@ -60,6 +60,16 @@ service cloud.firestore {
         || (resource != null && request.resource.data.whatsapp == resource.data.get('whatsapp', null));
     }
 
+    // Verdadeiro quando o documento NÃO ganha nem muda a média de estrelas do grupo (starsAvg e starsVotes): só o servidor
+    // (ratePlayers) escreve esses dois campos, para a "média do grupo" que todos veem ser mesmo a média das notas. Apagar o campo
+    // ou deixá-lo como já estava é permitido. Vale só para create/update.
+    function keepsStarsAvgOut() {
+      return (!('starsAvg' in request.resource.data)
+          || (resource != null && request.resource.data.starsAvg == resource.data.get('starsAvg', null)))
+        && (!('starsVotes' in request.resource.data)
+          || (resource != null && request.resource.data.starsVotes == resource.data.get('starsVotes', null)));
+    }
+
     function validPhotoDoc() {
       let d = request.resource.data;
       return d.keys().hasOnly(['url', 'uid', 'updatedAt'])
@@ -127,8 +137,16 @@ service cloud.firestore {
     // O WhatsApp NÃO fica no cadastro do elenco (todo membro lê): vai para "contacts", só do admin.
     match /leagues/{leagueId}/player_registry/{docId} {
       allow read: if isLeagueActiveUser(leagueId);
-      allow create, update: if isLeagueAdmin(leagueId) && keepsWhatsappOut();
+      allow create, update: if isLeagueAdmin(leagueId) && keepsWhatsappOut() && keepsStarsAvgOut();
       allow delete: if isLeagueAdmin(leagueId);
+    }
+
+    // Notas de estrelas que cada jogador dá aos outros (item 35), ANÔNIMAS: cada conta lê só as PRÓPRIAS (o documento leva o uid
+    // dela, e não a chave do jogador, para o admin não poder ligar a própria conta ao jogador de outra pessoa e ler as notas dela) e
+    // o app nunca grava aqui. A função ratePlayers valida as notas e publica a média no cadastro do jogador (starsAvg, starsVotes).
+    match /leagues/{leagueId}/star_votes/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid && isLeagueActiveUser(leagueId);
+      allow write: if false;
     }
 
     // Contatos (WhatsApp) de jogadores e avulsos: só o admin lê e grava.

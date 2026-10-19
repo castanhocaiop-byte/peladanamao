@@ -11,6 +11,7 @@ const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
+const starVotes = require("./star-votes");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -619,6 +620,7 @@ exports.leaveLeague = onCall(CALLABLE, async request => {
   }
 
   await userRef.update(new FieldPath("leagues", liga), FieldValue.delete());
+  await dropStarVotes(liga, auth.uid); // quem sai leva as notas de estrelas que deu
   return { ok: true };
 });
 
@@ -683,6 +685,9 @@ exports.manageMember = onCall(CALLABLE, async request => {
     default:
       throw fail("invalid-argument", "Ação inválida.");
   }
+  // As notas de estrelas que a conta deu valem como o jogador a que ela está ligada: recusada ou ligada a outro jogador, perde as notas.
+  if (action === "reject") await dropStarVotes(liga, targetUid);
+  else if (action === "link" || (action === "linkRequest" && request.data?.approve === true && key)) await dropStarVotes(liga, targetUid, key);
   return { ok: true };
 });
 
@@ -861,6 +866,114 @@ exports.saveEarnedBadges = onCall(CALLABLE, async request => {
   return { ok: true };
 });
 
+// ── Estrelas pela média do grupo (item 35) ───────────────────────────────────
+//
+// Quando o admin liga "Estrelas pela média do grupo", cada jogador dá de 1 a 5 estrelas aos outros e a média passa a valer no
+// sorteio. As notas são ANÔNIMAS: ficam em leagues/{liga}/star_votes/{uid}, que nenhuma conta lê além da dona (ver
+// firestore.rules), e só aparece a média, publicada no cadastro do jogador (starsVotes e starsAvg). A conta toda está em
+// star-votes.js; aqui fica a parte que mexe no banco.
+
+// Lê o elenco e as notas da liga numa transação, deixa `mutate` trocar as notas (devolve { votes: { [uid]: documento | null },
+// result }) e grava as notas e a média publicada no cadastro dos jogadores juntas: dois votos ao mesmo tempo não se perdem.
+async function starTransaction(liga, mutate) {
+  const base = `leagues/${liga}`;
+  return db.runTransaction(async tx => {
+    const [regSnap, votesSnap] = await Promise.all([
+      tx.get(db.collection(`${base}/player_registry`)),
+      tx.get(db.collection(`${base}/star_votes`)),
+    ]);
+    const registry = new Map(regSnap.docs.map(d => [d.id, d.data()]));
+    const voters = new Map(votesSnap.docs.map(d => [d.id, d.data()]));
+    const out = mutate({ registry, voters }) || {};
+    const changes = out.votes || {};
+    for (const [uid, doc] of Object.entries(changes)) {
+      if (doc === null) voters.delete(uid); else voters.set(uid, doc);
+    }
+    const patches = starVotes.publishPatches(registry, [...voters].map(([uid, d]) => ({ uid, ...d })));
+    for (const [uid, doc] of Object.entries(changes)) {
+      const ref = db.doc(`${base}/star_votes/${uid}`);
+      if (doc === null) tx.delete(ref); else tx.set(ref, doc);
+    }
+    for (const [key, patch] of patches) {
+      const fields = {};
+      for (const [field, value] of Object.entries(patch)) fields[field] = value === null ? FieldValue.delete() : value;
+      tx.update(db.doc(`${base}/player_registry/${key}`), fields);
+    }
+    return out.result;
+  });
+}
+
+// Quem sai da liga, é recusado, é ligado a outro jogador ou apaga a conta leva as notas que deu, e a média dos outros é refeita sem
+// elas. `exceptKey`: se a conta foi ligada ao MESMO jogador de antes, as notas continuam valendo. Sem nota guardada, não faz nada.
+async function dropStarVotes(liga, uid, exceptKey = "") {
+  const snap = await db.doc(`leagues/${liga}/star_votes/${uid}`).get();
+  if (!snap.exists || (exceptKey && snap.data()?.voterKey === exceptKey)) return;
+  await starTransaction(liga, ({ voters }) => (voters.has(uid) ? { votes: { [uid]: null } } : {}));
+}
+
+// O jogador mudou de chave (renomear no elenco, anonimizar o nome): as notas dadas por ele e a ele passam para a chave nova.
+async function migrateStarVotes(liga, from, to) {
+  const any = await db.collection(`leagues/${liga}/star_votes`).limit(1).get();
+  if (!any.size) return; // nenhuma nota nesta liga (quase todas): nada a mudar
+  await starTransaction(liga, ({ voters }) => ({ votes: starVotes.renameKey(voters, from, to) }));
+}
+
+const STAR_REASONS = {
+  shape: "Notas inválidas.",
+  empty: "Nenhuma nota enviada.",
+  "too-many": "Notas demais de uma vez.",
+  key: "Jogador inválido.",
+  value: "Cada nota deve ser de 1 a 5 estrelas.",
+};
+
+// Dar, trocar ou tirar as notas de quem chama. { liga, ratings: { [chave do jogador]: 1..5 | null } } (só o que mudou).
+exports.ratePlayers = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "ratePlayers", 30);
+  const liga = leagueIdOf(request.data);
+  const user = (await db.doc(`users/${auth.uid}`).get()).data() || {};
+  const entry = user.leagues?.[liga];
+  if (entry?.role !== "admin" && entry?.role !== "player") throw fail("permission-denied", "Você não participa desta liga.");
+  const voterKey = String(entry.playerKey || user.playerKey || "");
+  if (!PLAYER_KEY_RE.test(voterKey)) throw fail("failed-precondition", "Sua conta não está vinculada a um jogador desta liga.");
+  const cfg = (await db.doc(`leagues/${liga}/app_config/main`).get()).data() || {};
+  if (cfg.peerStars !== true) throw fail("failed-precondition", "A avaliação pelo grupo está desligada nesta liga.");
+
+  const now = new Date().toISOString();
+  return starTransaction(liga, ({ registry, voters }) => {
+    if (!registry.has(voterKey)) throw fail("failed-precondition", "Seu jogador não está no elenco desta liga.");
+    const registryKeys = new Set(registry.keys());
+    const parsed = starVotes.parseRatings(request.data?.ratings, { voterKey, registryKeys });
+    if (!parsed.ok) throw fail("invalid-argument", STAR_REASONS[parsed.reason] || "Notas inválidas.");
+    const ratings = starVotes.applyRatings(voters.get(auth.uid)?.ratings, parsed, { voterKey, registryKeys });
+    const total = Object.keys(ratings).length;
+    return {
+      votes: { [auth.uid]: total ? { voterKey, ratings, updatedAt: now } : null },
+      result: { ok: true, total, saved: Object.keys(parsed.set).length, removed: parsed.remove.length, ignored: parsed.ignored },
+    };
+  });
+});
+
+// Refaz a média das estrelas da liga e, se vier { rename: { from, to } }, leva as notas do jogador que mudou de chave para a chave
+// nova (o app chama depois de renomear ou de remover um jogador do elenco). Só admin da liga.
+exports.syncStarVotes = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "syncStarVotes", 30);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+  const rename = request.data?.rename;
+  let from = "", to = "";
+  if (rename !== undefined && rename !== null) {
+    from = idText(rename?.from, 100);
+    to = idText(rename?.to, 100);
+    if (!PLAYER_KEY_RE.test(from) || !PLAYER_KEY_RE.test(to) || from === to) throw fail("invalid-argument", "Jogador inválido.");
+  }
+  const any = await db.collection(`leagues/${liga}/star_votes`).limit(1).get();
+  if (!any.size) return { ok: true, changed: false }; // sem nenhuma nota guardada não há o que refazer
+  await starTransaction(liga, ({ voters }) => (from ? { votes: starVotes.renameKey(voters, from, to) } : {}));
+  return { ok: true, changed: true };
+});
+
 // ── Excluir a própria conta (direito de eliminação, LGPD) ────────────────────
 //
 // Apaga o login e os dados pessoais ligados à conta: cadastro (e-mail, nome, aparelhos de
@@ -903,6 +1016,7 @@ exports.deleteMyAccount = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
   for (const liga of ligas) {
     const base = `leagues/${liga}`;
     await db.doc(`${base}/link_requests/${uid}`).delete();
+    await dropStarVotes(liga, uid); // as notas de estrelas que a conta deu (a média dos outros é refeita sem elas)
 
     const key = String(leagues[liga]?.playerKey || user.playerKey || "");
     if (PLAYER_KEY_RE.test(key)) {
@@ -988,6 +1102,7 @@ async function renamePlayerToAnon(liga, oldKey) {
       name: newName, formerName: oldName,
       added: d.added || new Date().toISOString().slice(0, 10), active: d.active !== false,
       ...(d.stars != null ? { stars: d.stars } : {}),
+      ...(d.starsPinned === true ? { starsPinned: true } : {}), // estrela fixada pelo admin acompanha a troca (a média sai de novo em migrateStarVotes)
     });
     tx.delete(oldRegRef);
     linkedSnap.docs.forEach(doc => {
@@ -1017,6 +1132,7 @@ async function cleanPlayerHistory(liga, { oldKey, oldName, newKey, newName }) {
     await db.doc(`${base}/contacts/${newKey}`).set(contactOld.data());
     await contactOld.ref.delete();
   }
+  await migrateStarVotes(liga, oldKey, newKey); // as notas de estrelas dadas por ele e a ele passam para a chave nova
 
   const mensalidades = await db.collection(`${base}/financeiro_mensalidades`).get();
   for (const doc of mensalidades.docs) {
