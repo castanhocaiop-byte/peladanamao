@@ -3160,7 +3160,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
-        ${li('<strong>Rival:</strong> se você escolher um rival para comparar conquistas e números, a escolha fica guardada só neste aparelho (nada é enviado ao servidor e o outro jogador não é avisado). A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro e as vitórias, empates e derrotas dos times em que jogou). Se você compartilhar a imagem da comparação, ela leva o nome do seu rival.')}
+        ${li('<strong>Rival:</strong> se você escolher um rival para comparar conquistas e números, a escolha fica guardada só neste aparelho (nada é enviado ao servidor e o outro jogador não é avisado). A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro e as vitórias, empates e derrotas dos times em que jogou). Se você compartilhar a imagem da comparação, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado).')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -11790,6 +11790,31 @@ function rivalCompare() {
   const mineIds = rivalBadgeIds(pair.me), theirIds = rivalBadgeIds(pair.rival), d = rivalDiff(mineIds, theirIds), pack = ids => mjByRarity(ids.map(info));
   return { me: pair.me, rival: pair.rival, mine: pack(d.onlyMine), theirs: pack(d.onlyTheirs), both: pack(d.both), myCount: mineIds.length, rivalCount: theirIds.length, diff: mineIds.length - theirIds.length };
 }
+// A SUGESTÃO de rival: o jogador ativo da liga mais perto de você em número de conquistas (as que o painel mostra, a mesma conta do placar). Quando duas pessoas estão à mesma distância,
+// vem quem está na frente (um rival para alcançar) e, ainda empatando, a ordem alfabética. Quem ainda não tem nenhuma conquista não jogou e não é sugerido; sem nenhuma conquista minha não há
+// "perto" para medir. `exceptKey` pula um jogador (o rival atual, quando se troca de rival). Calculada só neste aparelho, com o que a liga já mostra a todos: nada vai ao servidor e ninguém é avisado.
+// Null sem sugestão, sem jogador vinculado ou na simulação do admin ("Ver como").
+const rivalCloser = (a, b) => Math.abs(a.gap) !== Math.abs(b.gap) ? Math.abs(a.gap) < Math.abs(b.gap) : (a.gap >= 0) !== (b.gap >= 0) ? a.gap >= 0 : a.name.localeCompare(b.name, 'pt') < 0;
+function rivalSuggestion(exceptKey) {
+  const myKey = st.userDoc?.playerKey;
+  if (!myKey || (st.mjPreviewKey && st.mjPreviewKey !== myKey)) return null;
+  const me = (st.players || []).find(p => playerKey(p.name) === myKey);
+  const mine = me ? rivalBadgeIds(me.name).length : 0;
+  if (!mine) return null;
+  let best = null;
+  for (const p of rivalCandidates()) {
+    const key = playerKey(p.name);
+    if (key === exceptKey) continue;
+    const count = rivalBadgeIds(p.name).length;
+    if (!count) continue;
+    const cand = { key, name: p.name, count, mine, gap: count - mine };
+    if (!best || rivalCloser(cand, best)) best = cand;
+  }
+  return best;
+}
+// "2 conquistas a mais que você" (ou "a menos", ou "o mesmo número de conquistas que você") e, na janela, "12 conquistas, 2 a mais que você"
+const rivalGapText = sg => sg.gap > 0 ? `${sg.gap} conquista${sg.gap === 1 ? '' : 's'} a mais que você` : sg.gap < 0 ? `${-sg.gap} conquista${sg.gap === -1 ? '' : 's'} a menos que você` : 'o mesmo número de conquistas que você';
+const rivalSuggestText = sg => `${sg.count} conquista${sg.count === 1 ? '' : 's'}, ${sg.gap > 0 ? sg.gap + ' a mais que você' : sg.gap < 0 ? -sg.gap + ' a menos que você' : 'igual a você'}`;
 // As linhas da tabela de números. `val` tira o número de um lado; `better` diz quem leva a cor ('high' = quem tem mais, 'low' = quem tem menos; sem ele a linha só informa, porque jogar
 // mais não é jogar melhor); `games` marca as que vêm dos jogos dos times (vitórias, empates, derrotas e % de vitórias, a mesma conta do Resumo de Jogos da aba EU).
 const rivalTitlesText = t => (t % 1 === 0 ? String(t) : Math.floor(t) + '½');
@@ -11835,7 +11860,10 @@ function rivalStrip(isSimulating) {
   const btn = 'flex-shrink:0;padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
   const row = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border2)';
   const c = rivalCompare();
-  if (!c) return `<div style="${row}"><span style="font-size:18px">⚔️</span><span style="flex:1;font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas e os seus números com os de um rival da liga.</span><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
+  if (!c) {
+    const sg = rivalSuggestion();
+    return `<div style="${row}"><span style="font-size:18px">⚔️</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas e os seus números com os de um rival da liga.</div>${sg ? `<button onclick="rivalPick('${sg.key}')" style="margin-top:4px;padding:0;border:none;background:none;color:var(--accent);font-size:12px;font-weight:700;text-align:left;cursor:pointer;font-family:inherit;line-height:1.4;overflow-wrap:anywhere">💡 Sugestão: ${esc(sg.name)} (${rivalGapText(sg)})</button>` : ''}</div><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
+  }
   const mc = c.diff > 0 ? 'var(--accent)' : 'var(--text)', rc = c.diff < 0 ? '#4db8ff' : 'var(--text)';
   return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
 }
@@ -11895,6 +11923,11 @@ function mRival() {
   const avatar = (name, color) => `<div style="width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:#161b22;border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${color}">${esc(rivalInitials(name))}</div>`;
   const c = m.picking ? null : rivalCompare();
   if (!c) {
+    const sg = rivalSuggestion(rivalGet());
+    const sugHtml = sg ? `<div data-rsuggest style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:12px;border:1px solid var(--accent);background:#00d67f12">
+        <span style="font-size:20px">💡</span>
+        <div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--accent)">Sugestão: mais perto de você</div><div style="font-size:14px;font-weight:700;overflow-wrap:anywhere">${esc(sg.name)}</div><div style="font-size:12px;color:var(--text3)">${rivalSuggestText(sg)}</div></div>
+        <button onclick="rivalPick('${sg.key}')" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Comparar</button></div>` : '';
     const rows = rivalCandidates().map(p => {
       const n = rivalBadgeIds(p.name).length;
       return `<button data-rname="${esc(p.name.toLowerCase())}" onclick="rivalPick('${playerKey(p.name)}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
@@ -11903,6 +11936,7 @@ function mRival() {
         <span style="font-size:12px;color:var(--text3);flex-shrink:0">${n} conquista${n === 1 ? '' : 's'}</span></button>`;
     }).join('');
     return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas e os números. A escolha fica só neste aparelho e o outro jogador não é avisado.</div>
+      ${sugHtml}
       ${rows ? `<input type="search" placeholder="Buscar jogador" oninput="rivalFilter(this.value)" aria-label="Buscar jogador" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit">
       <div id="rival-list" style="display:flex;flex-direction:column;gap:6px">${rows}</div>` : '<div style="padding:20px 0;text-align:center;font-size:13px;color:var(--text3)">Ainda não há outros jogadores na liga para virar seu rival.</div>'}
       ${rivalPlayer() ? '<button onclick="st.modal.picking=false;render()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">← Voltar para a comparação</button>' : ''}`);

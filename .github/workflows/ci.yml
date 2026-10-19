@@ -199,6 +199,10 @@ jobs:
         working-directory: functions
         run: node test/client-rival-test.js
 
+      - name: Testes do app (sugestão de rival - o jogador mais perto em número de conquistas, na faixa e na lista de escolha, privacidade e manual)
+        working-directory: functions
+        run: node test/client-rival-suggest-test.js
+
       - name: Testes do app (comparar os números com o rival - conta dos jogos, tabela, abas da janela e cartão Meus números x rival)
         working-directory: functions
         run: node test/client-rival-numbers-test.js
