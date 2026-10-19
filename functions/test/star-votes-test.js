@@ -470,10 +470,11 @@ const resetStars = () => {
 
   // anonimizar o nome
   await seed3();
-  store.set(REG + 'ana', { ...regOf('ana'), starsPinned: true });
+  store.set(REG + 'ana', { ...regOf('ana'), starsPinned: true, goleiro: true, somenteChurrasco: true });
   const am = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_ana'));
   const nk = am.newKey;
   check('anonimizar: o jogador novo herda a média que o grupo deu e a estrela fixada', !store.has(REG + 'ana') && regOf(nk).starsVotes === 1 && regOf(nk).starsPinned === true, regOf(nk));
+  check('anonimizar: o goleiro continua goleiro e quem só vai ao churrasco continua fora do sorteio (antes esses dois campos se perdiam)', regOf(nk).goleiro === true && regOf(nk).somenteChurrasco === true, regOf(nk));
   check('anonimizar: as notas que ele DEU passam para a chave nova (continuam valendo)', VOTE('u_ana').voterKey === nk && VOTE('u_ana').ratings.caio === 5 && regOf('caio').starsVotes === 3 && regOf('caio').starsAvg === 4, [VOTE('u_ana'), regOf('caio')]);
   check('anonimizar: as notas que ele RECEBEU passam para a chave nova (dani deu 2)', VOTE('u_dani').ratings[nk] === 2 && !('ana' in VOTE('u_dani').ratings), VOTE('u_dani'));
   check('anonimizar: nenhum documento de notas guarda a chave antiga', ![...store].some(([k, d]) => k.includes('/star_votes/') && (d.voterKey === 'ana' || 'ana' in d.ratings)));
@@ -483,6 +484,7 @@ const resetStars = () => {
   resetStars();
   const am3 = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_bia'));
   check('anonimizar numa liga SEM notas guardadas: funciona e não cria documento de notas', am3.ok === true && ![...store.keys()].some(k => k.includes('/star_votes/')));
+  check('anonimizar: quem NÃO era goleiro nem "só churrasco" não ganha esses campos', !('goleiro' in regOf(am3.newKey)) && !('somenteChurrasco' in regOf(am3.newKey)) && regOf(am3.newKey).stars === 3, regOf(am3.newKey));
 })().then(() => {
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

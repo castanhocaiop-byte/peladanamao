@@ -1103,6 +1103,7 @@ async function renamePlayerToAnon(liga, oldKey) {
       added: d.added || new Date().toISOString().slice(0, 10), active: d.active !== false,
       ...(d.stars != null ? { stars: d.stars } : {}),
       ...(d.starsPinned === true ? { starsPinned: true } : {}), // estrela fixada pelo admin acompanha a troca (a média sai de novo em migrateStarVotes)
+      ...(d.goleiro ? { goleiro: true } : {}), ...(d.somenteChurrasco ? { somenteChurrasco: true } : {}), // o goleiro continua goleiro e quem só vai ao churrasco continua fora do sorteio
     });
     tx.delete(oldRegRef);
     linkedSnap.docs.forEach(doc => {
