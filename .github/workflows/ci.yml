@@ -187,7 +187,7 @@ jobs:
         working-directory: functions
         run: node test/client-badge-share-test.js
 
-      - name: Testes do app (conquista Alérgico a Gol - 3 campeonatos seguidos sem gol, estatísticas, catálogo e manual)
+      - name: Testes do app (conquistas Alérgico a Gol e Golfóbico - 3 e 10 campeonatos seguidos sem gol, estatísticas, catálogo e manual)
         working-directory: functions
         run: node test/client-badge-alergico-test.js
 

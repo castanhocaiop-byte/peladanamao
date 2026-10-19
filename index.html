@@ -1128,6 +1128,7 @@ const BADGE_CATALOG = [
   { id:'maquina',        emoji:'⚡', label:'Máquina de Gols',      desc:'Média de 1+ gol por jogo em 1 campeonato',      check: s => s.hasMachineChamp,           fieldOnly: true },
   { id:'empresario',     emoji:'💪', label:'Eu sou bom, meu empresário que é ruim', desc:'Artilheiro do camp. com o time em último lugar',check: s => s.hasArtLastPlace,           fieldOnly: true },
   { id:'alergico_gol',   emoji:'🤧', label:'Alérgico a Gol',        desc:'3 campeonatos seguidos sem fazer nenhum gol',  check: s => s.consecGoalless >= 3,       fieldOnly: true },
+  { id:'golfobico',      emoji:'😱', label:'Golfóbico',             desc:'10 campeonatos seguidos sem fazer nenhum gol', check: s => s.consecGoalless >= 10,      fieldOnly: true },
   // presença emprestada
   { id:'fominha',        emoji:'🙋', label:'Fominha',              desc:'3+ jogos emprestados em um único campeonato',   check: s => s.maxBorrowedMatches >= 3 },
   { id:'jogo_todas',     emoji:'🌪️', label:'Jogo Todas',           desc:'6+ jogos emprestados em um único campeonato',  check: s => s.maxBorrowedMatches >= 6 },

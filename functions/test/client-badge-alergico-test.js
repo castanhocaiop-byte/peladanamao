@@ -1,4 +1,5 @@
-// Conquista "Alérgico a Gol" (index.html): 3 campeonatos SEGUIDOS sem fazer nenhum gol; não vale para goleiros. Extrai o código real e o executa num ambiente
+// Conquistas "Alérgico a Gol" (3 campeonatos SEGUIDOS sem fazer nenhum gol) e "Golfóbico" (10 seguidos, item 34, 19/10/2026): a MESMA conta (consecGoalless), cada uma com o seu
+// limite; não valem para goleiros. Extrai o código real e o executa num ambiente
 // simulado, sem navegador: a função que conta a sequência (goallessStreak), o cálculo das estatísticas de todos os jogadores (computePlayerBadgeStats), a linha
 // do catálogo e as ligações no app e no manual. Regras: o jogador precisa estar no elenco; o campeonato precisa ter gols registrados (senão não dá para provar
 // nada e a sequência zera); fazer um gol zera; FALTAR a um campeonato NÃO zera nem soma (o campeonato é ignorado: só contam os que o jogador disputou, decisão do dono em
@@ -25,6 +26,8 @@ const statsCode = slice('function computePlayerBadgeStats(name) {', 'function ge
 // ── a linha do catálogo, executada de verdade (só o objeto: o `check` não depende de mais nada) ──
 const entryLine = (html.match(/^ {2}\{ id:'alergico_gol'.*\},$/m) || [])[0];
 const BADGE = entryLine ? new Function('return (' + entryLine.trim().replace(/,$/, '') + ')')() : null;
+const golfLine = (html.match(/^ {2}\{ id:'golfobico'.*\},$/m) || [])[0];
+const GOLF = golfLine ? new Function('return (' + golfLine.trim().replace(/,$/, '') + ')')() : null;
 
 // ── ambiente do aplicativo falso ─────────────────────────────────────────────────────────────────
 function makeStats(players, champs) {
@@ -132,12 +135,45 @@ const D2 = i => (i < 4 ? D(i) : '2026-10-' + String(i * 7 - 20).padStart(2, '0')
   check('a conquista nunca é "impossível" nem exclusiva: sem minGoalsMatch (não depende do limite de gols por jogo), sem specialFor e sem visible (aparece bloqueada em toda liga)', !('minGoalsMatch' in BADGE) && !('specialFor' in BADGE) && !('visible' in BADGE) && !('icon' in BADGE));
   check('o emoji 🤧 e o nome não repetem os de outra conquista', (html.match(/emoji:'🤧'/g) || []).length === 1 && (html.match(/label:'Alérgico a Gol'/g) || []).length === 1);
 
+
+  // ══ 5. GOLFÓBICO: 10 campeonatos seguidos sem gol (a mesma conta do Alérgico a Gol, outro limite) ═════
+  const W = i => new Date(Date.UTC(2026, 8, 9 + i * 7)).toISOString().slice(0, 10); // 09/09, 16/09, 23/09… (quartas, a partir do corte de 08/09/2026)
+  const semW = i => SEM(W(i)), comW = i => COM(W(i)), faltouW = i => FALTOU(W(i)), semGolsW = i => SEMGOLS(W(i));
+  const S2 = (champs, nome = 'Ana') => makeStats(players, champs).computePlayerBadgeStats(nome);
+  const nSem = n => Array.from({ length: n }, (_, i) => semW(i));
+  check('a linha do catálogo do Golfóbico existe, uma vez só: id golfobico, 😱, "Golfóbico", "10 campeonatos seguidos sem fazer nenhum gol", só jogador de linha (fieldOnly, nunca gkOnly) e logo depois do Alérgico a Gol', !!GOLF && (html.match(/id:'golfobico'/g) || []).length === 1 && GOLF.id === 'golfobico' && GOLF.emoji === '😱' && GOLF.label === 'Golfóbico' && GOLF.desc === '10 campeonatos seguidos sem fazer nenhum gol' && GOLF.fieldOnly === true && !GOLF.gkOnly && !GOLF.specialFor && html.indexOf("id:'golfobico'") > html.indexOf("id:'alergico_gol'") && html.indexOf("id:'golfobico'") < html.indexOf("id:'fominha'"), GOLF);
+  check('o emoji 😱 e o nome "Golfóbico" não repetem os de outra conquista', (html.match(/emoji:'😱'/g) || []).length === 1 && (html.match(/label:'Golfóbico'/g) || []).length === 1);
+  check('a conquista nunca é "impossível" nem exclusiva: sem minGoalsMatch, sem specialFor, sem visible e sem icon (aparece bloqueada em toda liga, como o Alérgico a Gol)', !('minGoalsMatch' in GOLF) && !('specialFor' in GOLF) && !('visible' in GOLF) && !('icon' in GOLF));
+  check('sai com 10 seguidos (consecGoalless ≥ 10) e não com 9 nem com 3 (o limite do Alérgico); sem o dado (undefined) não sai', GOLF.check({ consecGoalless: 10 }) === true && GOLF.check({ consecGoalless: 11 }) === true && GOLF.check({ consecGoalless: 9 }) === false && GOLF.check({ consecGoalless: 3 }) === false && GOLF.check({ consecGoalless: 0 }) === false && GOLF.check({}) === false);
+  check('as duas conquistas leem a MESMA estatística (consecGoalless), cada uma com o seu limite: com 3 só o Alérgico a Gol, com 10 os dois', (() => { const at = n => [BADGE.check({ consecGoalless: n }), GOLF.check({ consecGoalless: n })].join(); return at(2) === 'false,false' && at(3) === 'true,false' && at(9) === 'true,false' && at(10) === 'true,true' && at(15) === 'true,true'; })());
+  check('pela conta de todos os jogadores: 10 campeonatos seguidos sem gol = consecGoalless 10 (saem as duas); 9 = 9 (só o Alérgico a Gol)', S2(nSem(10)).consecGoalless === 10 && BADGE.check(S2(nSem(10))) === true && GOLF.check(S2(nSem(10))) === true && S2(nSem(9)).consecGoalless === 9 && BADGE.check(S2(nSem(9))) === true && GOLF.check(S2(nSem(9))) === false);
+  check('um gol zera: 6 sem gol + 1 com gol + 4 sem gol = 6 (nada de Golfóbico); 6 + gol + 10 sem gol = 10 (sai); 5 + gol + 5 = 5', (() => { const mix = (a, b) => [...nSem(a), comW(a), ...Array.from({ length: b }, (_, i) => semW(a + 1 + i))]; return S2(mix(6, 4)).consecGoalless === 6 && GOLF.check(S2(mix(6, 4))) === false && S2(mix(6, 10)).consecGoalless === 10 && GOLF.check(S2(mix(6, 10))) === true && S2(mix(5, 5)).consecGoalless === 5; })());
+  check('faltar a campeonatos não atrapalha nem ajuda: 10 sem gol com 3 ausências no meio = 10 (sai); 9 sem gol com 5 ausências = 9 (não sai); só ausências = 0', (() => {
+    const dez = [semW(0), semW(1), faltouW(2), semW(3), semW(4), faltouW(5), semW(6), semW(7), semW(8), faltouW(9), semW(10), semW(11), semW(12)];
+    const nove = [semW(0), faltouW(1), semW(2), faltouW(3), semW(4), faltouW(5), semW(6), faltouW(7), semW(8), faltouW(9), semW(10), semW(11), semW(12), semW(13)];
+    return S2(dez).consecGoalless === 10 && GOLF.check(S2(dez)) === true && S2(nove).consecGoalless === 9 && GOLF.check(S2(nove)) === false && S2(Array.from({ length: 12 }, (_, i) => faltouW(i))).consecGoalless === 0;
+  })());
+  check('campeonato sem NENHUM gol lançado zera (erro de lançamento não dá conquista de "não fazer"): 5 sem gol + 1 sem lançamento + 5 sem gol = 5; 12 sem lançamento = 0', S2([...nSem(5), semGolsW(5), ...Array.from({ length: 5 }, (_, i) => semW(6 + i))]).consecGoalless === 5 && S2(Array.from({ length: 12 }, (_, i) => semGolsW(i))).consecGoalless === 0);
+  check('quem faz gol em todos fica com 0, quem só faltou também; no mesmo campeonato quem fez gol (Bia) não tem o Golfóbico e quem não fez (Ana) tem: 10 campeonatos seguidos', S2(Array.from({ length: 10 }, (_, i) => comW(i))).consecGoalless === 0 && S2(nSem(10), 'Fulano').consecGoalless === 0 && GOLF.check(S2(nSem(10), 'Bia')) === false && GOLF.check(S2(nSem(10), 'Ana')) === true);
+  check('campeonato do plano gratuito e o que não terminou não entram na conta (nem somam, nem quebram): 5 + 1 gratuito + 1 em andamento + 5 = 10 (sai); 4 + 1 gratuito + 5 = 9 (não sai)', (() => {
+    const a = [...nSem(5), SEM('2026-10-20', { free: true, tag: 'f' }), SEM('2026-10-21', { status: 'active', tag: 'a' }), ...Array.from({ length: 5 }, (_, i) => semW(5 + i))];
+    const b = [...nSem(4), SEM('2026-10-20', { free: true, tag: 'f' }), ...Array.from({ length: 5 }, (_, i) => semW(4 + i))];
+    return S2(a).consecGoalless === 10 && GOLF.check(S2(a)) === true && S2(b).consecGoalless === 9 && GOLF.check(S2(b)) === false;
+  })());
+  check('antes de 08/09/2026 não conta (ainda não havia gols registrados): 9 depois do corte + 3 antigos = 9 (não sai); 10 depois + 3 antigos = 10 (sai)', S2([...nSem(9), SEM('2026-09-01'), SEM('2026-09-02'), SEM('2026-09-03')]).consecGoalless === 9 && GOLF.check(S2([...nSem(9), SEM('2026-09-01'), SEM('2026-09-02'), SEM('2026-09-03')])) === false && GOLF.check(S2([...nSem(10), SEM('2026-09-01'), SEM('2026-09-02'), SEM('2026-09-03')])) === true);
+  check('goleiro: a conta sai igual, mas a conquista é só de linha: fieldOnly e o filtro do catálogo (aba EU e cache) tiram as "fieldOnly" de quem é goleiro; o total de quem pode ter conta só jogadores de linha', GOLF.fieldOnly === true && /BADGE_CATALOG\.filter\(b => !\(b\.fieldOnly && isGK\)/.test(view) && /if\(b\.fieldOnly&&isGK\) return false;/.test(html) && /!\(b\.fieldOnly && p\.goleiro\)/.test(html));
+  check('a conta continua uma só: uma definição de goallessStreak e as mesmas 2 chamadas (aba EU e cache); o Golfóbico não criou outra conta', (html.match(/function goallessStreak\(/g) || []).length === 1 && (html.match(/goallessStreak\(/g) || []).length === 3 && (html.match(/consecGoalless >= /g) || []).length === 2, (html.match(/consecGoalless >= /g) || []).length);
+
   // ══ 4. MANUAL ═════════════════════════════════════════════════════════════════════════════════════
   const plainM = s => s.replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   const sec13 = plainM(manual.slice(manual.indexOf('id="conquistas"'), manual.indexOf('<h3>Presença emprestada')));
   const row = (sec13.match(/🤧 Alérgico a Gol.{0,700}/) || [''])[0];
-  check('manual (seção 13): a linha da conquista, na tabela "Partidas e records" da linha de campo, com o critério dos 3 campeonatos seguidos', /🤧 Alérgico a Gol 3 campeonatos seguidos sem fazer nenhum gol/.test(row) && (manual.match(/Alérgico a Gol/g) || []).length === 1 && manual.indexOf('Alérgico a Gol') > manual.indexOf('Viciado em Hat-trick') && manual.indexOf('Alérgico a Gol') < manual.indexOf('<td>😭 Gols, Glória e... Derrota!</td>'), row.slice(0, 200));
+  check('manual (seção 13): a linha da conquista, na tabela "Partidas e records" da linha de campo, com o critério dos 3 campeonatos seguidos', /🤧 Alérgico a Gol 3 campeonatos seguidos sem fazer nenhum gol/.test(row) && (manual.match(/<td>🤧 Alérgico a Gol<\/td>/g) || []).length === 1 && manual.indexOf('<td>🤧 Alérgico a Gol</td>') > manual.indexOf('Viciado em Hat-trick') && manual.indexOf('<td>🤧 Alérgico a Gol</td>') < manual.indexOf('<td>😱 Golfóbico</td>'), row.slice(0, 200));
   check('manual: explica que precisa estar no elenco, que o campeonato precisa ter gols registrados, que fazer gol zera mas faltar NÃO zera, o corte de 08/09/2026, o plano gratuito e que goleiros não recebem', /precisa estar no elenco do campeonato/.test(row) && /precisa ter gols registrados/.test(row) && /se ninguém marcou, o campeonato não conta e a sequência recomeça/.test(row) && /fazer um gol zera a sequência/.test(row) && /Faltar a um campeonato não zera/.test(row) && /só contam os campeonatos em que o jogador esteve no elenco/.test(row) && !/também zera a sequência/.test(row) && /a partir de 08\/09\/2026/.test(row) && /fora do plano gratuito/.test(row) && /Goleiros não recebem esta badge/.test(row), row);
+
+  const rowG = (sec13.match(/😱 Golfóbico.{0,900}/) || [''])[0];
+  check('manual (seção 13): a linha do Golfóbico, logo depois da do Alérgico a Gol e antes de "Gols, Glória e... Derrota!", com os 10 campeonatos seguidos (uma linha só)', /😱 Golfóbico 10 campeonatos seguidos sem fazer nenhum gol/.test(rowG) && (manual.match(/<td>😱 Golfóbico<\/td>/g) || []).length === 1 && (manual.match(/Golfóbico/g) || []).length === 1 && manual.indexOf('<td>😱 Golfóbico</td>') > manual.indexOf('<td>🤧 Alérgico a Gol</td>') && manual.indexOf('<td>😱 Golfóbico</td>') < manual.indexOf('<td>😭 Gols, Glória e... Derrota!</td>'), rowG.slice(0, 200));
+  check('manual: diz que as regras são as do Alérgico a Gol (elenco, gols registrados, gol zera, faltar não zera), que quem chega a 10 já tem o Alérgico, o corte de 08/09/2026, o plano gratuito e que goleiros não recebem', /mesmas regras do 🤧 Alérgico a Gol/.test(rowG) && /precisa estar no elenco do campeonato/.test(rowG) && /precisa ter gols registrados/.test(rowG) && /fazer um gol zera a sequência/.test(rowG) && /faltar a um campeonato não zera/.test(rowG) && /Quem chega a 10 já tem o Alérgico a Gol/.test(rowG) && /a partir de 08\/09\/2026/.test(rowG) && /fora do plano gratuito/.test(rowG) && /Goleiros não recebem esta badge/.test(rowG), rowG);
 
   console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
   if (fails) process.exitCode = 1;
