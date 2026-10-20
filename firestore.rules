@@ -149,6 +149,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Rival (item 36). A escolha de rival de cada conta fica aqui: só a PRÓPRIA conta lê (nem o admin, nem o rival) e o app nunca grava;
+    // a função setRival valida e guarda, e saveRivalProgress guarda o histórico dos duelos do mês. Os documentos levam o uid da conta.
+    match /leagues/{leagueId}/rivals/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid && isLeagueActiveUser(leagueId);
+      allow write: if false;
+    }
+
+    // O que a liga toda vê do rival, por jogador (docId = chave do jogador): as badges do rival que ele já ganhou (awards) e as marcas
+    // "Alvo da Galera" e "Rivalidade Declarada" (alvo, declarada). Ninguém vê quem escolheu quem. Só o servidor grava.
+    match /leagues/{leagueId}/rival_public/{key} {
+      allow read: if isLeagueActiveUser(leagueId);
+      allow write: if false;
+    }
+
     // Contatos (WhatsApp) de jogadores e avulsos: só o admin lê e grava.
     // Jogador: id do cadastro. Avulso: "avulso_" + chave do nome.
     match /leagues/{leagueId}/contacts/{docId} {

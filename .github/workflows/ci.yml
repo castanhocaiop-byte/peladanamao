@@ -215,6 +215,10 @@ jobs:
         working-directory: functions
         run: node test/client-stars-test.js
 
+      - name: Testes das Cloud Functions (rival - validar os duelos do mês, sequências, viradas, tempo com o rival, Alvo da Galera, Rivalidade Declarada, escolha do rival no servidor e limpeza ao sair da liga, ser recusado, excluir a conta e anonimizar o nome)
+        working-directory: functions
+        run: node test/rival-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
