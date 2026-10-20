@@ -38,8 +38,9 @@ const PLAYERS = [
   { id: 'hugo', name: 'Hugo', stars: 4 }, { id: 'iara', name: 'Iara', stars: 3 }, { id: 'joao', name: 'João', stars: 2 },
 ]; // 8 jogam (Fábio é inativo, Gil só vai ao churrasco): são precisos 4 votos
 
-function makeEnv({ players = PLAYERS, appCfg = { peerStars: true }, admin = true, me = 'ana', sim = null, saved = null, readFails = false, callFails = null, confirmAnswer = true, champs = [] } = {}) {
-  const calls = { updates: [], sets: [], deletes: [], toasts: [], renders: 0, fn: [], confirms: [], reads: [], closes: 0, scroll: [], contacts: [], busyAtCall: [] };
+function makeEnv({ players = PLAYERS, appCfg = { peerStars: true }, admin = true, me = 'ana', sim = null, saved = null, readFails = false, callFails = null, confirmAnswer = true, champs = [], lsFails = false, noDB = false, callResult = { ok: true, recipients: 6, withPush: 5 } } = {}) {
+  const calls = { updates: [], sets: [], deletes: [], toasts: [], renders: 0, fn: [], confirms: [], reads: [], closes: 0, scroll: [], contacts: [], busyAtCall: [], callingAtCall: [] };
+  const ls = new Map();
   const db = { doc: p => ({ get: async () => { calls.reads.push(p); if (readFails) throw new Error('sem permissão'); return saved ? { exists: true, data: () => saved } : { exists: false, data: () => undefined }; } }) };
   const ldoc = p => ({
     update: async d => { calls.updates.push([p, d]); }, set: async d => { calls.sets.push([p, d]); }, delete: async () => { calls.deletes.push(p); },
@@ -47,10 +48,11 @@ function makeEnv({ players = PLAYERS, appCfg = { peerStars: true }, admin = true
   });
   const env = {
     st: { authUser: { uid: 'u1' }, leagueId: 'liga1', userDoc: { playerKey: me }, players: players.map(p => ({ ...p })), appCfg: { ...appCfg }, mjPreviewKey: sim, modal: null, ready: true, photos: {}, ranks: [], champs, finMens: {}, drawResult: null, drawTeamColors: [], drawNumTeams: 2, drawMode: 'balanced', drawExtras: [] },
-    DB: db, ldoc, col: () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }),
+    DB: noDB ? null : db, ldoc, col: () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }),
     isAdmin: () => admin, toast: (m, t) => { calls.toasts.push([m, t]); }, render: () => { calls.renders++; },
     confirm: msg => { calls.confirms.push(msg); return confirmAnswer; },
-    callFn: async (name, data) => { calls.fn.push([name, data]); calls.busyAtCall.push(!!(env.st.modal && env.st.modal.busy)); if (callFails) throw new Error(callFails); return { ok: true }; },
+    callFn: async (name, data) => { calls.fn.push([name, data]); calls.busyAtCall.push(!!(env.st.modal && env.st.modal.busy)); calls.callingAtCall.push(!!env.st._starsCalling); if (callFails) throw new Error(callFails); return name === 'notifyStarRatings' ? callResult : { ok: true }; },
+    localStorage: { getItem: k => { if (lsFails) throw new Error('bloqueado'); return ls.has(k) ? ls.get(k) : null; }, setItem: (k, v) => { if (lsFails) throw new Error('bloqueado'); ls.set(k, String(v)); } },
     getModalScrollTop: () => 7, setModalScrollTop: v => { calls.scroll.push(v); },
     closeModal: () => { calls.closes++; env.st.modal = null; },
     waOf: () => '', saveContact: async (k, n) => { calls.contacts.push([k, n]); }, today: () => '2026-10-19',
@@ -61,9 +63,9 @@ function makeEnv({ players = PLAYERS, appCfg = { peerStars: true }, admin = true
   const names = Object.keys(env);
   const body = [escCode, keyCode, avatarCode, voteMeCode, helpersCode, actionsCode, drawCode, renderStarsCode, drawCardCode, vPlayersCode, renameCode].join('\n') + `
 return { peerStarsOn, playingPlayers, neededVotes, starsInfo, starsOf, starsText, starsDisplay, starsCaption, drawWeight, setPlayerStars, toggleStarsPinned, starSync, ratingTargets,
-  openRateStars, rateStarSet, submitRateStars, mRateStars, balancedDraw, randomDraw, renderStars, renderDrawCard, vPlayers, deleteRegisteredPlayer, renamePlayer, playerKey };`;
+  openRateStars, rateStarSet, submitRateStars, mRateStars, starsCallPending, starsCallDone, dismissStarsCall, renderStarsCallBanner, callStarRaters, starsCallKey, balancedDraw, randomDraw, renderStars, renderDrawCard, vPlayers, deleteRegisteredPlayer, renamePlayer, playerKey };`;
   const api = new Function(...names, body)(...names.map(n => env[n]));
-  return { api, env, calls, st: env.st };
+  return { api, env, calls, st: env.st, ls };
 }
 const withStars = (extra, opts) => { const e = makeEnv(opts); e.st.players = e.st.players.map(p => (p.id === 'ana' ? { ...p, ...extra } : p)); return e; };
 const infoOf = (extra, opts) => { const e = withStars(extra, opts); return e.api.starsInfo(e.st.players.find(p => p.id === 'ana')); };
@@ -448,7 +450,7 @@ const withSeed = (seed, fn) => { const real = Math.random; Math.random = mulberr
   check('política de privacidade (quem vê o quê): ninguém, nem o admin, vê quem deu qual nota; a média com a contagem aparece aos membros a partir de 3 votos', /ninguém \(nem o admin da liga\) vê quem deu qual nota/.test(priv) && /a partir de 3 votos/.test(priv));
   check('as funções do servidor existem e são chamadas pelo app: ratePlayers e syncStarVotes', /exports\.ratePlayers = onCall/.test(fnsSrc) && /exports\.syncStarVotes = onCall/.test(fnsSrc) && /callFn\('ratePlayers'/.test(html) && /callFn\('syncStarVotes'/.test(html));
   check('regras do Firestore: star_votes só lê a dona (uid), ninguém grava; o cadastro não aceita starsAvg/starsVotes vindos do app', /match \/leagues\/\{leagueId\}\/star_votes\/\{uid\}[\s\S]{0,700}request\.auth\.uid == uid[\s\S]{0,60}allow write: if false;/.test(rules) && /function keepsStarsAvgOut\(\)/.test(rules) && /keepsWhatsappOut\(\) && keepsStarsAvgOut\(\)/.test(rules));
-  const sec = manual.slice(manual.indexOf('id="estrelas-do-grupo"'), manual.indexOf('id="estrelas-do-grupo"') + 12000);
+  const sec = manual.slice(manual.indexOf('id="estrelas-do-grupo"'), manual.indexOf('id="estrelas-do-grupo"') + 20000);
   const plainSec = x => x.replace(/<\/(?:td|th|tr|p|li|div|h3|h2|ul|table)>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
   const psec = plainSec(sec.slice(0, sec.indexOf('</section>')));
   check('manual: subseção "⭐ Estrelas pela média do grupo" (id estrelas-do-grupo) dentro do Painel Admin', manual.indexOf('id="estrelas-do-grupo"') > manual.indexOf('id="admin"') && manual.indexOf('id="estrelas-do-grupo"') < manual.indexOf('id="resumo"') && /⭐ Estrelas pela média do grupo/.test(sec));
@@ -458,6 +460,90 @@ const withSeed = (seed, fn) => { const real = Math.random; Math.random = mulberr
   check('manual: o plano gratuito inclui as estrelas pela média (lista do que continua funcionando)', /Dar estrelas ao elenco/.test(manual.slice(manual.indexOf('O que continua funcionando no plano free'), manual.indexOf('O que continua funcionando no plano free') + 1600)));
   check('manual: a seção "Excluir a conta" cita as notas de estrelas que a pessoa deu', /notas de estrelas/i.test(manual.slice(manual.indexOf('id="excluir"'), manual.indexOf('id="anonimizar"'))));
   check('CI: o teste do app das estrelas roda (passo "Testes do app (estrelas pela média do grupo …)" executando test/client-stars-test.js e o das funções star-votes-test.js)', /name: Testes do app \(estrelas pela média do grupo[^\n]*\)\n\s+working-directory: functions\n\s+run: node test\/client-stars-test\.js/.test(ci) && /node test\/star-votes-test\.js/.test(ci));
+
+  // ══ 8b. A CHAMADA DO ADMIN PARA O GRUPO AVALIAR ═════════════════════════════════════════════════════
+  const AT = new Date(Date.now() - 3 * 3600 * 1000).toISOString(); // chamada de 3 horas atrás
+  const CALLED = { peerStars: true, starsCallAt: AT, starsCallBy: 'admin-uid' };
+  const pend = (o = {}) => { const x = makeEnv({ players: LEAGUE, me: 'ana', admin: false, appCfg: CALLED, ...o }); return { ...x, pending: x.api.starsCallPending() }; };
+  check('convite: chamada recente, opção ligada, conta ligada a um jogador e quem chamou é outra pessoa → pendente', pend().pending === true);
+  check('convite: com a opção desligada não aparece (mesmo com a chamada gravada)', pend({ appCfg: { ...CALLED, peerStars: false } }).pending === false);
+  check('convite: sem chamada gravada não aparece', pend({ appCfg: { peerStars: true } }).pending === false);
+  check('convite: data torta (texto, vazio) não aparece', ['ontem', '', 'NaN'].every(v => pend({ appCfg: { ...CALLED, starsCallAt: v } }).pending === false));
+  check('convite: o banner dura 14 dias: com 14 dias e meio já não aparece, com 13 e meio ainda aparece', pend({ appCfg: { ...CALLED, starsCallAt: new Date(Date.now() - 14.5 * 86400000).toISOString() } }).pending === false && pend({ appCfg: { ...CALLED, starsCallAt: new Date(Date.now() - 13.5 * 86400000).toISOString() } }).pending === true);
+  check('convite: quem chamou (o uid gravado é o da própria conta) não vê o banner', pend({ appCfg: { ...CALLED, starsCallBy: 'u1' } }).pending === false);
+  check('convite: conta sem jogador ligado, ou na simulação do admin, não vê o banner', pend({ me: 'ninguem' }).pending === false && pend({ sim: 'bia' }).pending === false);
+  const pe = pend();
+  const hB = pe.api.renderStarsCallBanner();
+  check('convite: o banner tem o título, a explicação do anonimato, "Avaliar agora" (abre a janela) e "Agora não"; tags equilibradas', /O admin pediu para você avaliar o elenco/.test(hB) && /anônimas/.test(hB) && /onclick="openRateStars\(\)"[^>]*>Avaliar agora</.test(hB) && /onclick="dismissStarsCall\(\)"[^>]*>Agora não</.test(hB) && abre(hB) === fecha(hB), hB.slice(0, 300));
+  check('convite: sem chamada pendente o banner não desenha nada', pend({ appCfg: { peerStars: true } }).api.renderStarsCallBanner() === '');
+  pe.api.dismissStarsCall();
+  check('convite: "Agora não" guarda NESTE aparelho (a chave leva a liga e o jogador, o valor é o momento da chamada), redesenha a tela e o banner some', pe.ls.get('pnm_stars_call_liga1_ana') === AT && pe.calls.renders === 1 && pe.api.starsCallPending() === false && pe.api.renderStarsCallBanner() === '', [...pe.ls]);
+  check('convite: uma chamada NOVA (outro momento) traz o banner de volta', (() => { pe.st.appCfg.starsCallAt = new Date().toISOString(); return pe.api.starsCallPending() === true; })());
+  const lsBad = pend({ lsFails: true });
+  check('convite: com o armazenamento do navegador bloqueado o banner ainda aparece e tocar em "Agora não" não quebra', lsBad.pending === true && (() => { try { lsBad.api.dismissStarsCall(); return true; } catch (_) { return false; } })());
+  const saveOk = pend();
+  await saveOk.api.openRateStars(); saveOk.api.rateStarSet(0, 4); await saveOk.api.submitRateStars();
+  check('convite: depois de SALVAR as avaliações o banner some (a pessoa já fez o que o admin pediu)', saveOk.ls.get('pnm_stars_call_liga1_ana') === AT && saveOk.api.starsCallPending() === false, [...saveOk.ls]);
+  const saveBad = pend({ callFails: 'Muitas tentativas' });
+  await saveBad.api.openRateStars(); saveBad.api.rateStarSet(0, 4); await saveBad.api.submitRateStars();
+  check('convite: se salvar falhar o banner continua (a pessoa ainda não avaliou)', saveBad.ls.size === 0 && saveBad.api.starsCallPending() === true);
+  check('convite: a chave do aparelho leva a liga e o jogador (outro jogador no mesmo aparelho vê o banner)', (() => { const x = pend(); x.api.dismissStarsCall(); x.st.userDoc.playerKey = 'bia'; return x.api.starsCallKey() === 'pnm_stars_call_liga1_bia' && x.api.starsCallPending() === true; })());
+
+  const adminCall = (o = {}) => makeEnv({ players: LEAGUE, admin: true, me: 'ana', ...o });
+  let ac = adminCall();
+  await ac.api.callStarRaters();
+  check('chamar: o admin confirma (a pergunta explica o aviso e as 6 horas) e a função notifyStarRatings é chamada com a liga; enquanto chama a tela fica marcada e depois destrava', ac.calls.confirms.length === 1 && /Chamar o grupo para avaliar o elenco agora/.test(ac.calls.confirms[0]) && /6 horas/.test(ac.calls.confirms[0]) && JSON.stringify(ac.calls.fn) === '[["notifyStarRatings",{"liga":"liga1"}]]' && ac.calls.callingAtCall.join() === 'true' && ac.st._starsCalling === false && ac.calls.renders === 2, [ac.calls.confirms, ac.calls.fn, ac.calls.callingAtCall, ac.calls.renders]);
+  for (const [res, text] of [
+    [{ recipients: 6, withPush: 5 }, 'Aviso enviado no celular a 5 de 6 jogadores. O outro vê o convite ao abrir o app.'],
+    [{ recipients: 8, withPush: 5 }, 'Aviso enviado no celular a 5 de 8 jogadores. Os outros 3 veem o convite ao abrir o app.'],
+    [{ recipients: 4, withPush: 4 }, 'Aviso enviado no celular a 4 de 4 jogadores.'],
+    [{ recipients: 1, withPush: 1 }, 'Aviso enviado no celular a 1 de 1 jogador.'],
+    [{ recipients: 3, withPush: 0 }, 'Convite registrado para 3 jogadores: ninguém ativou as notificações, então todos o veem ao abrir o app.'],
+    [{ recipients: 1, withPush: 0 }, 'Convite registrado para 1 jogador: ninguém ativou as notificações, então todos o veem ao abrir o app.'],
+    [{ recipients: 0, withPush: 0 }, 'Convite registrado, mas ainda não há jogadores com a conta ligada ao elenco para avisar.'],
+  ]) {
+    const x = adminCall({ callResult: { ok: true, ...res } });
+    await x.api.callStarRaters();
+    check(`chamar: o resultado ${res.withPush} de ${res.recipients} vira a frase certa`, x.calls.toasts.length === 1 && x.calls.toasts[0][0] === text && x.calls.toasts[0][1] === 'ok', x.calls.toasts);
+  }
+  ac = adminCall({ confirmAnswer: false });
+  await ac.api.callStarRaters();
+  check('chamar: se o admin não confirmar, nada é enviado', ac.calls.fn.length === 0 && ac.calls.confirms.length === 1 && ac.st._starsCalling !== true);
+  ac = adminCall({ noDB: true });
+  await ac.api.callStarRaters();
+  check('chamar: sem conexão com o banco (app ainda abrindo) nada acontece', ac.calls.fn.length === 0 && ac.calls.confirms.length === 0);
+  ac = adminCall({ admin: false });
+  await ac.api.callStarRaters();
+  check('chamar: quem não é admin nem recebe a pergunta', ac.calls.fn.length === 0 && ac.calls.confirms.length === 0);
+  ac = adminCall({ appCfg: {} });
+  await ac.api.callStarRaters();
+  check('chamar: com a opção desligada nada acontece', ac.calls.fn.length === 0 && ac.calls.confirms.length === 0);
+  ac = adminCall();
+  ac.st._starsCalling = true;
+  await ac.api.callStarRaters();
+  check('chamar: toque duplo enquanto já está chamando é ignorado', ac.calls.fn.length === 0 && ac.calls.confirms.length === 0);
+  ac = adminCall({ callFails: 'O grupo já foi chamado há pouco. Dá para chamar de novo daqui a 6 h.' });
+  await ac.api.callStarRaters();
+  check('chamar: se o servidor recusar (já chamou há pouco), o admin lê o motivo e o botão destrava', ac.calls.toasts.length === 1 && ac.calls.toasts[0][0] === 'O grupo já foi chamado há pouco. Dá para chamar de novo daqui a 6 h.' && ac.calls.toasts[0][1] === undefined && ac.st._starsCalling === false, ac.calls.toasts);
+
+  const hCall = adminCall().api.vPlayers();
+  check('Elenco: o admin vê "📣 Chamar o grupo" (callStarRaters) junto do "Avaliar o elenco"; tags equilibradas', /onclick="callStarRaters\(\)"[^>]*>📣 Chamar o grupo</.test(hCall) && /Avaliar o elenco/.test(hCall) && abre(hCall) === fecha(hCall));
+  check('Elenco: jogador comum não vê o botão de chamar', !/callStarRaters/.test(makeEnv({ players: LEAGUE, admin: false, me: 'bia' }).api.vPlayers()));
+  check('Elenco: com a opção desligada nem o admin vê o botão de chamar', !/callStarRaters/.test(adminCall({ appCfg: {} }).api.vPlayers()));
+  check('Elenco: enquanto chama o botão diz "Chamando…" e fica desativado', (() => { const x = adminCall(); x.st._starsCalling = true; return /disabled[^>]*>Chamando…/.test(x.api.vPlayers()); })());
+  check('Elenco: o admin que não tem jogador ligado vê o botão de chamar e não o de avaliar', (() => { const h = adminCall({ me: 'ninguem' }).api.vPlayers(); return /callStarRaters/.test(h) && !/openRateStars/.test(h); })());
+  check('o banner entra na aba EU logo depois dos avisos de votação', html.includes('${renderVoteBanners()}\n    ${renderStarsCallBanner()}'));
+  check('a configuração da liga lê starsCallAt e starsCallBy do banco', /starsCallAt:\s+data\.starsCallAt\s+\|\| null,/.test(html) && /starsCallBy:\s+data\.starsCallBy\s+\|\| '',/.test(html));
+  check('o texto do Painel Admin cita o botão de chamar e as 6 horas', (blk => /📣 Chamar o grupo/.test(blk) && /6 horas/.test(blk))(html.slice(html.indexOf('⭐ Estrelas pela média do grupo</div>'), html.indexOf('🗳️ Votação de destaques</div>'))));
+  check('a função do servidor existe e o app a chama', /exports\.notifyStarRatings = onCall/.test(fnsSrc) && /callFn\('notifyStarRatings'/.test(html));
+  check('manual: explica o botão "📣 Chamar o grupo", o aviso no celular, o banner "O admin pediu para você avaliar o elenco" (Avaliar agora / Agora não), quem não recebe, os 14 dias e as 6 horas entre chamadas', (() => {
+    const i = manual.indexOf('id="estrelas-do-grupo"');
+    const p = manual.slice(i, manual.indexOf('</section>', i)).replace(/<\/(?:td|th|tr|p|li|div|h3|h2|ul|table)>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+    return /botão 📣 Chamar o grupo no alto da aba Elenco/.test(p) && /quem ativou as notificações recebe um aviso no celular/.test(p) && /O admin pediu para você avaliar o elenco/.test(p) && /Avaliar agora \(abre a janela de avaliar\) e Agora não/.test(p) && /só dá para chamar de novo depois de 6 horas/.test(p) && /quem chamou não recebe o aviso nem o banner/.test(p) && /depois de 14 dias/.test(p);
+  })());
+  check('manual: a subseção "Chamar o grupo para avaliar" existe, dentro das estrelas pela média e antes de "Qual estrela vale"', (() => { const a = manual.indexOf('<h3>Chamar o grupo para avaliar</h3>'); return a > manual.indexOf('id="estrelas-do-grupo"') && a < manual.indexOf('<h3>Qual estrela vale</h3>'); })());
+  check('manual: a nota técnica cita notifyStarRatings, starsCallAt e starsCallBy, o controle rate_limits e a etiqueta que evita empilhar', /A chamada para avaliar<\/strong> — a função <code>notifyStarRatings<\/code>/.test(manual) && /<code>starsCallAt<\/code> e <code>starsCallBy<\/code> em <code>app_config\/main<\/code>/.test(manual) && /controle <code>rate_limits<\/code>/.test(manual) && /repetir não empilha/.test(manual));
+  check('manual: a tabela das notificações push tem a linha "⭐ Chamada para avaliar o elenco"', /⭐ Chamada para avaliar o elenco<\/td><td>Jogadores com a conta ligada a um jogador do elenco \(menos o admin que chamou\)/.test(manual.slice(manual.indexOf('id="admin"'), manual.indexOf('id="clima"'))));
 
   // ══ 9. NENHUM OUTRO LUGAR LÊ A ESTRELA BRUTA DO ADMIN ═══════════════════════════════════════════════
   const rawLines = html.split('\n').filter(l => /\.stars\b|\bstars:/.test(l)).map(l => l.trim());

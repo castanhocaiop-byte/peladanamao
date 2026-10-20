@@ -1458,6 +1458,8 @@ function startListeners() {
       votePos:           !!data.votePos,
       voteNeg:           !!data.voteNeg,
       peerStars:         !!data.peerStars,
+      starsCallAt:       data.starsCallAt       || null,
+      starsCallBy:       data.starsCallBy       || '',
     };
     st.cfgReady = true;
     render();
@@ -5079,6 +5081,64 @@ function starSync(rename) {
   callFn('syncStarVotes', { liga: st.leagueId, ...(rename ? { rename } : {}) }).catch(() => {});
 }
 
+/* ── Chamada do admin para o grupo avaliar o elenco ──────────────────────────────────────────────────────────────────────────
+   O admin toca em "📣 Chamar o grupo" (função notifyStarRatings): quem ativou as notificações recebe um aviso no celular e todo jogador com
+   a conta ligada ao elenco vê, ao abrir o app (o toque no aviso abre o app), o banner "O admin pediu para você avaliar o elenco"
+   (starsCallAt, gravado pelo servidor em app_config/main). O banner some quando a pessoa avalia, toca em "Agora não" ou depois de 14 dias;
+   uma chamada nova (starsCallAt diferente) traz o banner de volta. Quem chamou não vê o banner. O servidor limita a uma chamada por liga
+   a cada 6 horas. */
+function starsCallKey() { const me = myVotePlayer(); return me ? `pnm_stars_call_${st.leagueId}_${me.key}` : ''; }
+function starsCallPending() {
+  const at = st.appCfg?.starsCallAt;
+  if (!at || !peerStarsOn() || !myVotePlayer()) return false;
+  if (st.appCfg.starsCallBy && st.appCfg.starsCallBy === st.authUser?.uid) return false;
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms) || Date.now() - ms > 14 * 86400000) return false;
+  try { if (localStorage.getItem(starsCallKey()) === at) return false; } catch(_) {}
+  return true;
+}
+function starsCallDone() {
+  const at = st.appCfg?.starsCallAt, k = starsCallKey();
+  if (!at || !k) return;
+  try { localStorage.setItem(k, at); } catch(_) {}
+}
+function dismissStarsCall() { starsCallDone(); render(); }
+function renderStarsCallBanner() {
+  if (!starsCallPending()) return '';
+  return `<div style="background:var(--s2);border:1.5px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px">
+    <span style="font-size:22px">⭐</span>
+    <div style="flex:1 1 180px;min-width:0">
+      <div style="font-size:13px;font-weight:700">O admin pediu para você avaliar o elenco</div>
+      <div style="font-size:11px;color:var(--text3)">Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio.</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="openRateStars()" style="padding:8px 14px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Avaliar agora</button>
+      <button onclick="dismissStarsCall()" style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Agora não</button>
+    </div>
+  </div>`;
+}
+
+// Só o admin: avisa o grupo (celular + convite no app). O servidor recusa se já chamou há menos de 6 horas.
+async function callStarRaters() {
+  if (!DB || !isAdmin() || !peerStarsOn() || st._starsCalling) return;
+  if (!confirm('Chamar o grupo para avaliar o elenco agora? Quem ativou as notificações recebe um aviso no celular, e todo jogador com a conta ligada ao elenco vê o convite ao abrir o app. Só dá para chamar de novo depois de 6 horas.')) return;
+  st._starsCalling = true;
+  render();
+  try {
+    const r = await callFn('notifyStarRatings', {liga: st.leagueId});
+    const nJog = n => `${n} jogador${n === 1 ? '' : 'es'}`;
+    const rest = r.recipients - r.withPush;
+    toast(!r.recipients ? 'Convite registrado, mas ainda não há jogadores com a conta ligada ao elenco para avisar.'
+      : !r.withPush ? `Convite registrado para ${nJog(r.recipients)}: ninguém ativou as notificações, então todos o veem ao abrir o app.`
+      : `Aviso enviado no celular a ${r.withPush} de ${nJog(r.recipients)}.${rest === 1 ? ' O outro vê o convite ao abrir o app.' : rest > 1 ? ` Os outros ${rest} veem o convite ao abrir o app.` : ''}`, 'ok');
+  } catch(e) {
+    toast(e?.message || 'Não foi possível chamar o grupo agora. Tente de novo.');
+  } finally {
+    st._starsCalling = false;
+    render();
+  }
+}
+
 /* ── Avaliar o elenco: cada jogador dá de 1 a 5 estrelas aos outros ──────────────────────────────────────────────────────────── */
 function ratingTargets() {
   const me = myVotePlayer();
@@ -5127,6 +5187,7 @@ async function submitRateStars() {
   render();
   try {
     await callFn('ratePlayers', {liga: st.leagueId, ratings: diff});
+    starsCallDone(); // quem avaliou não precisa mais do convite do admin
     st.modal = null;
     render();
     toast('Avaliações salvas! Só a média do grupo aparece para os outros.', 'ok');
@@ -6281,6 +6342,7 @@ function vPlayers() {
     ${peerStarsOn()?`<div class="card-body" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px">
       <div style="flex:1 1 200px;min-width:0;font-size:12px;color:var(--text3);line-height:1.5">⭐ A estrela de cada jogador vem da <strong style="color:var(--text2)">média das notas do grupo</strong>. As notas são anônimas: só a média aparece.</div>
       ${myVotePlayer()?`<button class="btn btn-primary btn-sm btn-inline" onclick="openRateStars()" style="margin:0;white-space:nowrap">Avaliar o elenco</button>`:''}
+      ${isAdmin()?`<button class="btn btn-sm btn-inline" onclick="callStarRaters()" ${st._starsCalling?'disabled':''} style="margin:0;white-space:nowrap;border:1px solid var(--accent);background:none;color:var(--accent)">${st._starsCalling?'Chamando…':'📣 Chamar o grupo'}</button>`:''}
     </div>`:''}
     ${isAdmin()?`<div class="card-body" style="display:flex;gap:8px;align-items:center">
       <input id="newp-inp" class="player-input" type="text" placeholder="Nome do jogador"
@@ -7723,6 +7785,7 @@ function vMeuJogador() {
     </div>`:''}
     ${isSimulating?'':checklistCard()}
     ${renderVoteBanners()}
+    ${renderStarsCallBanner()}
     ${(()=>{
       const _preset = presetChamp();
       if (!_preset) return '';
@@ -8490,7 +8553,7 @@ function mAdminPanel() {
           </div>
           <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">⭐ Estrelas pela média do grupo</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada jogador dá de 1 a 5 estrelas aos outros e o sorteio equilibrado passa a usar a média das notas. As notas são anônimas: só a média aparece. A média vale para cada jogador quando metade do elenco que joga (no mínimo 3 pessoas) já avaliou; antes disso vale a estrela que você deu. No Elenco, o 📌 fixa a estrela de um jogador e ignora os votos dele.</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada jogador dá de 1 a 5 estrelas aos outros e o sorteio equilibrado passa a usar a média das notas. As notas são anônimas: só a média aparece. A média vale para cada jogador quando metade do elenco que joga (no mínimo 3 pessoas) já avaliou; antes disso vale a estrela que você deu. No Elenco, o 📌 fixa a estrela de um jogador e ignora os votos dele, e o 📣 Chamar o grupo avisa os jogadores para avaliarem (uma vez a cada 6 horas).</div>
             <div style="display:flex;gap:8px">
               <button onclick="saveAppCfg({peerStars:true})" style="${tog(!!cfg.peerStars)}">Ligada</button>
               <button onclick="saveAppCfg({peerStars:false})" style="${tog(!cfg.peerStars)}">Desligada</button>

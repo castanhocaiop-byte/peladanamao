@@ -1032,6 +1032,30 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     const par2 = await Promise.all([[U.pl1, 1], [U.pl2, 1], [U.admA, 1]].map(([u, n]) => rate(u.token, { caio: n })));
     const cp2 = await reg('caio');
     check('estrelas: 3 trocas ao mesmo tempo → a média acompanha todas (1, 1 e 1 → 1)', par2.every(x => x.status === 200) && cp2.starsVotes === 3 && cp2.starsAvg === 1, [par2.map(x => x.status), cp2]);
+
+    // a chamada do admin para o grupo avaliar (notifyStarRatings): sem aparelhos cadastrados, porque o emulador não fala com o serviço de avisos de verdade
+    await db.update('owner', 'users/' + U.pl1.uid, { fcmTokens: [] });
+    await db.update('owner', 'users/' + U.admA.uid, { fcmTokens: [] });
+    const cfgPath = 'leagues/la/app_config/main';
+    r = await callFn('notifyStarRatings', null, { liga: 'la' });
+    check('estrelas/chamada: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('notifyStarRatings', tok, { liga: 'la' });
+      check(`estrelas/chamada: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    await S(cfgPath, { hasFinais: true, peerStars: false });
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    check('estrelas/chamada: com a opção desligada → pré-condição falhou, sem gravar nada', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /Ligue as estrelas/.test(r.error.message) && !('starsCallAt' in (await db.get('owner', cfgPath).then(docData))), r.raw);
+    await S(cfgPath, { hasFinais: true, peerStars: true });
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    const cfgDepois = await db.get('owner', cfgPath).then(docData);
+    check('estrelas/chamada: o admin chama; o resumo conta os 2 jogadores com a conta ligada ao elenco (pl1 e pl2; o admin que chamou fica de fora) e 0 com aviso no celular', r.status === 200 && r.result.ok === true && r.result.recipients === 2 && r.result.withPush === 0, r.raw);
+    check('estrelas/chamada: o convite do app fica gravado em app_config/main (momento e quem chamou) sem apagar o resto da configuração', /^\d{4}-\d\d-\d\dT/.test(cfgDepois.starsCallAt) && cfgDepois.starsCallBy === U.admA.uid && cfgDepois.peerStars === true && cfgDepois.hasFinais === true, cfgDepois);
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    check('estrelas/chamada: chamar de novo logo em seguida → "o grupo já foi chamado há pouco" (429) e o convite gravado não muda', r.status === 429 && r.error.status === 'RESOURCE_EXHAUSTED' && /chamado há pouco/.test(r.error.message) && (await db.get('owner', cfgPath).then(docData)).starsCallAt === cfgDepois.starsCallAt, r.raw);
+    check('estrelas/chamada: o controle de tempo fica numa área que nenhuma conta lê nem grava direto (rate_limits)', no(await db.get(U.admA.token, 'rate_limits/la_starsCall')) && no(await db.set(U.admA.token, 'rate_limits/la_starsCall', { at: 0 })) && no(await db.get(U.pl1.token, 'rate_limits/la_starsCall')));
+    check('estrelas/chamada: os jogadores leem o convite pelo app_config da liga (starsCallAt e quem chamou), como o app faz', (d => d.starsCallBy === U.admA.uid && typeof d.starsCallAt === 'string')(docData(await db.get(U.pl2.token, cfgPath))));
+
   }
 
   // ═════════════ MONITOR DE TRAVAMENTOS DO NAVEGADOR ═════════════

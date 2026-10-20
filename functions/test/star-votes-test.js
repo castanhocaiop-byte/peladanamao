@@ -112,13 +112,19 @@ const fakeDb = {
 
 class HttpsError extends Error { constructor(code, message, details) { super(message); this.code = code; this.details = details; } }
 const authDeleted = [];
+const pushes = [];          // cada envio de aviso (push) que a função fez
+let pushFails = false;      // true = o serviço de avisos está fora do ar
 let authDeleteError = null;   // código de erro simulado ao apagar o login
 const callableOpts = [];
 const logs = [];
 const admin = {
   initializeApp() {},
   firestore: Object.assign(() => fakeDb, { FieldValue, FieldPath }),
-  messaging: () => ({}),
+  messaging: () => ({ sendEachForMulticast: async msg => {
+    if (pushFails) throw new Error('serviço de avisos fora do ar');
+    pushes.push(JSON.parse(JSON.stringify(msg)));
+    return { successCount: msg.tokens.length, failureCount: 0, responses: msg.tokens.map(() => ({ success: true })) };
+  } }),
   auth: () => ({ deleteUser: async uid => {
     if (authDeleteError) { const e = new Error('erro simulado'); e.code = authDeleteError; throw e; }
     authDeleted.push(uid);
@@ -485,6 +491,109 @@ const resetStars = () => {
   const am3 = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_bia'));
   check('anonimizar numa liga SEM notas guardadas: funciona e não cria documento de notas', am3.ok === true && ![...store.keys()].some(k => k.includes('/star_votes/')));
   check('anonimizar: quem NÃO era goleiro nem "só churrasco" não ganha esses campos', !('goleiro' in regOf(am3.newKey)) && !('somenteChurrasco' in regOf(am3.newKey)) && regOf(am3.newKey).stars === 3, regOf(am3.newKey));
+  // ═════════ funções: notifyStarRatings (o admin chama o grupo para avaliar) ═════════
+  const call6 = (uid, liga = 'L', extra = {}) => call(fns.notifyStarRatings, { liga }, authOf(uid, extra));
+  const cfgL = () => store.get('leagues/L/app_config/main');
+  const cool = () => store.get('rate_limits/L_starsCall');
+  const withTokens = () => {
+    resetStars();
+    pushes.length = 0; pushFails = false;
+    store.set('leagues/L/app_config/main', { peerStars: true, hasFinais: true });
+    const tok = (uid, tokens) => store.set('users/' + uid, { ...store.get('users/' + uid), fcmTokens: tokens });
+    tok('u_ana', ['tok-ana-1', 'tok-ana-2']); tok('u_ana2', ['tok-ana-1']); tok('u_bia', ['tok-bia']); tok('u_caio', []); tok('u_dani', ['tok-dani']);
+    tok('u_eli', ['tok-bia']); tok('u_adm', ['tok-adm']); tok('u_pend', ['tok-pend']); tok('u_fora', ['tok-fora']); tok('u_semlink', ['tok-semlink']); tok('u_admB', ['tok-admB']);
+    store.set('users/u_ghost', { email: 'g@x.com', role: 'pending', playerKey: 'fantasma', fcmTokens: ['tok-ghost'], leagues: { L: { role: 'player', playerKey: 'fantasma' } } });
+    store.set('users/u_rej', { email: 'r@x.com', role: 'pending', playerKey: 'bia', fcmTokens: ['tok-rej'], leagues: { L: { role: 'rejected', playerKey: 'bia' } } });
+  };
+
+  withTokens();
+  check('chamada: sem login', await codeOf(call(fns.notifyStarRatings, { liga: 'L' })) === 'unauthenticated');
+  check('chamada: jogador comum não pode', await codeOf(call6('u_ana')) === 'permission-denied');
+  check('chamada: pendente não pode', await codeOf(call6('u_pend')) === 'permission-denied');
+  check('chamada: admin de OUTRA liga não pode', await codeOf(call6('u_admB')) === 'permission-denied');
+  check('chamada: e-mail do dono SEM verificação não vale', await codeOf(call6('estranho', 'L', { email: 'castanho.caiop@gmail.com', email_verified: false })) === 'permission-denied');
+  check('chamada: liga inválida', await codeOf(call6('u_adm', '../x')) === 'invalid-argument');
+  check('chamada: nada foi enviado nem gravado nas negativas', pushes.length === 0 && !('starsCallAt' in cfgL()) && !cool(), [pushes.length, cfgL(), cool()]);
+
+  store.set('leagues/L/app_config/main', { peerStars: false, hasFinais: true });
+  let e6 = null; try { await call6('u_adm'); } catch (e) { e6 = e; }
+  check('chamada: com a opção desligada → pré-condição falhou, mandando ligar as estrelas antes, sem enviar nada', e6 && e6.code === 'failed-precondition' && /Ligue as estrelas pela média do grupo/.test(e6.message) && pushes.length === 0 && !cool(), e6 && e6.message);
+  store.delete('leagues/L/app_config/main');
+  check('chamada: liga sem configuração nenhuma também recusa', await codeOf(call6('u_adm')) === 'failed-precondition');
+  store.set('leagues/L/app_config/main', { peerStars: 'true' });
+  check('chamada: só o valor verdadeiro (booleano) liga a opção', await codeOf(call6('u_adm')) === 'failed-precondition' && pushes.length === 0);
+
+  withTokens();
+  const t0 = Date.now();
+  let r6 = await call6('u_adm');
+  check('chamada: o admin chama; o resumo diz quantos jogadores podem avaliar (6) e quantos têm aviso no celular (5)', r6.ok === true && r6.recipients === 6 && r6.withPush === 5, r6);
+  check('chamada: um único envio, só para os aparelhos de quem PODE avaliar: membros (admin ou jogador) ligados a um jogador do elenco, sem repetir aparelho, sem quem chamou, sem pendente, sem recusado, sem outra liga, sem conta sem jogador e sem jogador que saiu do elenco',
+    pushes.length === 1 && JSON.stringify([...pushes[0].tokens].sort()) === JSON.stringify(['tok-ana-1', 'tok-ana-2', 'tok-bia', 'tok-dani']), pushes.map(p => p.tokens));
+  const p0 = pushes[0];
+  check('chamada: o aviso diz o que é, o nome da liga e que as notas são anônimas; leva a liga e a tela; uma etiqueta por liga (repetir substitui, não empilha)', p0.notification.title === '⭐ Avalie o elenco — Liga L' && /1 a 5 estrelas/.test(p0.notification.body) && /anônimas/.test(p0.notification.body) && /média do grupo/.test(p0.notification.body) && p0.data.leagueId === 'L' && p0.data.view === 'eu' && p0.data.tag === 'estrelas-L' && p0.webpush.notification.tag === 'estrelas-L', p0);
+  check('chamada: grava no app_config/main o momento e QUEM chamou (o banner do app lê isso) e não apaga o resto da configuração', /^\d{4}-\d\d-\d\dT/.test(cfgL().starsCallAt) && Date.parse(cfgL().starsCallAt) >= t0 - 1000 && cfgL().starsCallBy === 'u_adm' && cfgL().peerStars === true && cfgL().hasFinais === true, cfgL());
+  check('chamada: guarda o momento do aviso no controle do servidor (rate_limits), que só o servidor lê', cool() && Math.abs(cool().at - t0) < 5000, cool());
+  check('chamada: não mexe em outra liga', !store.has('leagues/B/app_config/main') && !pushes.some(p => p.tokens.includes('tok-fora') || p.tokens.includes('tok-admB')));
+
+  let e7 = null; try { await call6('u_adm'); } catch (e) { e7 = e; }
+  check('chamada: chamar de novo logo em seguida → "o grupo já foi chamado há pouco", dizendo quanto falta (6 h), sem enviar de novo', e7 && e7.code === 'resource-exhausted' && /chamado há pouco/.test(e7.message) && /daqui a 6 h/.test(e7.message) && pushes.length === 1, e7 && e7.message);
+  const firstAt = cfgL().starsCallAt;
+  store.set('rate_limits/L_starsCall', { at: Date.now() - (6 * 3600 * 1000 - 90 * 60000) });
+  let e8 = null; try { await call6('u_adm'); } catch (e) { e8 = e; }
+  check('chamada: faltando 90 minutos a mensagem diz "2 h" (arredonda para cima)', e8 && /daqui a 2 h/.test(e8.message), e8 && e8.message);
+  store.set('rate_limits/L_starsCall', { at: Date.now() - (6 * 3600 * 1000 - 20 * 60000) });
+  e8 = null; try { await call6('u_adm'); } catch (e) { e8 = e; }
+  check('chamada: faltando 20 minutos a mensagem diz "20 min"', e8 && /daqui a (19|20) min/.test(e8.message), e8 && e8.message);
+  store.set('rate_limits/L_starsCall', { at: Date.now() - (6 * 3600 * 1000 - 19.5 * 60000) });
+  e8 = null; try { await call6('u_adm'); } catch (e) { e8 = e; }
+  check('chamada: faltando 19 min e meio a mensagem diz "20 min" (arredonda para cima, nunca para baixo)', e8 && /daqui a 20 min\./.test(e8.message), e8 && e8.message);
+  check('chamada: as recusas não mudaram o aviso gravado', cfgL().starsCallAt === firstAt && pushes.length === 1);
+  store.set('rate_limits/L_starsCall', { at: Date.now() - 6 * 3600 * 1000 - 1000 });
+  await new Promise(r => setTimeout(r, 5));
+  r6 = await call6('u_adm');
+  check('chamada: passadas as 6 horas dá para chamar de novo (novo envio, novo momento gravado)', r6.ok === true && pushes.length === 2 && cfgL().starsCallAt > firstAt, [r6, cfgL().starsCallAt, firstAt]);
+  check('chamada: o cuidado é por liga: outro admin da MESMA liga também espera', await (async () => { store.set('users/u_adm2', { email: 'a2@x.com', role: 'pending', leagues: { L: { role: 'admin' } } }); return (await codeOf(call6('u_adm2'))) === 'resource-exhausted'; })());
+
+  withTokens();
+  pushFails = true;
+  let e9 = null; try { await call6('u_adm'); } catch (e) { e9 = e; }
+  check('chamada: se o serviço de avisos cair → "não foi possível enviar o aviso agora", e NADA é gravado (nem o convite do app nem o controle de tempo)', e9 && e9.code === 'unavailable' && /Não foi possível enviar o aviso/.test(e9.message) && !('starsCallAt' in cfgL()) && !cool(), [e9 && e9.code, cfgL(), cool()]);
+  pushFails = false;
+  check('chamada: …e o admin pode tentar de novo na hora', (await call6('u_adm')).ok === true && cool() && 'starsCallAt' in cfgL());
+
+  withTokens();
+  for (const uid of ['u_ana', 'u_ana2', 'u_bia', 'u_dani', 'u_eli']) store.set('users/' + uid, { ...store.get('users/' + uid), fcmTokens: [] });
+  r6 = await call6('u_adm');
+  check('chamada: ninguém com aviso no celular → não chama o serviço de avisos, mas o convite dentro do app é gravado e o resumo diz withPush 0', r6.ok === true && r6.recipients === 6 && r6.withPush === 0 && pushes.length === 0 && cfgL().starsCallBy === 'u_adm' && !!cool(), [r6, pushes.length]);
+
+  withTokens();
+  for (const uid of ['u_ana', 'u_ana2', 'u_bia', 'u_caio', 'u_dani', 'u_eli']) store.delete('users/' + uid);
+  r6 = await call6('u_adm');
+  check('chamada: sem outros jogadores com conta ligada: resumo 0 e 0, nada enviado, e o convite do app é gravado mesmo assim', r6.recipients === 0 && r6.withPush === 0 && pushes.length === 0 && 'starsCallAt' in cfgL(), r6);
+
+  withTokens();
+  store.set('leagues/L/app_config/main', { peerStars: false });
+  const seq = [];
+  for (let i = 0; i < 12; i++) seq.push(await codeOf(call6('u_adm')));
+  check('chamada: limite por minuto de cada admin (10): as 10 primeiras tentativas dão pré-condição e da 11ª em diante "muitas tentativas"', seq.slice(0, 10).every(c => c === 'failed-precondition') && seq[10] === 'resource-exhausted' && seq[11] === 'resource-exhausted', seq);
+  withTokens();
+  store.set('users/u_top', { email: 'top@x.com', role: 'pending', playerKey: 'eli', fcmTokens: ['tok-top'], leagues: { L: { role: 'player' } } });
+  r6 = await call6('u_adm');
+  check('chamada: quem tem o vínculo só no topo do cadastro (cadastro antigo) também é chamado', r6.recipients === 7 && r6.withPush === 6 && pushes[0].tokens.includes('tok-top'), [r6, pushes[0] && pushes[0].tokens]);
+
+  withTokens();
+  store.set('users/u_lg', { email: 'lg@x.com', role: 'pending', fcmTokens: ['tok-lg'], leagues: { L: { role: 'player', playerKey: 'eli' } } });
+  r6 = await call6('u_adm');
+  check('chamada: quem tem o vínculo só dentro da liga (sem o do topo do cadastro) também é chamado', r6.recipients === 7 && r6.withPush === 6 && pushes[0].tokens.includes('tok-lg'), [r6, pushes[0] && pushes[0].tokens]);
+
+  withTokens();
+  r6 = await call6('estranho', 'L', { email: 'castanho.caiop@gmail.com', email_verified: true });
+  check('chamada: o dono do sistema (e-mail verificado) também pode chamar, mesmo sem ser membro, e recebe-se os mesmos 6 jogadores e o admin da liga também recebe aviso', r6.ok === true && r6.recipients === 7 && r6.withPush === 6 && pushes[0].tokens.includes('tok-adm') && cfgL().starsCallBy === 'estranho', [r6, pushes[0] && pushes[0].tokens]);
+
+  withTokens();
+  store.set('users/u_adm', { ...store.get('users/u_adm'), leagues: { L: { role: 'admin', playerKey: 'adm' } } });
+  r6 = await call6('u_adm');
+  check('chamada: o admin que também é jogador não recebe o próprio aviso (quem chama é excluído)', r6.recipients === 6 && !pushes[0].tokens.includes('tok-adm'), [r6, pushes[0].tokens]);
 })().then(() => {
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

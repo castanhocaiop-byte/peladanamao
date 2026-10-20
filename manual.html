@@ -1617,6 +1617,7 @@ p strong {
           <tr><td>💰 Nova mensalidade</td><td>O jogador cobrado</td><td>Valor da cobrança gerada. Ao tocar, abre o Financeiro.</td></tr>
           <tr><td>🏅 Nova badge conquistada</td><td>O próprio jogador</td><td>Nome da badge desbloqueada. Ao tocar, abre a aba EU (Conquistas).</td></tr>
           <tr><td>🗳️ Votação aberta</td><td>Só os jogadores que estavam no elenco daquele campeonato (e têm conta vinculada)</td><td>Campeonato, prêmios em votação e prazo. Enviada quando a votação abre (ao finalizar o campeonato ou ao usar <em>Abrir votação</em>) e reenviada pelo botão <em>🔔 Avisar jogadores</em>. Ao tocar, abre a aba EU, onde está o banner de voto.</td></tr>
+          <tr><td>⭐ Chamada para avaliar o elenco</td><td>Jogadores com a conta ligada a um jogador do elenco (menos o admin que chamou)</td><td>"Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio." Enviada só quando o admin toca em <strong>📣 Chamar o grupo</strong> (no máximo uma vez a cada 6 horas por liga). Ao tocar, abre o app, onde o convite aparece na aba EU (seção 14, <a href="#estrelas-do-grupo" style="color: var(--accent)">Estrelas pela média do grupo</a>).</td></tr>
         </tbody>
       </table>
 
@@ -1653,6 +1654,14 @@ p strong {
       <h3>Como avaliar</h3>
       <p>Com a opção ligada, a aba <strong>Elenco</strong> mostra o botão <strong>Avaliar o elenco</strong> para quem tem a conta ligada a um jogador. A janela lista os outros jogadores que jogam (ativos e fora do "só churrasco"; ninguém avalia a si mesmo), cada um com 5 estrelas: um toque dá a nota, um toque de novo na mesma estrela tira a nota e um toque em outra estrela troca. Dá para pular quem a pessoa não conhece e mudar as notas quando quiser, sem prazo. <strong>Salvar avaliações</strong> manda só o que mudou. Quem está em "👁 Ver como" outro jogador não vê o botão.</p>
 
+      <h3>Chamar o grupo para avaliar</h3>
+      <p>Para ninguém esquecer, o admin tem o botão <strong>📣 Chamar o grupo</strong> no alto da aba <strong>Elenco</strong> (só aparece com a opção ligada). Ao confirmar, <strong>quem ativou as notificações recebe um aviso no celular</strong> ("⭐ Avalie o elenco — nome da liga") e <strong>todo jogador com a conta ligada ao elenco vê, ao abrir o app, um banner</strong> na aba EU: <strong>"O admin pediu para você avaliar o elenco"</strong>, com os botões <strong>Avaliar agora</strong> (abre a janela de avaliar) e <strong>Agora não</strong>. Tocar no aviso abre o app, e é o banner que leva à janela.</p>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li>Recebe a chamada quem é admin ou jogador da liga e tem a conta ligada a um jogador que está no elenco; <strong>quem chamou não recebe o aviso nem o banner</strong>. Quem não ativou as notificações só vê o banner. Depois de chamar, o app diz para quantas pessoas o aviso saiu no celular.</li>
+        <li>O banner some quando a pessoa <strong>salva as avaliações</strong>, toca em <strong>Agora não</strong> ou depois de <strong>14 dias</strong>; uma chamada nova traz o banner de volta.</li>
+        <li>Para ninguém ser incomodado em dobro, <strong>só dá para chamar de novo depois de 6 horas</strong> (por liga: vale para todos os admins). Se o admin tentar antes, o app diz quanto falta.</li>
+      </ul>
+
       <h3>Qual estrela vale</h3>
       <table class="data-table">
         <thead><tr><th>Situação do jogador</th><th>Estrela usada no sorteio e nas telas</th></tr></thead>
@@ -1684,6 +1693,7 @@ p strong {
         <li><strong style="color: var(--text)">Quem grava</strong> — a função <code>ratePlayers</code> (só membro da liga, com a opção ligada e a conta ligada a um jogador do elenco). Ela valida (nota de 1 a 5, até 200 jogadores por chamada; a nota em si mesmo e em quem saiu do elenco é ignorada), guarda as notas e recalcula a média numa <strong>transação</strong>, então votos ao mesmo tempo não se perdem. Duas contas ligadas ao mesmo jogador valem um voto só (vale o mais recente). Limite de 30 chamadas por minuto.</li>
         <li><strong style="color: var(--text)">A média no elenco</strong> — o servidor escreve no cadastro do jogador (<code>player_registry</code>) <code>starsAvg</code> (2 casas, só a partir de 3 votos) e <code>starsVotes</code> (quantas pessoas votaram); as regras do Firestore não deixam o app gravar esses dois campos. O app decide se a média já vale (metade de quem joga, mínimo 3) e se o admin fixou a estrela (<code>starsPinned</code>).</li>
         <li><strong style="color: var(--text)">Quando o elenco muda</strong> — <code>syncStarVotes</code> (só admin) refaz a média e leva as notas para a chave nova quando um jogador é renomeado; o app a chama depois de renomear ou de remover um jogador. As funções de sair da liga, recusar ou ligar uma conta a outro jogador, excluir a conta e anonimizar o nome também acertam as notas.</li>
+        <li><strong style="color: var(--text)">A chamada para avaliar</strong> — a função <code>notifyStarRatings</code> (só admin da liga, com a opção ligada) manda o aviso (push, com a etiqueta <code>estrelas-&lt;liga&gt;</code>, então repetir não empilha) para os aparelhos dos membros com a conta ligada a um jogador do elenco, menos quem chamou, e grava <code>starsCallAt</code> e <code>starsCallBy</code> em <code>app_config/main</code> (o banner do app lê isso) e o momento da chamada no controle <code>rate_limits</code> (só o servidor lê), de onde vêm as 6 horas entre chamadas. Se o envio falhar, nada é gravado e o admin pode tentar de novo na hora.</li>
         <li><strong style="color: var(--text)">O sorteio</strong> — usa pesos em centésimos de estrela, em número inteiro (as somas ficam exatas, sem erro de ponto flutuante); com estrelas inteiras sorteia exatamente como antes.</li>
       </ul>
     </section>

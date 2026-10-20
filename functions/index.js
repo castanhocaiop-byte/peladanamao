@@ -974,6 +974,59 @@ exports.syncStarVotes = onCall(CALLABLE, async request => {
   return { ok: true, changed: true };
 });
 
+// Chamada do admin para o grupo avaliar o elenco: um aviso no celular (push) para quem pode avaliar e o convite dentro do app
+// (starsCallAt e starsCallBy em app_config/main: é o que o app lê para mostrar o banner, e o toque na notificação abre o app nesse
+// banner). Recebe quem é membro (admin ou jogador) com a conta ligada a um jogador que está no elenco, menos quem chamou. No máximo
+// uma chamada por liga a cada STAR_CALL_COOLDOWN_MS, para ninguém ser incomodado em dobro: o controle fica em rate_limits, que só
+// o servidor lê. Se o envio falhar, nada é gravado (o admin pode tentar de novo na hora).
+const STAR_CALL_COOLDOWN_MS = 6 * 3600 * 1000;
+
+exports.notifyStarRatings = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "notifyStarRatings", 10);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+
+  const cfgRef = db.doc(`leagues/${liga}/app_config/main`);
+  const cfg = (await cfgRef.get()).data() || {};
+  if (cfg.peerStars !== true) throw fail("failed-precondition", "Ligue as estrelas pela média do grupo antes de chamar o grupo para avaliar.");
+
+  const coolRef = db.doc(`rate_limits/${liga}_starsCall`);
+  const last = Number((await coolRef.get()).data()?.at) || 0;
+  const now = Date.now();
+  if (now - last < STAR_CALL_COOLDOWN_MS) {
+    const minutes = Math.ceil((last + STAR_CALL_COOLDOWN_MS - now) / 60000);
+    const wait = minutes >= 60 ? `${Math.ceil(minutes / 60)} h` : `${minutes} min`;
+    throw fail("resource-exhausted", `O grupo já foi chamado há pouco. Dá para chamar de novo daqui a ${wait}.`);
+  }
+
+  const [users, registry, league] = await Promise.all([
+    db.collection("users").where(new FieldPath("leagues", liga, "role"), "in", ["admin", "player"]).get(),
+    db.collection(`leagues/${liga}/player_registry`).get(),
+    db.doc(`leagues/${liga}`).get(),
+  ]);
+  const keys = new Set(registry.docs.map(d => d.id));
+  const raters = users.docs.filter(d => {
+    if (d.id === auth.uid) return false;
+    const u = d.data() || {};
+    const key = String(u.leagues?.[liga]?.playerKey || u.playerKey || "");
+    return keys.has(key);
+  });
+  const withPush = raters.filter(d => (d.data().fcmTokens || []).length > 0);
+  const tokens = [...new Set(withPush.flatMap(d => d.data().fcmTokens || []))];
+  const leagueName = league.data()?.name || "Pelada na Mão";
+  try {
+    await sendToTokens(tokens, { title: `⭐ Avalie o elenco — ${leagueName}`, body: "Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio." },
+      { leagueId: liga, view: "eu" }, `estrelas-${liga}`);
+  } catch (e) {
+    logger.error("notifyStarRatings: o envio do aviso falhou", { liga, code: e?.code });
+    throw fail("unavailable", "Não foi possível enviar o aviso agora. Tente de novo em alguns minutos.");
+  }
+  await cfgRef.update({ starsCallAt: new Date(now).toISOString(), starsCallBy: auth.uid });
+  await coolRef.set({ at: now });
+  return { ok: true, recipients: raters.length, withPush: withPush.length };
+});
+
 // ── Excluir a própria conta (direito de eliminação, LGPD) ────────────────────
 //
 // Apaga o login e os dados pessoais ligados à conta: cadastro (e-mail, nome, aparelhos de
