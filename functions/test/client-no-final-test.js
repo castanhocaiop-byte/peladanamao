@@ -47,6 +47,7 @@ const CODE = [
   slice('function getPlayerRarestBadge(', 'function computeVices('),
   slice('function gerarResumoChamp(', 'function copyChampSummary('),
   slice('const BADGE_CATALOG = [', '/* ── championship logic (pure)'),
+  one(/^const RIVAL_ONLY_IDS = .*;$/m),
   one(/^const rivalVisible = .*;$/m),                                           // a comparação com o rival também só conta as conquistas visíveis na liga
   one(/^const rivalBadgeIds = .*;$/m),
 ].join('\n');
@@ -74,7 +75,7 @@ function makeEnv({ hasFinais = true, champs = [], admin = true, badgeCache = nul
     matchCard: (m, editable) => `<match id="${m.id}" phase="${m.phase}" played="${m.played ? 1 : 0}"${editable ? ' editable' : ''}/>`,
     getBadgeCache: () => badgeCache, computeNewBadgesInChamp: () => newBadges,
     waLeagueTitle: () => 'Liga X', WA_APP_FOOTER: '[rodapé]', getChampAwards: () => null, champPlayerGames: () => 1,
-    votingUsed: () => state.voting, magicalDayPeriod: () => ({ word: 'Noite', fem: true }), enabledColors: () => [['azul', {}]],
+    votingUsed: () => state.voting, rivalBadgesShown: () => false, h2hOn: () => true, rivalAward: () => false, magicalDayPeriod: () => ({ word: 'Noite', fem: true }), enabledColors: () => [['azul', {}]],
   };
   const names = Object.keys(env);
   const api = new Function(...names, CODE + '\nreturn { ' + EXPORTS + ' };')(...names.map(n => env[n]));

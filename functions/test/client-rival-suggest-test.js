@@ -44,6 +44,7 @@ function makeEnv({ players = PLAYERS, badges = BADGES, me = 'ana', sim = null, m
     st: { authUser: { uid: 'u1' }, leagueId: 'liga1', userDoc: { playerKey: me }, players, champs: [], ranks: [], availableLeagues: [{ id: 'liga1', name: 'Série B' }], photos: {}, modal: null, mjPreviewKey: sim },
     document: doc, navigator: {}, Image: class {}, URL: {}, pixCopyText: async () => true,
     trackEvent: (n, once = true) => { calls.events.push([n, once]); }, toast: (m, t) => { calls.toasts.push([m, t]); },
+    DB: null, callFn: async () => ({}), votingUsed: () => false, peerStarsOn: () => false, starsInfo: () => ({ value: 0, source: 'admin' }), starsText: n => String(n), getChampAwards: () => null,
     localStorage, render: () => { calls.renders++; }, BADGE_CATALOG: CAT, getBadgeCache: () => ({ playerBadges: badges, badgeHolders: holdersOf(badges), playerStats: {} }),
   };
   const names = Object.keys(env);
@@ -143,7 +144,7 @@ const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imu
   // ══ 5. O TOQUE NA SUGESTÃO ════════════════════════════════════════════════════════════════════════
   e = makeEnv();
   e.api.rivalPick('gil');
-  check('tocar na sugestão (da faixa ou do cartão) escolhe aquele jogador e abre a comparação já pronta (janela "rival", sem a lista), redesenhando uma vez', e.api.rivalGet() === 'gil' && e.env.st.modal?.type === 'rival' && e.env.st.modal.picking === false && e.calls.renders === 1 && JSON.stringify(Array.from(e.store.keys())) === JSON.stringify(['aceoma_rival']) && /"u1_liga1":"gil"/.test(e.store.get('aceoma_rival')), [e.env.st.modal, Array.from(e.store.entries())]);
+  check('tocar na sugestão (da faixa ou do cartão) escolhe aquele jogador e abre a comparação já pronta (janela "rival", sem a lista), redesenhando uma vez', e.api.rivalGet() === 'gil' && e.env.st.modal?.type === 'rival' && e.env.st.modal.picking === false && e.calls.renders === 1 && e.store.size === 0 && e.env.st.rivalDoc.rivalKey === 'gil', [e.env.st.modal, Array.from(e.store.entries())]);
   e = makeEnv(); e.env.st.modal = { type: 'rival', picking: true, tab: 'numbers' }; e.api.rivalPick('alvaro');
   check('escolher a sugestão a partir da lista mantém a aba que estava (como qualquer escolha de rival)', e.env.st.modal.tab === 'numbers' && e.env.st.modal.picking === false && e.api.rivalGet() === 'alvaro');
   e = makeEnv(); e.api.rivalPick('hugo'); e.api.rivalPick('ana'); e.api.rivalPick('xxx');

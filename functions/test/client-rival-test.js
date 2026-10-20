@@ -25,6 +25,8 @@ const keyCode = slice('const playerKey = name =>', '\n\n');
 const escCode = slice('const esc = s =>', 'function toast(');
 const streakCode = slice('function goallessStreak(chron, name) {', 'function getPlayerRarestBadge(');
 const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()');
+const h2hCode = slice('function h2hAgainstAll(champs, name) {', '// Quem mais ganhou de `name`'); // h2hAgainstAll + h2hFlags: o código REAL do frente a frente
+const pubCode = slice('function rivalPublicStats(name) {', 'const rivalAward =');          // o cadastro público do rival, no formato das contas das conquistas
 
 // ── contexto de desenho falso: guarda o que foi desenhado e mede texto como "0,5 × tamanho da fonte por letra" ──
 function fakeCtx() {
@@ -69,7 +71,7 @@ const BADGES = {
 };
 const holdersOf = badges => { const h = {}; for (const b of CAT) h[b.id] = Object.entries(badges).filter(([, ids]) => ids.includes(b.id)).map(([n]) => n); return h; };
 
-function makeEnv({ canShare = true, shareImpl, copyOk = true, storage = {}, storageThrows = false, players = PLAYERS, badges = BADGES, catalog = CAT, me = 'ana_maria_souza', sim = null } = {}) {
+function makeEnv({ canShare = true, shareImpl, copyOk = true, storage = {}, storageThrows = false, players = PLAYERS, badges = BADGES, catalog = CAT, me = 'ana_maria_souza', sim = null, db = null, fn = null, ready = true } = {}) {
   const calls = { events: [], toasts: [], shared: [], clicks: [], revoked: [], canvases: [], copied: [], renders: 0, queries: 0 };
   let urlN = 0;
   const fakeUrl = { createObjectURL: b => `blob:teste/${++urlN}-${b.size}`, revokeObjectURL: u => { calls.revoked.push(u); } };
@@ -93,15 +95,16 @@ function makeEnv({ canShare = true, shareImpl, copyOk = true, storage = {}, stor
     setItem: (k, v) => { if (storageThrows) throw new Error('bloqueado'); store.set(k, String(v)); },
   };
   const env = {
-    st: { authUser: { uid: 'u1' }, leagueId: 'liga1', userDoc: { playerKey: me }, players, availableLeagues: [{ id: 'liga1', name: 'Série B Aceoma' }], photos: { [me]: 'https://res.cloudinary.com/x/foto.jpg' }, modal: null, mjPreviewKey: sim },
+    st: { authUser: { uid: 'u1' }, leagueId: 'liga1', userDoc: { playerKey: me }, players, rivalDoc: null, rivalReady: ready, playersReady: ready, availableLeagues: [{ id: 'liga1', name: 'Série B Aceoma' }], photos: { [me]: 'https://res.cloudinary.com/x/foto.jpg' }, modal: null, mjPreviewKey: sim },
     document: doc, navigator: nav, Image: FakeImage, URL: fakeUrl, pixCopyText: async t => { calls.copied.push(t); return copyOk; },
     trackEvent: (n, once = true) => { calls.events.push([n, once]); }, toast: (m, t) => { calls.toasts.push([m, t]); },
+    DB: db, callFn: fn || (async () => ({})), votingUsed: () => false, peerStarsOn: () => false, starsInfo: () => ({ value: 0, source: 'admin' }), starsText: n => String(n), getChampAwards: () => null,
     localStorage, render: () => { calls.renders++; }, BADGE_CATALOG: catalog, getBadgeCache: () => ({ playerBadges: badges, badgeHolders: holdersOf(badges) }),
   };
   const names = Object.keys(env);
   const body = escCode + '\n' + keyCode + '\n' + code + '\n' + eligCode + '\n' + rivalCode + `
 return { MJ_CARD, MJ_STORY, MJ_TIERS, MJ_KINDS, mjTierOf, mjByRarity, mjRivalData, mjRivalVerdict, mjRivalCaption, drawMjRivalCard, drawMjRivalStory, openMjShare, closeMjCard, shareMjCard, copyMjCaption,
-  downloadMjCard, setMjFormat, getKind: () => _mjKind, getBlobs: () => _mjBlobs, RIVAL_STORE, rivalStoreKey, rivalGet, rivalSet, rivalCandidates, rivalPlayer, rivalVisible, rivalBadgeIds, rivalDiff,
+  downloadMjCard, setMjFormat, getKind: () => _mjKind, getBlobs: () => _mjBlobs, RIVAL_STORE, rivalStoreKey, rivalGet, rivalSince, rivalMigrateLocal, rivalSet, rivalCandidates, rivalPlayer, rivalVisible, rivalBadgeIds, rivalDiff,
   rivalCompare, rivalInitials, rivalStrip, openRival, rivalPick, rivalChange, rivalRemove, rivalFilter, openMjRival, mRival, playerKey, badgeEligibleCount };`;
   const api = new Function(...names, body)(...names.map(n => env[n]));
   return { api, env, calls, layers, store, rows };
@@ -167,29 +170,92 @@ const KEY = 'u1_liga1';
   const sf = draw(r, photo), ss = draw(r, photo, logo, 'drawMjRivalStory'), S = A.MJ_STORY, kS = (S.H - S.TOP - S.BOTTOM) / A.MJ_CARD.H;
   check('Story: o MESMO cartão inteiro e escalado entre as margens de 250 e 340 px, com os mesmos textos, o brilho acompanhando (y = 250 + 400·k) e a mesma cor do placar', ss.texts.every(t => Math.abs(t.k - kS) < 1e-9 && t.ay >= S.TOP && t.ay <= S.H - S.BOTTOM && t.ax >= 0 && t.ax <= S.W) && JSON.stringify(ss.texts.map(t => t.text)) === JSON.stringify(sf.texts.map(t => t.text)) && Math.abs(ss.radials[0][1] - (S.TOP + 400 * kS)) < 1e-6 && ss.fillRects.filter(q => q.w === 1080 && q.h === 1920).length === 2 && ss.stops.includes(A.MJ_TIERS.legendary.bg) && ss.strokes[0].color === COLORS.legendary && ss.saves === ss.restores && ss.k === 1);
 
-  // ══ 3. A ESCOLHA FICA SÓ NO APARELHO ══════════════════════════════════════════════════════════════
+  // ══ 3. A ESCOLHA FICA NO SERVIDOR ═════════════════════════════════════════════════════════════════
   let e = makeEnv();
-  check('a chave da guarda é "conta_liga"; sem conta ou sem liga é vazia e nada é guardado nem lido', e.api.rivalStoreKey() === KEY && e.api.RIVAL_STORE === 'aceoma_rival' && (() => { const z = makeEnv(); z.env.st.authUser = null; const k1 = z.api.rivalStoreKey(); z.env.st.authUser = { uid: 'u1' }; z.env.st.leagueId = null; const k2 = z.api.rivalStoreKey(); z.api.rivalSet('bruno'); return k1 === '' && k2 === '' && z.api.rivalGet() === '' && z.store.size === 0; })());
-  check('começa sem rival', e.api.rivalGet() === '' && e.store.size === 0 && e.api.rivalPlayer() === null);
+  const docOf = (ownKey, rivalKey, extra = {}) => ({ ownKey, rivalKey, since: '2026-09-10T12:00:00.000Z', mutual: false, lead: '', duels: {}, ...extra });
+  check('a chave da guarda ANTIGA é "conta_liga" (hoje só serve para levar a escolha antiga ao servidor); sem conta ou sem liga é vazia', e.api.rivalStoreKey() === KEY && e.api.RIVAL_STORE === 'aceoma_rival' && (() => { const z = makeEnv(); z.env.st.authUser = null; const k1 = z.api.rivalStoreKey(); z.env.st.authUser = { uid: 'u1' }; z.env.st.leagueId = null; return k1 === '' && z.api.rivalStoreKey() === ''; })());
+  check('começa sem rival (documento da conta nulo): nem rival, nem data, nem jogador', e.api.rivalGet() === '' && e.api.rivalSince() === '' && e.api.rivalPlayer() === null && e.store.size === 0);
   e.api.rivalSet('bruno');
-  check('escolher guarda SÓ a chave do jogador (texto), por conta e liga, no aparelho: {"u1_liga1":"bruno"}; nada de nome, e-mail ou números', e.store.get('aceoma_rival') === '{"u1_liga1":"bruno"}' && e.api.rivalGet() === 'bruno' && e.calls.renders === 0);
-  e.env.st._rival = null;
-  check('depois de recarregar o app (memória vazia) a escolha volta do aparelho', e.api.rivalGet() === 'bruno');
-  e.env.st.leagueId = 'outra';
-  check('outra liga da mesma conta tem o seu próprio rival (nenhum); a primeira continua guardada', e.api.rivalGet() === '' && JSON.parse(e.store.get('aceoma_rival'))[KEY] === 'bruno');
-  e.api.rivalSet('carla_dias'); e.env.st.leagueId = 'liga1'; e.env.st._rival = null;
-  check('as duas ligas convivem sem se misturar', e.api.rivalGet() === 'bruno' && JSON.parse(e.store.get('aceoma_rival')).u1_outra === 'carla_dias');
+  check('escolher mostra na hora: o documento da conta ganha o jogador, o rival, a hora, o histórico vazio e "sem par"; nada vai para o aparelho (localStorage) e não redesenha sozinho', JSON.stringify(Object.keys(e.env.st.rivalDoc).sort()) === JSON.stringify(['duels', 'lead', 'mutual', 'ownKey', 'rivalKey', 'since']) && e.env.st.rivalDoc.ownKey === 'ana_maria_souza' && e.env.st.rivalDoc.rivalKey === 'bruno' && /^\d{4}-\d\d-\d\dT/.test(e.env.st.rivalDoc.since) && e.env.st.rivalDoc.mutual === false && e.env.st.rivalDoc.lead === '' && JSON.stringify(e.env.st.rivalDoc.duels) === '{}' && e.api.rivalGet() === 'bruno' && e.api.rivalSince() === e.env.st.rivalDoc.since && e.store.size === 0 && e.calls.renders === 0, e.env.st.rivalDoc);
+  check('o rival só vale para o jogador a que a conta está ligada AGORA: documento de outro jogador (conta ligada a outro depois) não conta', (() => { const z = makeEnv(); z.env.st.rivalDoc = docOf('outro_jogador', 'bruno'); return z.api.rivalGet() === '' && z.api.rivalSince() === '' && z.api.rivalPlayer() === null; })() && (() => { const z = makeEnv({ me: undefined }); z.env.st.userDoc.playerKey = undefined; z.env.st.rivalDoc = docOf('ana_maria_souza', 'bruno'); return z.api.rivalGet() === ''; })());
+  e.env.st.rivalDoc = docOf('ana_maria_souza', 'bruno', { duels: { '2026-08': { r: 'bruno', res: 'mao', m: 3, t: 1 } }, lead: 'mine', mutual: true });
+  e.api.rivalSet('carla_dias');
+  check('trocar de rival: já mostra o novo, recomeça a data, tira o "par" e a virada, e MANTÉM os meses de duelo que já fecharam', e.api.rivalGet() === 'carla_dias' && e.env.st.rivalDoc.since !== '2026-09-10T12:00:00.000Z' && e.env.st.rivalDoc.mutual === false && e.env.st.rivalDoc.lead === '' && e.env.st.rivalDoc.duels['2026-08'].res === 'mao', e.env.st.rivalDoc);
   e.api.rivalSet('');
-  check('remover: apaga a escolha da memória e do aparelho (a chave some do JSON), sem mexer na outra liga', e.api.rivalGet() === '' && !('u1_liga1' in JSON.parse(e.store.get('aceoma_rival'))) && JSON.parse(e.store.get('aceoma_rival')).u1_outra === 'carla_dias');
-  const ruins = [];
-  for (const [rotulo, valor] of [['JSON quebrado', '{{{'], ['texto solto', 'oi'], ['lista', '[1,2]'], ['número', '42'], ['null', 'null'], ['valor que não é texto', JSON.stringify({ [KEY]: 5 })], ['valor objeto', JSON.stringify({ [KEY]: { a: 1 } })]]) {
-    const z = makeEnv({ storage: { aceoma_rival: valor } });
-    let threw = false, antes, depois, guardado; try { antes = z.api.rivalGet(); z.api.rivalSet('bruno'); depois = z.api.rivalGet(); guardado = JSON.parse(z.store.get('aceoma_rival'))[KEY]; } catch (_) { threw = true; }
-    if (threw || antes !== '' || depois !== 'bruno' || guardado !== 'bruno') ruins.push([rotulo, threw, antes, depois, guardado]);
+  check('remover: o documento fica (com o histórico), sem rival e sem data', e.api.rivalGet() === '' && e.api.rivalSince() === '' && e.env.st.rivalDoc.rivalKey === '' && e.env.st.rivalDoc.since === '' && e.env.st.rivalDoc.duels['2026-08'].res === 'mao', e.env.st.rivalDoc);
+  check('remover quando já não há rival: não faz nada (nem chama o servidor)', await (async () => { const calls2 = []; const z = makeEnv({ db: {}, fn: async (n, d) => { calls2.push([n, d]); return {}; } }); const ok = await z.api.rivalSet(''); return ok === true && calls2.length === 0 && z.env.st.rivalDoc === undefined || z.env.st.rivalDoc === null; })());
+
+  // com o servidor: a escolha aparece na hora e o servidor confirma (setRival)
+  const fnCalls = [];
+  let fnImpl = async (n, d) => ({ ok: true, rivalKey: d.rivalKey, since: '2026-10-20T15:00:00.000Z', mutual: true });
+  e = makeEnv({ db: {}, fn: (n, d) => { fnCalls.push([n, d]); return fnImpl(n, d); } });
+  const pr1 = e.api.rivalSet('bruno');
+  check('com o servidor: a escolha já vale na tela antes da resposta e o app fica "ocupado" (uma leitura antiga não a desfaz)', e.api.rivalGet() === 'bruno' && e.env.st._rivalBusy === 1 && JSON.stringify(fnCalls) === JSON.stringify([['setRival', { liga: 'liga1', rivalKey: 'bruno' }]]));
+  const ok1 = await pr1;
+  check('com o servidor: a resposta traz a hora do servidor e se os dois se escolheram; o app larga o "ocupado" e redesenha uma vez', ok1 === true && e.env.st.rivalDoc.since === '2026-10-20T15:00:00.000Z' && e.env.st.rivalDoc.mutual === true && e.env.st.rivalDoc.rivalKey === 'bruno' && e.env.st._rivalBusy === 0 && e.calls.renders === 1, e.env.st.rivalDoc);
+  fnImpl = async () => { throw new Error('Esse jogador não está ativo no elenco desta liga.'); };
+  const antes = e.env.st.rivalDoc;
+  const ok2 = await e.api.rivalSet('carla_dias');
+  check('com o servidor: se ele recusar, a tela volta ao que era, o motivo aparece num aviso e a promessa devolve false', ok2 === false && e.env.st.rivalDoc === antes && e.api.rivalGet() === 'bruno' && e.calls.toasts.length === 1 && /não está ativo/.test(e.calls.toasts[0][0]) && e.env.st._rivalBusy === 0 && e.calls.renders === 2, [e.calls.toasts, e.env.st.rivalDoc]);
+  fnImpl = async () => { throw new Error(); };
+  await e.api.rivalSet('gil');
+  check('com o servidor: erro sem mensagem mostra o aviso padrão', /Não foi possível salvar o rival agora/.test(e.calls.toasts[1][0]));
+  fnImpl = async (n, d) => ({ ok: true, rivalKey: '', since: '', mutual: false });
+  const ok3 = await e.api.rivalSet('');
+  check('com o servidor: tirar o rival também passa pelo servidor (rivalKey vazio) e a tela já fica sem rival', ok3 === true && fnCalls[fnCalls.length - 1][1].rivalKey === '' && e.api.rivalGet() === '' && e.env.st.rivalDoc.since === '', fnCalls[fnCalls.length - 1]);
+  check('sem jogador vinculado à conta: rivalSet não faz nada', await (async () => { const z = makeEnv({ db: {}, fn: async () => { throw new Error('não devia chamar'); } }); z.env.st.userDoc.playerKey = undefined; return (await z.api.rivalSet('bruno')) === false && z.env.st.rivalDoc === undefined || z.env.st.rivalDoc === null; })());
+
+  // duas escolhas seguidas, com as respostas fora de ordem: vale a última, nunca a que chegou por último
+  {
+    const waits = [];
+    const z = makeEnv({ db: {}, fn: (n, d) => new Promise(res => waits.push(() => res({ ok: true, rivalKey: d.rivalKey, since: 'S-' + d.rivalKey, mutual: false }))) });
+    const p1 = z.api.rivalSet('bruno'), p2 = z.api.rivalSet('carla_dias');
+    check('duas escolhas seguidas: a tela já mostra a última e o app fica ocupado nas duas', z.api.rivalGet() === 'carla_dias' && z.env.st._rivalBusy === 2);
+    waits[1](); await p2; waits[0](); await p1;
+    check('…a resposta da primeira chegando depois da segunda NÃO desfaz a segunda (a tela fica com carla_dias e a hora dela) e o app larga o "ocupado"', z.api.rivalGet() === 'carla_dias' && z.env.st.rivalDoc.since === 'S-carla_dias' && z.env.st._rivalBusy === 0, z.env.st.rivalDoc);
+    const w2 = [];
+    const y = makeEnv({ db: {}, fn: (n, d) => new Promise((res, rej) => w2.push(() => (d.rivalKey === 'bruno' ? rej(new Error('erro da 1ª')) : res({ ok: true, rivalKey: d.rivalKey, since: 'S', mutual: false })))) });
+    const q1 = y.api.rivalSet('bruno'), q2 = y.api.rivalSet('carla_dias');
+    w2[1](); await q2; w2[0](); await q1;
+    check('…e o erro da primeira (já substituída) não volta a tela atrás nem avisa; a segunda vale', y.api.rivalGet() === 'carla_dias' && y.calls.toasts.length === 0, [y.env.st.rivalDoc, y.calls.toasts]);
   }
-  check('armazenamento estragado (JSON quebrado, texto, lista, número, null, valor que não é texto): ignora, segue sem quebrar e a próxima gravação conserta', ruins.length === 0, ruins);
-  const bl = makeEnv({ storageThrows: true }); let jogou = false; try { bl.api.rivalSet('bruno'); bl.api.rivalSet(''); bl.api.rivalSet('carla_dias'); } catch (_) { jogou = true; }
-  check('armazenamento bloqueado (navegação privada): nada quebra e a escolha vale enquanto o app estiver aberto', !jogou && bl.api.rivalGet() === 'carla_dias');
+
+  // quem escolheu o rival antes (só no aparelho) não perde a escolha
+  const KEYL = 'u1_liga1';
+  const mig = async (storage, opts = {}) => {
+    const calls2 = [];
+    const z = makeEnv({ db: {}, fn: async (n, d) => { calls2.push([n, d]); if (opts.fails) throw new Error('x'); return { ok: true, rivalKey: d.rivalKey, since: '2026-10-20T15:00:00.000Z', mutual: false }; }, storage, ...(opts.env || {}) });
+    if (opts.server) z.env.st.rivalDoc = opts.server;
+    z.api.rivalMigrateLocal();
+    await tick();
+    let left = null; try { left = z.store.has('aceoma_rival') ? JSON.parse(z.store.get('aceoma_rival')) : null; } catch (_) {}
+    return { z, calls: calls2, left };
+  };
+  let mg = await mig({ aceoma_rival: JSON.stringify({ [KEYL]: 'bruno', u9_outra: 'gil' }) });
+  check('migração: o rival antigo do aparelho vai para o servidor uma vez, e só a cópia dele sai do aparelho (as outras ligas ficam)', mg.calls.length === 1 && mg.calls[0][0] === 'setRival' && mg.calls[0][1].rivalKey === 'bruno' && mg.z.api.rivalGet() === 'bruno' && JSON.stringify(mg.left) === '{"u9_outra":"gil"}', [mg.calls, mg.left]);
+  mg = await mig({ aceoma_rival: JSON.stringify({ [KEYL]: 'bruno' }) }, { server: docOf('ana_maria_souza', 'carla_dias') });
+  check('migração: se a conta já tem rival no servidor (escolhido em outro aparelho), vale o do servidor: nada é enviado e a cópia antiga some', mg.calls.length === 0 && mg.z.api.rivalGet() === 'carla_dias' && JSON.stringify(mg.left) === '{}', [mg.calls, mg.left]);
+  for (const [rotulo, chave] of [['eu mesmo', 'ana_maria_souza'], ['jogador inativo', 'zeca'], ['jogador que não existe mais', 'fulano_de_tal']]) {
+    mg = await mig({ aceoma_rival: JSON.stringify({ [KEYL]: chave }) });
+    check(`migração: rival antigo que já não pode ser rival (${rotulo}) não vai ao servidor e a cópia some`, mg.calls.length === 0 && mg.z.api.rivalGet() === '' && JSON.stringify(mg.left) === '{}', [mg.calls, mg.left]);
+  }
+  mg = await mig({ aceoma_rival: JSON.stringify({ [KEYL]: 'bruno' }) }, { fails: true });
+  check('migração: se o servidor falhar, a escolha antiga continua no aparelho para tentar de novo e o app volta a não ter rival', mg.calls.length === 1 && mg.z.api.rivalGet() === '' && JSON.stringify(mg.left) === JSON.stringify({ [KEYL]: 'bruno' }), [mg.calls, mg.left]);
+  mg = await mig({ aceoma_rival: JSON.stringify({ [KEYL]: 'bruno' }) }, { env: { ready: false } });
+  check('migração: só roda com o documento da conta e o elenco já carregados', mg.calls.length === 0 && JSON.stringify(mg.left) === JSON.stringify({ [KEYL]: 'bruno' }));
+  mg = await mig({});
+  check('migração: sem escolha antiga no aparelho, nada acontece', mg.calls.length === 0 && mg.left === null);
+  const once = await (async () => { const calls2 = []; const z = makeEnv({ db: {}, fn: async (n, d) => { calls2.push(d.rivalKey); return { ok: true, rivalKey: d.rivalKey, since: 's', mutual: false }; }, storage: { aceoma_rival: JSON.stringify({ [KEYL]: 'bruno' }) } }); z.api.rivalMigrateLocal(); z.api.rivalMigrateLocal(); await tick(); z.api.rivalMigrateLocal(); await tick(); return calls2.length; })();
+  check('migração: chamada várias vezes (a cada leitura do banco) envia só uma vez', once === 1, once);
+  const ruins = [];
+  for (const [rotulo, valor] of [['JSON quebrado', '{{{'], ['texto solto', 'oi'], ['lista', '[1,2]'], ['número', '42'], ['null', 'null'], ['valor que não é texto', JSON.stringify({ [KEYL]: 5 })], ['valor objeto', JSON.stringify({ [KEYL]: { a: 1 } })]]) {
+    let threw = false, r;
+    try { r = await mig({ aceoma_rival: valor }); } catch (_) { threw = true; }
+    if (threw || r.calls.length !== 0 || r.z.api.rivalGet() !== '') ruins.push([rotulo, threw]);
+  }
+  check('migração: armazenamento estragado (JSON quebrado, texto, lista, número, null, valor que não é texto): ignora e segue sem quebrar', ruins.length === 0, ruins);
+  const bl = makeEnv({ storageThrows: true, db: {}, fn: async (n, d) => ({ ok: true, rivalKey: d.rivalKey, since: 's', mutual: false }) }); let jogou = false; try { bl.api.rivalMigrateLocal(); bl.api.rivalSet('bruno'); bl.api.rivalSet(''); bl.api.rivalSet('carla_dias'); await tick(); } catch (_) { jogou = true; }
+  check('armazenamento bloqueado (navegação privada): nada quebra, a escolha vale pelo servidor', !jogou && bl.api.rivalGet() === 'carla_dias');
 
   // ══ 4. QUEM PODE SER RIVAL ════════════════════════════════════════════════════════════════════════
   e = makeEnv();
@@ -262,11 +328,11 @@ const KEY = 'u1_liga1';
   e.api.rivalPick('xxx'); e.api.rivalPick('ana_maria_souza'); e.api.rivalPick('zeca'); e.api.rivalPick(undefined); e.api.rivalPick("bruno'); alert(1); ('");
   check('escolher alguém que não é candidato (eu, inativo, que não existe, texto estranho): ignora, não guarda nada e não redesenha', e.store.size === 0 && e.calls.renders === 0 && e.api.rivalGet() === '');
   e.api.rivalPick('bruno');
-  check('escolher o Bruno: guarda, passa da escolha para a comparação e redesenha', e.api.rivalGet() === 'bruno' && e.env.st.modal.type === 'rival' && e.env.st.modal.picking === false && e.calls.renders === 1 && e.store.get('aceoma_rival') === '{"u1_liga1":"bruno"}');
+  check('escolher o Bruno: guarda, passa da escolha para a comparação e redesenha', e.api.rivalGet() === 'bruno' && e.env.st.modal.type === 'rival' && e.env.st.modal.picking === false && e.calls.renders === 1 && e.store.size === 0 && e.env.st.rivalDoc.rivalKey === 'bruno');
   e.api.rivalChange();
   check('Trocar rival: volta para a lista (sem apagar a escolha até escolher outro) e redesenha', e.env.st.modal.picking === true && e.api.rivalGet() === 'bruno' && e.calls.renders === 2);
   e.api.rivalRemove();
-  check('Remover rival: apaga a escolha (memória e aparelho), vai para a lista e redesenha', e.api.rivalGet() === '' && !('u1_liga1' in JSON.parse(e.store.get('aceoma_rival'))) && e.env.st.modal.picking === true && e.calls.renders === 3);
+  check('Remover rival: tira a escolha, vai para a lista e redesenha', e.api.rivalGet() === '' && e.store.size === 0 && e.env.st.modal.picking === true && e.calls.renders === 3);
   const rm = makeEnv(); rm.api.rivalSet('bruno'); rm.env.st.modal = { type: 'rival', picking: false }; rm.api.rivalRemove();
   check('Remover rival na tela da comparação: apaga a escolha, já mostra a lista de escolha (picking) e redesenha', rm.api.rivalGet() === '' && rm.env.st.modal.picking === true && rm.calls.renders === 1);
   const z0 = makeEnv(); z0.env.st.modal = { type: 'badgeInfo' }; z0.api.rivalChange();
@@ -301,7 +367,7 @@ const KEY = 'u1_liga1';
   check('computador (sem compartilhar arquivo): baixa a imagem do rival em vez de ficar parado', e3.calls.shared.length === 0 && e3.calls.clicks.length === 1 && e3.calls.clicks[0].download === 'rival-pelada-na-mao-story.png');
 
   // ══ 8. O CÁLCULO DAS CONQUISTAS DE TODOS OS JOGADORES ═════════════════════════════════════════════
-  const statsApi = (players, champs) => { const env2 = { st: { players, champs, ranks: [], finMens: {}, finCfg: {} }, getChampAwards: () => null, computeAwardStats: () => ({ posAwards: 0, negAwards: 0, hasCarregado: false, hasCraqueTimePequeno: false }), getPaid: () => false, getPaidDate: () => null }; const n2 = Object.keys(env2); return new Function(...n2, streakCode + '\n' + statsCode + '\nreturn { computePlayerBadgeStats };')(...n2.map(x => env2[x])); };
+  const statsApi = (players, champs) => { const env2 = { st: { players, champs, ranks: [], finMens: {}, finCfg: {}, rivalPublic: {} }, getChampAwards: () => null, computeAwardStats: () => ({ posAwards: 0, negAwards: 0, hasCarregado: false, hasCraqueTimePequeno: false }), getPaid: () => false, getPaidDate: () => null }; const n2 = Object.keys(env2); return new Function(...n2, keyCode + '\n' + streakCode + '\n' + h2hCode + '\n' + pubCode + '\n' + statsCode + '\nreturn { computePlayerBadgeStats };')(...n2.map(x => env2[x])); };
   const camp = (date, roster, o = {}) => ({ id: 'c' + date, date, status: 'completed', freeMode: false, churrasco: !!o.churrasco, teamRosters: { azul: roster, verde: ['Zé'] }, matches: [{ phase: 'regular', played: true, home: 'azul', away: 'verde', hs: 1, as: 0, goals: [{ player: 'Zé' }] }] });
   const S2 = (champs, nome = 'Ana') => statsApi([{ name: 'Ana' }, { name: 'Zé' }], champs).computePlayerBadgeStats(nome);
   const cs = [camp('2026-09-09', ['Ana'], { churrasco: true }), camp('2026-09-16', ['Ana']), camp('2026-09-23', ['Ana'], { churrasco: true }), camp('2026-09-30', ['Zé'], { churrasco: true })];
@@ -321,7 +387,9 @@ const KEY = 'u1_liga1';
   check('a faixa do rival fica dentro do card Conquistas, entre o cabeçalho e a grade de conquistas, e recebe se o admin está simulando', /<\/div>\s*\$\{rivalStrip\(isSimulating\)\}\s*<div style="display:flex;flex-wrap:wrap;gap:8px;padding:14px">\s*\$\{\[\.\.\.earnedBadges\.map/.test(view) && (view.match(/\$\{rivalStrip\(/g) || []).length === 1, view.match(/.{60}rivalStrip.{60}/)?.[0]);
   check('a janela do rival entra na lista de janelas do app (junto da janela da conquista)', /\+mBadgeInfo\(\)\+mRival\(\)\+mVote\(\)/.test(html));
   const semComentarios = rivalCode.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  check('o rival nunca fala com o servidor nem conta evento: o bloco não chama callFn, DB, fetch, trackEvent nem Firebase; só localStorage', !/callFn|DB\.|fetch\(|trackEvent|firebase|firestore|XMLHttp|sendBeacon/i.test(semComentarios) && /localStorage/.test(semComentarios));
+  const migra = (semComentarios.match(/function rivalMigrateLocal\(\) \{[\s\S]*?\n\}\n/) || [''])[0];
+  check('o rival só fala com o servidor pelas duas funções dele (setRival e saveRivalProgress), sem contar evento: o bloco não usa DB direto, fetch, trackEvent nem Firebase', [...semComentarios.matchAll(/callFn\('([A-Za-z]+)'/g)].map(x => x[1]).sort().join() === 'saveRivalProgress,setRival' && (semComentarios.match(/callFn\(/g) || []).length === 2 && !/DB\.|fetch\(|trackEvent|firebase|firestore|XMLHttp|sendBeacon/i.test(semComentarios));
+  check('o aparelho (localStorage) só é usado para levar a escolha ANTIGA ao servidor: o bloco lê e apaga a chave antiga lá dentro (rivalMigrateLocal) e em mais nenhum lugar', !!migra && /localStorage\.getItem\(RIVAL_STORE/.test(migra) && /localStorage\.setItem\(RIVAL_STORE/.test(migra) && !/localStorage/.test(semComentarios.replace(migra, '')), migra.length);
   check('PRIVACIDADE: o bloco do rival não cita e-mail, WhatsApp nem contatos; a conta aparece só na chave da guarda (rivalStoreKey)', !/whatsapp|e-?mail|contacts|waOf/i.test(semComentarios) && semComentarios.split('\n').filter(l => /authUser/.test(l)).every(l => /^const rivalStoreKey = \(\) => \(st\.authUser\?\.uid/.test(l.trim())) && /const rivalStoreKey = \(\) => \(st\.authUser\?\.uid/.test(semComentarios));
   check('PRIVACIDADE: o código do cartão do rival (dados, desenho, legenda) nem cita e-mail, WhatsApp, contatos nem a conta logada', (() => { const s = slice('function mjRivalData', 'function mjRoundRect') + slice('function drawMjRivalCard', 'function mjLoadImage') + slice('function mjRivalCaption', 'async function copyMjCaption'); return !/whatsapp|e-?mail|contacts|authUser|waOf|\.uid/i.test(s); })());
   check('nenhum contador novo no servidor: o módulo do cartão continua só com cardOpen e cardShare e um único link (?ref=cartao)', JSON.stringify([...new Set([...code.matchAll(/trackEvent\('([A-Za-z]+)'/g)].map(x => x[1]))].sort()) === JSON.stringify(['cardOpen', 'cardShare']) && (code.match(/\?ref=/g) || []).length === 1);

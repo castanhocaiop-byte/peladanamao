@@ -1038,6 +1038,11 @@ const st = {
   badgeShowAll: false,
   photos: {},
   contacts: {}, // WhatsApp (só o admin recebe): { idDoContato: '11999999999' }
+  rivalDoc: null,       // a escolha de rival da conta (leagues/{liga}/rivals/{uid}): só a própria conta lê, só o servidor grava
+  rivalReady: false,    // o documento acima já chegou (mesmo que a conta não tenha rival)
+  rivalPublic: {},      // o que a liga vê do rival, por chave de jogador: { awards, alvo, declarada } (leagues/{liga}/rival_public)
+  rivalPubReady: false,
+  _rivalPubVer: 0,      // sobe a cada mudança do cadastro público: faz o cache das conquistas refazer a conta
   _photoBusy: false,
   _anonBusy: false,
 };
@@ -1175,6 +1180,26 @@ const BADGE_CATALOG = [
   { id:'paleta_de_ouro', emoji:'🎨', label:'Paleta de Ouro', desc:'Venceu campeonato com cada cor disponível na liga', check: s => { const avail = enabledColors().map(([id]) => id); return avail.length > 0 && avail.every(id => s.colorsWon.has(id)); } },
   // virou saf
   { id:'virou_saf', emoji:'🔄', label:'Virou SAF', desc:'Último lugar no campeonato anterior e campeão no seguinte', check: s => s.hasViouSaf },
+  // rival (item 36) — frente a frente: calculadas para todos os jogadores a partir dos jogos entre times opostos (o admin da liga pode desligar)
+  { id:'carrasco',   emoji:'😈', label:'Carrasco',   desc:'Ganhou 5+ jogos do mesmo jogador, em times opostos, e pelo menos 3 a mais do que perdeu', visible: () => h2hOn(), check: s => s.h2hCarrasco },
+  { id:'fregues',    emoji:'🎣', label:'Freguês',    desc:'Perdeu 5+ jogos para o mesmo jogador, em times opostos, e pelo menos 3 a mais do que ganhou', visible: () => h2hOn(), check: s => s.h2hFregues },
+  { id:'tira_teima', emoji:'⚖️', label:'Tira-teima', desc:'Histórico empatado (as mesmas vitórias e derrotas) contra um jogador depois de 6+ jogos em times opostos', visible: () => h2hOn(), check: s => s.h2hTiraTeima },
+  { id:'classico',   emoji:'🔥', label:'Clássico',   desc:'20+ jogos contra o mesmo jogador, em times opostos', visible: () => h2hOn(), check: s => s.h2hClassico },
+  // rival — as duas marcas que só o servidor calcula (ninguém vê quem escolheu quem)
+  { id:'alvo_galera',     emoji:'🎯', label:'Alvo da Galera',        desc:'Escolhido como rival por 3 ou mais jogadores (ninguém sabe quem)', visible: () => rivalBadgesShown(), check: s => s.rivalAlvo },
+  { id:'rival_declarada', emoji:'🤝', label:'Rivalidade Declarada',  desc:'Você e o seu rival se escolheram como rivais', visible: () => rivalBadgesShown(), check: s => s.rivalDeclarada },
+  // rival — duelo do mês, sequências, virada e tempo com o mesmo rival (o app manda ao servidor; as contagens ficam no cadastro público do jogador)
+  { id:'duelo_aluno',     emoji:'📚', label:'Aluno do Rival',        desc:'O seu rival foi melhor que você na maioria dos números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_aluno') },
+  { id:'duelo_fora_liga', emoji:'🛸', label:'Fora da Sua Liga',      desc:'O seu rival foi melhor que você em todos os números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_fora_liga') },
+  { id:'duelo_mao',       emoji:'✊', label:'Rival na Mão',          desc:'Você foi melhor que o seu rival na maioria dos números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_mao') },
+  { id:'duelo_trator',    emoji:'🚜', label:'Passei o Trator',       desc:'Você foi melhor que o seu rival em todos os números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_trator') },
+  { id:'duelo_dono',      emoji:'👑', label:'Dono do Rival',         desc:'Foi melhor que o mesmo rival em 3 duelos do mês seguidos', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_dono') },
+  { id:'duelo_sombra',    emoji:'👤', label:'Sombra do Rival',       desc:'Foi pior que o mesmo rival em 3 duelos do mês seguidos', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_sombra') },
+  { id:'rival_passou',    emoji:'🚀', label:'Passou o Rival',        desc:'Estava atrás do rival no número de conquistas e passou à frente', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_passou') },
+  { id:'rival_ultrapassada', emoji:'🏎️', label:'Levou a Ultrapassada', desc:'Estava na frente do rival no número de conquistas e ele passou à frente', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_ultrapassada') },
+  { id:'rival_3m',        emoji:'🐕', label:'Rival de Estimação',    desc:'3 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_3m') },
+  { id:'rival_6m',        emoji:'⚔️', label:'Arquirrival',           desc:'6 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_6m') },
+  { id:'rival_12m',       emoji:'🏛️', label:'Rivalidade Histórica',  desc:'12 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_12m') },
 ];
 
 /* ── championship logic (pure) ──────────────────────────────── */
@@ -1343,6 +1368,8 @@ function showHalfTitles() { return !!(st.appCfg?.hasFinais && (st.appCfg?.halfTi
 // "Sem final" na liga = PONTOS CORRIDOS: o campeão é o time que mais somou pontos no campeonato (sem final, semifinais nem disputa de 3º lugar). O que vale para o
 // campeonato é a regra do dia em que ele foi CRIADO, gravada em `champ.noFinal` por createChampionship: campeonato já começado não muda de regra no meio.
 function finalsEnabled() { return st.appCfg?.hasFinais !== false; }
+// As badges do frente a frente (Carrasco, Freguês, Tira-teima, Clássico) valem para todos, a menos que o admin da liga as desligue no Painel Admin.
+function h2hOn() { return st.appCfg?.h2hBadges !== false; }
 // Quem lidera a tabela. Desempate como em standings(): pontos, saldo de gols, gols pró. Se ainda empatar em tudo, `leader` fica nulo e `tied` lista os empatados no
 // topo (quem decide é o admin, na janela champTie). Sem nenhum jogo disputado não há líder.
 function titleRace(teams, matches) {
@@ -1379,6 +1406,7 @@ function startListeners() {
   _unsubListeners = [];
   st.photos = {};
   st.contacts = {};
+  st.rivalDoc = null; st.rivalReady = false; st.rivalPublic = {}; st.rivalPubReady = false;
   callFn('touchLeagueActivity', { liga: st.leagueId }).catch(()=>{}); // marca a liga como ativa; falha aqui não afeta o uso do app
 
   const u1 = col('championships').onSnapshot(snap => {
@@ -1401,6 +1429,7 @@ function startListeners() {
     st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
     st.playersReady = true;
+    rivalMigrateLocal();
     render();
   }, err=>{ listenerFailed('player_registry', err); st.playersReady = true; render(); });
 
@@ -1460,6 +1489,7 @@ function startListeners() {
       peerStars:         !!data.peerStars,
       starsCallAt:       data.starsCallAt       || null,
       starsCallBy:       data.starsCallBy       || '',
+      h2hBadges:         data.h2hBadges         ?? true,
     };
     st.cfgReady = true;
     render();
@@ -1473,7 +1503,25 @@ function startListeners() {
     if (changed) render();
   }, err=>{ listenerFailed('player_photos', err); });
 
-  _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8,uPh];
+  // Rival (item 36): a escolha da própria conta (privada) e o cadastro público do rival da liga (badges e marcas). Enquanto uma escolha está
+  // sendo salva no servidor, o app mostra o que a pessoa acabou de pedir e não deixa uma leitura antiga desfazer isso.
+  const uRv = st.authUser?.uid ? col('rivals').doc(st.authUser.uid).onSnapshot(snap => {
+    if (st._rivalBusy) return;
+    st.rivalDoc = snap.exists ? snap.data() : null;
+    st.rivalReady = true;
+    rivalMigrateLocal();
+    render();
+  }, err => { listenerFailed('rivals', err); st.rivalReady = true; render(); }) : null;
+  const uRp = col('rival_public').onSnapshot(snap => {
+    const next = {};
+    snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data(); });
+    st.rivalPublic = next;
+    st._rivalPubVer = (st._rivalPubVer || 0) + 1;
+    st.rivalPubReady = true;
+    render();
+  }, err => { listenerFailed('rival_public', err); st.rivalPubReady = true; render(); });
+
+  _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8,uPh,uRv,uRp].filter(Boolean);
 
   if (st.userRole === 'admin') {
     refreshAdminBadge();
@@ -2151,6 +2199,7 @@ async function recoverFreeChamps() {
 async function signOutUser() {
   _unsubListeners.forEach(u=>u()); _unsubListeners=[];
   st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
+  st.rivalDoc=null; st.rivalReady=false; st.rivalPublic={}; st.rivalPubReady=false;
   st.userRole=null; st.userDoc=null; st.leagueId=null; st.availableLeagues=[]; st.ready=false;
   await AUTH.signOut();
 }
@@ -7651,12 +7700,12 @@ function vMeuJogador() {
     }
   }
   const consecGoalless = goallessStreak([...done].reverse(), myName);
-  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), myName };
+  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), ...h2hFlags(doneAll, myName), ...rivalPublicStats(myName), myName };
   const earnedBadges = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && b.check(_bStats));
   const lockedBadges  = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && !b.check(_bStats));
 
   // badge change detection — cross-session via userDoc baseline + in-session via memory
-  if (!st.mjPreviewKey && st.authUser?.uid && st.ready && st.ranksReady && st.playersReady && st.cfgReady) {
+  if (!st.mjPreviewKey && st.authUser?.uid && st.ready && st.ranksReady && st.playersReady && st.cfgReady && st.rivalPubReady) {
     const bKey = st.authUser.uid + '_' + (st.leagueId || '');
     const allIds = earnedBadges.map(b => b.id);
     if (st._knownBadgesKey !== bKey) {
@@ -7678,6 +7727,8 @@ function vMeuJogador() {
       }
     }
   }
+
+  if (!st.mjPreviewKey && st.authUser?.uid) rivalProgressSync(); // item 36: manda ao servidor os meses de duelo que fecharam e as viradas (só no próprio perfil)
 
   // payment status
   const curMonth = new Date().toISOString().slice(0,7);
@@ -9169,7 +9220,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
+  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),...h2hFlags(doneAll,name),...rivalPublicStats(name),myName:name};
 }
 
 function getBadgeCache() {
@@ -9178,7 +9229,7 @@ function getBadgeCache() {
     const pags=st.finMens[mon]?.pagamentos||{};
     return mon+':'+Object.entries(pags).map(([n,p])=>n+'='+(typeof p==='boolean'?p:JSON.stringify(p))).sort().join(',');
   }).join('|');
-  const key=champs.length+'|'+champs.map(c=>c.id||'').join(',')+'|'+finKey+'|'+votingCacheKey();
+  const key=champs.length+'|'+champs.map(c=>c.id||'').join(',')+'|'+finKey+'|'+votingCacheKey()+'|'+(st._rivalPubVer||0);
   if(_badgeCache&&_badgeCacheKey===key) return _badgeCache;
   const allNames=new Set();
   for(const r of(st.ranks||[])) if(r.name) allNames.add(r.name);
@@ -11971,31 +12022,51 @@ function mBadgeInfo() {
 }
 
 /* ── Rival ───────────────────────────────────────────────────────────────────────────────
-   Comparar as minhas conquistas com as de outro jogador da liga. A escolha do rival fica SÓ neste aparelho (localStorage, por conta e liga): nada vai ao servidor e o
-   rival não é avisado. A comparação usa o que a liga já mostra a todos (as conquistas de cada um, do cache das conquistas, com as mesmas regras para os dois lados) e só
-   aparece no PRÓPRIO perfil (nunca na simulação do admin). */
-const RIVAL_STORE = 'aceoma_rival';
+   Comparar as minhas conquistas e os meus números com os de outro jogador da liga, o duelo do mês e o frente a frente. A escolha do rival fica no SERVIDOR (item 36):
+   leagues/{liga}/rivals/{uid}, que só a própria conta lê (nem o admin, nem o rival) e só a função setRival grava. O rival NÃO é avisado; só se os dois se escolherem
+   (Rivalidade Declarada) os dois ficam sabendo, e com 3 ou mais escolhas o jogador ganha o Alvo da Galera (ninguém vê quem escolheu). A comparação usa o que a liga já
+   mostra a todos (as conquistas e os números de cada um, com as mesmas regras para os dois lados) e só aparece no PRÓPRIO perfil (nunca na simulação do admin). */
+const RIVAL_STORE = 'aceoma_rival'; // onde a escolha ficava antes (só no aparelho): hoje só serve para levar a escolha antiga para o servidor, uma vez
 const rivalStoreKey = () => (st.authUser?.uid && st.leagueId ? `${st.authUser.uid}_${st.leagueId}` : '');
+// O rival escolhido (a chave do jogador) ou ''. Vem do documento da conta no servidor e só vale para o jogador a que a conta está ligada agora.
 function rivalGet() {
-  const k = rivalStoreKey();
-  if (!k) return '';
-  if (st._rival?.k === k) return st._rival.v;
-  let v = '';
-  try { const all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); if (all && typeof all === 'object' && !Array.isArray(all) && typeof all[k] === 'string') v = all[k]; } catch(_) {}
-  st._rival = { k, v };
-  return v;
+  const d = st.rivalDoc, me = st.userDoc?.playerKey;
+  return d && me && d.ownKey === me ? String(d.rivalKey || '') : '';
 }
+// Quando o rival atual foi escolhido (hora do servidor), ou '' sem rival.
+function rivalSince() { return rivalGet() && st.rivalDoc?.since ? String(st.rivalDoc.since) : ''; }
+// Escolher, trocar ou tirar o rival ('' = sem rival). Mostra a escolha na hora e confirma no servidor (setRival); se o servidor recusar, volta ao que era e avisa.
+// Devolve uma promessa com true (valeu) ou false. Sem servidor (a demonstração) só vale no aparelho.
 function rivalSet(v) {
+  const me = st.userDoc?.playerKey;
+  if (!me) return Promise.resolve(false);
+  const before = st.rivalDoc;
+  if (!v && !rivalGet()) return Promise.resolve(true); // já não havia rival
+  const mine = before && before.ownKey === me ? before : null;
+  st.rivalDoc = { ...(mine || {}), ownKey: me, rivalKey: v, since: v ? new Date().toISOString() : '', mutual: false, lead: '', duels: mine?.duels || {} };
+  if (!DB || !st.leagueId) return Promise.resolve(true);
+  st._rivalBusy = (st._rivalBusy || 0) + 1;
+  const seq = st._rivalSeq = (st._rivalSeq || 0) + 1; // duas escolhas seguidas: só a resposta da última mexe na tela
+  return callFn('setRival', { liga: st.leagueId, rivalKey: v }).then(r => {
+    if (seq === st._rivalSeq) st.rivalDoc = { ...st.rivalDoc, rivalKey: String(r?.rivalKey || ''), since: String(r?.since || ''), mutual: r?.mutual === true };
+    return true;
+  }).catch(e => {
+    if (seq === st._rivalSeq) { st.rivalDoc = before; toast(e?.message || 'Não foi possível salvar o rival agora. Tente de novo.'); }
+    return false;
+  }).finally(() => { st._rivalBusy = Math.max(0, (st._rivalBusy || 1) - 1); render(); });
+}
+// Quem já tinha escolhido um rival antes (guardado só no aparelho) não perde a escolha: na 1ª vez que o app tem o documento da conta, o rival antigo vai para o servidor
+// (se a conta ainda não tem rival lá e o jogador ainda está ativo na liga); de qualquer jeito a cópia do aparelho é apagada.
+function rivalMigrateLocal() {
   const k = rivalStoreKey();
-  if (!k) return;
-  st._rival = { k, v };
-  try {
-    let all = {};
-    try { all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); } catch(_) {} // guardado estragado: recomeça do zero em vez de nunca mais gravar
-    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
-    if (v) all[k] = v; else delete all[k];
-    localStorage.setItem(RIVAL_STORE, JSON.stringify(all));
-  } catch(_) {}
+  if (!k || !st.rivalReady || !st.playersReady || !st.userDoc?.playerKey || st._rivalMigrated === k) return;
+  st._rivalMigrated = k;
+  let all = {}, legacy = '';
+  try { all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); if (all && typeof all === 'object' && !Array.isArray(all) && typeof all[k] === 'string') legacy = all[k]; } catch(_) {}
+  if (!legacy) return;
+  const dropLocal = () => { try { delete all[k]; localStorage.setItem(RIVAL_STORE, JSON.stringify(all)); } catch(_) {} };
+  if (rivalGet() || !rivalCandidates().some(p => playerKey(p.name) === legacy)) { dropLocal(); return; }
+  rivalSet(legacy).then(ok => { if (ok) dropLocal(); });
 }
 // Quem pode ser rival: os outros jogadores ativos da liga.
 function rivalCandidates() { return (st.players || []).filter(p => p.active !== false && playerKey(p.name) !== st.userDoc?.playerKey); }
@@ -12004,9 +12075,24 @@ function rivalPlayer() {
   const key = rivalGet();
   return key ? rivalCandidates().find(p => playerKey(p.name) === key) || null : null;
 }
+// As badges que só falam do rival (as 6 do duelo e da sequência, as 2 da virada, as 3 do tempo, Alvo da Galera e Rivalidade Declarada): não entram na comparação de conquistas, que seria
+// circular (ganhar uma delas mudaria o próprio placar). As do frente a frente são normais.
+const RIVAL_ONLY_IDS = ['alvo_galera', 'rival_declarada', 'duelo_aluno', 'duelo_fora_liga', 'duelo_mao', 'duelo_trator', 'duelo_dono', 'duelo_sombra', 'rival_passou', 'rival_ultrapassada', 'rival_3m', 'rival_6m', 'rival_12m'];
+// O que a liga sabe do rival de um jogador (cadastro público, só contagens e marcas), no formato das contas das conquistas.
+function rivalPublicStats(name) {
+  const p = st.rivalPublic?.[playerKey(name)] || {};
+  return { rivalAwards: p.awards || {}, rivalAlvo: p.alvo === true, rivalDeclarada: p.declarada === true };
+}
+const rivalAward = (s, id) => (Number(s.rivalAwards?.[id]) || 0) >= 1;
+// As badges do rival (as que faltam, trancadas) só aparecem para quem usa o rival ou já ganhou alguma; as do frente a frente valem para todos.
+function rivalBadgesShown() {
+  if (rivalGet()) return true;
+  const key = st.mjPreviewKey || st.userDoc?.playerKey, p = key ? st.rivalPublic?.[key] : null;
+  return !!p && (p.alvo === true || p.declarada === true || Object.values(p.awards || {}).some(n => Number(n) >= 1));
+}
 // Conquistas que a liga mostra no painel (as escondidas pela configuração da liga não entram na conta, para os dois lados).
 const rivalVisible = id => { const b = BADGE_CATALOG.find(x => x.id === id); return !!b && (!b.visible || b.visible()); };
-const rivalBadgeIds = name => (getBadgeCache().playerBadges[name] || []).filter(rivalVisible);
+const rivalBadgeIds = name => (getBadgeCache().playerBadges[name] || []).filter(id => rivalVisible(id) && !RIVAL_ONLY_IDS.includes(id));
 function rivalDiff(mine, theirs) {
   const a = new Set(mine), b = new Set(theirs);
   return { onlyMine: mine.filter(x => !b.has(x)), onlyTheirs: theirs.filter(x => !a.has(x)), both: mine.filter(x => b.has(x)) };
@@ -12053,7 +12139,9 @@ function rivalSuggestion(exceptKey) {
 const rivalGapText = sg => sg.gap > 0 ? `${sg.gap} conquista${sg.gap === 1 ? '' : 's'} a mais que você` : sg.gap < 0 ? `${-sg.gap} conquista${sg.gap === -1 ? '' : 's'} a menos que você` : 'o mesmo número de conquistas que você';
 const rivalSuggestText = sg => `${sg.count} conquista${sg.count === 1 ? '' : 's'}, ${sg.gap > 0 ? sg.gap + ' a mais que você' : sg.gap < 0 ? -sg.gap + ' a menos que você' : 'igual a você'}`;
 // As linhas da tabela de números. `val` tira o número de um lado; `better` diz quem leva a cor ('high' = quem tem mais, 'low' = quem tem menos; sem ele a linha só informa, porque jogar
-// mais não é jogar melhor); `games` marca as que vêm dos jogos dos times (vitórias, empates, derrotas e % de vitórias, a mesma conta do Resumo de Jogos da aba EU).
+// mais não é jogar melhor); `games` marca as que vêm dos jogos dos times (vitórias, empates, derrotas e % de vitórias, a mesma conta do Resumo de Jogos da aba EU); `both` faz a linha
+// só disputar quando os dois já jogaram (senão quem nunca jogou "ganharia" em quem tem menos); `skipNull` esconde a linha quando um dos lados não tem o número; `only` diz quando a
+// liga usa aquele número (votação de destaques, notas do grupo). A MESMA lista serve ao comparativo de sempre (os números do rival) e ao duelo do mês.
 const rivalTitlesText = t => (t % 1 === 0 ? String(t) : Math.floor(t) + '½');
 const rivalPctOf = s => (s.matches > 0 ? Math.round(s.w / s.matches * 100) : null);
 const RIVAL_NUMBER_ROWS = [
@@ -12066,29 +12154,253 @@ const RIVAL_NUMBER_ROWS = [
   { id: 'winpct', label: '% de vitórias', val: rivalPctOf, text: v => (v === null ? '—' : v + '%'), better: 'high', games: true },
   { id: 'goals', label: 'Gols', val: s => s.goals, better: 'high' },
   { id: 'art', label: 'Vezes artilheiro', val: s => s.art, better: 'high' },
+  { id: 'pres', label: 'Presença', val: s => s.pres, text: v => v + '%', better: 'high', skipNull: true },
+  { id: 'pos', label: 'Bola Cheia', val: s => s.pos, better: 'high', only: () => votingUsed('pos') },
+  { id: 'neg', label: 'Bola Murcha', val: s => s.neg, better: 'low', both: true, only: () => votingUsed('neg') },
+  { id: 'stars', label: 'Nota do grupo', val: s => s.groupStar, text: v => starsText(v), better: 'high', skipNull: true, only: () => peerStarsOn() },
 ];
-// Os números de UM jogador, tirados do que a liga já mostra a todos: títulos (o ranking), campeonatos, gols e vezes artilheiro (a mesma conta da aba EU e das conquistas) e os jogos do time dele.
+// A nota do grupo de um jogador (a média que o grupo deu, só quando já vale); null quando a liga não usa ou ainda não vale.
+function rivalStarOf(name) {
+  if (!peerStarsOn()) return null;
+  const p = (st.players || []).find(x => x.name === name), i = p ? starsInfo(p) : null;
+  return i && i.source === 'avg' ? i.value : null;
+}
+// Os números de UM jogador, tirados do que a liga já mostra a todos: títulos (o ranking), campeonatos, gols e vezes artilheiro (a mesma conta da aba EU e das conquistas), os jogos do time dele,
+// a presença, os destaques da votação e a nota do grupo.
 function rivalStatsOf(name) {
   const rk = (st.ranks || []).find(r => r.id === playerKey(name)), ps = getBadgeCache().playerStats?.[name] || {};
   const rec = matchRecord((st.champs || []).filter(c => c.status === 'completed' && !c.freeMode), name);
-  return { titles: Number(rk?.titles) || 0, champs: ps.champsPlayed || 0, goals: ps.totalGoals || 0, art: ps.myArt || 0, ...rec };
+  return { titles: Number(rk?.titles) || 0, champs: ps.champsPlayed || 0, goals: ps.totalGoals || 0, art: ps.myArt || 0, pos: ps.posAwards || 0, neg: ps.negAwards || 0,
+    pres: ps.done_count > 0 ? Math.round((ps.champsPlayedCutoff || 0) / ps.done_count * 100) : null, groupStar: rivalStarOf(name), ...rec };
 }
-// Os números lado a lado, com a mesma conta para os dois. Cada linha diz o que mostrar de cada lado e quem está na frente ('mine', 'theirs' ou '' no empate). Só disputa a linha que tem `better`; as de
-// jogos só disputam quando os dois já jogaram (senão quem nunca jogou "ganharia" em derrotas), e as de jogos só aparecem se algum dos dois já jogou. Linha em que os dois têm zero não aparece.
-// Null nas mesmas situações da comparação das conquistas.
-function rivalNumbers() {
-  const pair = rivalPair();
-  if (!pair) return null;
-  const a = rivalStatsOf(pair.me), b = rivalStatsOf(pair.rival), played = a.matches > 0 && b.matches > 0, anyGame = a.matches > 0 || b.matches > 0, rows = [];
+// A tabela com os números de dois lados: o que mostrar de cada lado e quem está na frente em cada linha ('mine', 'theirs' ou '' no empate). Só disputa a linha que tem `better`; as de jogos só
+// disputam quando os dois já jogaram, e só aparecem se algum dos dois já jogou. Linha em que os dois têm zero não aparece. Pura: serve aos números de sempre e ao duelo do mês.
+function rivalRows(a, b) {
+  const played = a.matches > 0 && b.matches > 0, anyGame = a.matches > 0 || b.matches > 0, rows = [];
   for (const def of RIVAL_NUMBER_ROWS) {
+    if (def.only && !def.only()) continue;
     const x = def.val(a), y = def.val(b);
+    if (def.skipNull && (x === null || x === undefined || y === null || y === undefined)) continue;
     if (def.games ? !anyGame : x === 0 && y === 0) continue;
-    const scored = !!def.better && (!def.games || played);
+    const scored = !!def.better && (!(def.games || def.both) || played);
     const lead = !scored || x === y ? '' : (def.better === 'low' ? x < y : x > y) ? 'mine' : 'theirs';
     rows.push({ id: def.id, label: def.label, mine: def.text ? def.text(x) : String(x), theirs: def.text ? def.text(y) : String(y), scored, lead });
   }
   const mineLead = rows.filter(r => r.lead === 'mine').length, theirsLead = rows.filter(r => r.lead === 'theirs').length, scored = rows.filter(r => r.scored).length;
-  return { me: pair.me, rival: pair.rival, rows, mineLead, theirsLead, scored, status: !scored ? 'none' : mineLead > theirsLead ? 'ahead' : mineLead < theirsLead ? 'behind' : 'tie' };
+  return { rows, mineLead, theirsLead, scored, status: !scored ? 'none' : mineLead > theirsLead ? 'ahead' : mineLead < theirsLead ? 'behind' : 'tie' };
+}
+// Os números lado a lado, com a mesma conta para os dois. Null nas mesmas situações da comparação das conquistas.
+function rivalNumbers() {
+  const pair = rivalPair();
+  if (!pair) return null;
+  return { me: pair.me, rival: pair.rival, ...rivalRows(rivalStatsOf(pair.me), rivalStatsOf(pair.rival)) };
+}
+
+/* ── Frente a frente (item 36) ───────────────────────────────────────────────────────────────────────────────────────────────
+   Só contam os jogos em que os dois estavam em times OPOSTOS no mesmo campeonato (elenco de cada time e placar dos jogos já disputados; jogador "emprestado" não entra, como em matchRecord).
+   Serve à aba Frente a frente da janela do rival e às badges Carrasco, Freguês, Tira-teima e Clássico (calculadas para todos os jogadores no cache das conquistas). */
+function h2hGoals(m, name) {
+  const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
+  let n = 0;
+  for (const g of gs) if (g.player === name) n++;
+  return n;
+}
+// O retrospecto de `a` contra `b`: vitórias, empates e derrotas de `a`, os jogos e os gols de cada um nesses jogos.
+function h2hRecord(champs, a, b) {
+  let w = 0, d = 0, l = 0, ga = 0, gb = 0;
+  for (const c of champs) {
+    if (!c.teamRosters) continue;
+    let ta = null, tb = null;
+    for (const [t, roster] of Object.entries(c.teamRosters)) { if (ta === null && roster.includes(a)) ta = t; if (tb === null && roster.includes(b)) tb = t; }
+    if (!ta || !tb || ta === tb) continue;
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const aHome = m.home === ta && m.away === tb, bHome = m.home === tb && m.away === ta;
+      if (!aHome && !bHome) continue;
+      const sa = aHome ? m.hs : m.as, sb = aHome ? m.as : m.hs;
+      if (sa === sb) d++; else if (sa > sb) w++; else l++;
+      ga += h2hGoals(m, a); gb += h2hGoals(m, b);
+    }
+  }
+  return { w, d, l, games: w + d + l, ga, gb };
+}
+// O retrospecto de `name` contra cada outro jogador: { [nome do outro]: { w, d, l } }, olhando só os jogos entre times opostos.
+function h2hAgainstAll(champs, name) {
+  const rec = {};
+  for (const c of champs) {
+    if (!c.teamRosters) continue;
+    let mine = null;
+    for (const [t, roster] of Object.entries(c.teamRosters)) { if (roster.includes(name)) { mine = t; break; } }
+    if (!mine) continue;
+    for (const m of (c.matches || [])) {
+      if (!m.played || (m.home !== mine && m.away !== mine)) continue;
+      const home = m.home === mine, opp = home ? m.away : m.home, my = home ? m.hs : m.as, their = home ? m.as : m.hs;
+      for (const p of (c.teamRosters[opp] || [])) {
+        if (p === name) continue;
+        const r = rec[p] || (rec[p] = { w: 0, d: 0, l: 0 });
+        if (my === their) r.d++; else if (my > their) r.w++; else r.l++;
+      }
+    }
+  }
+  return rec;
+}
+// As quatro badges do frente a frente de um jogador (o mesmo cálculo na aba EU e no cache de todos).
+function h2hFlags(champs, name) {
+  const all = Object.values(h2hAgainstAll(champs, name)).map(r => ({ ...r, games: r.w + r.d + r.l }));
+  return {
+    h2hCarrasco: all.some(r => r.w >= 5 && r.w - r.l >= 3),
+    h2hFregues: all.some(r => r.l >= 5 && r.l - r.w >= 3),
+    h2hTiraTeima: all.some(r => r.games >= 6 && r.w === r.l),
+    h2hClassico: all.some(r => r.games >= 20),
+  };
+}
+// Quem mais ganhou de `name` (o carrasco dele) e de quem ele mais ganhou (o freguês dele), entre os que já o enfrentaram 3 vezes ou mais: { nome, w, d, l } do ponto de vista de `name`.
+function h2hExtremes(champs, name) {
+  const list = Object.entries(h2hAgainstAll(champs, name)).map(([n, r]) => ({ name: n, ...r, games: r.w + r.d + r.l, diff: r.w - r.l })).filter(r => r.games >= 3);
+  const pick = (cmp, ok) => list.filter(ok).sort((x, y) => cmp(x, y) || x.name.localeCompare(y.name, 'pt'))[0] || null;
+  return { carrasco: pick((x, y) => x.diff - y.diff, r => r.diff < 0), fregues: pick((x, y) => y.diff - x.diff, r => r.diff > 0) };
+}
+// O frente a frente do jogador com o rival escolhido, mais o carrasco e o freguês dele. Null nas mesmas situações da comparação das conquistas.
+function rivalH2H() {
+  const pair = rivalPair();
+  if (!pair) return null;
+  const champs = (st.champs || []).filter(c => c.status === 'completed' && !c.freeMode), rec = h2hRecord(champs, pair.me, pair.rival);
+  return { me: pair.me, rival: pair.rival, ...rec, ...h2hExtremes(champs, pair.me), status: rec.games === 0 ? 'none' : rec.w > rec.l ? 'ahead' : rec.w < rec.l ? 'behind' : 'tie' };
+}
+
+/* ── Duelo do mês (item 36) ──────────────────────────────────────────────────────────────────────────────────────────────────
+   Todo mês, eu e o meu rival somos comparados nos números do mês (os campeonatos concluídos com data naquele mês). Vale se o rival já estava escolhido ANTES do primeiro campeonato do mês
+   e se os dois jogaram pelo menos RIVAL_MIN_GAMES jogos. Só contam os números que tiveram um vencedor: "maioria" = levei mais números que ele (com 3 ou mais decididos), "todos" = ele não levou
+   nenhum (com 4 ou mais), empate não dá nada. O mês fecha no dia RIVAL_CLOSE_DAY do mês seguinte (dá tempo de fechar a votação de destaques do último campeonato) e sem campeonato em andamento;
+   aí o app manda o resultado ao servidor (saveRivalProgress), que guarda o histórico e soma as badges. Quem troca de rival depois do 1º campeonato do mês perde o duelo daquele mês. */
+const RIVAL_MIN_GAMES = 3, RIVAL_CLOSE_DAY = 5;
+const pad2 = n => String(n).padStart(2, '0');
+const localDate = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; // AAAA-MM-DD no horário do aparelho
+const monthShift = (m, n) => { const t = (+m.slice(0, 4)) * 12 + (+m.slice(5, 7) - 1) + n; return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`; };
+const RIVAL_MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const monthLabel = m => `${RIVAL_MONTHS[+m.slice(5, 7) - 1]}${m.slice(0, 4) === localDate().slice(0, 4) ? '' : ' de ' + m.slice(0, 4)}`;
+// Os números de um jogador num mês: só os campeonatos concluídos (fora do plano gratuito) com data naquele mês.
+function rivalMonthStats(name, month) {
+  const champs = (st.champs || []).filter(c => c.status === 'completed' && !c.freeMode && String(c.date || '').slice(0, 7) === month);
+  let titles = 0, goals = 0, art = 0, pos = 0, neg = 0, played = 0;
+  for (const c of champs) {
+    if (c.teamRosters && Object.values(c.teamRosters).some(r => r.includes(name))) played++;
+    const cp = (c.champion_players || []).find(p => p.name.trim() === name);
+    if (cp) titles += cp.weight || 1;
+    const per = {};
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
+      for (const g of gs) per[g.player] = (per[g.player] || 0) + 1;
+    }
+    goals += per[name] || 0;
+    const mx = Math.max(0, ...Object.values(per));
+    if (mx > 0 && (per[name] || 0) === mx) art++;
+    const aw = getChampAwards(c);
+    if (aw?.pos?.winners.includes(name)) pos++;
+    if (aw?.neg?.winners.includes(name)) neg++;
+  }
+  return { titles, champs: played, goals, art, pos, neg, pres: champs.length ? Math.round(played / champs.length * 100) : null, groupStar: rivalStarOf(name), ...matchRecord(champs, name) };
+}
+// A data (AAAA-MM-DD) do 1º campeonato do mês, começado ou concluído; '' se ainda não houve nenhum.
+function rivalFirstChampDate(month) {
+  const ds = (st.champs || []).filter(c => !c.freeMode && (c.status === 'completed' || c.status === 'active') && String(c.date || '').slice(0, 7) === month).map(c => c.date).sort();
+  return ds[0] || '';
+}
+// O rival já estava escolhido antes do 1º campeonato do mês? Escolher no dia anterior vale; no mesmo dia ou depois, o duelo daquele mês não conta.
+function rivalLockedIn(month, since = rivalSince()) {
+  const first = rivalFirstChampDate(month);
+  return !!since && !!first && localDate(new Date(since)) < first;
+}
+// O resultado do duelo a partir de quantos números cada lado levou: 'trator' (todos, 4 ou mais), 'mao' (maioria), 'fora' (ele levou todos, 4 ou mais), 'aluno' (ele levou a maioria),
+// 'empate' (4 ou mais decididos, metade para cada) ou 'none' (menos de 3 números decididos).
+function rivalDuelClassify(m, t) {
+  const decided = m + t;
+  if (decided < 3) return 'none';
+  if (m > t) return t === 0 && m >= 4 ? 'trator' : 'mao';
+  if (t > m) return m === 0 && t >= 4 ? 'fora' : 'aluno';
+  return 'empate';
+}
+// O duelo de um mês entre mim e o rival: a tabela do mês, quantos números cada um levou e o resultado. `valid` diz se o duelo do mês vale (rival escolhido antes do 1º campeonato e jogos
+// suficientes); sem isso o resultado é 'none'. Null sem rival, sem jogador vinculado ou na simulação do admin.
+function rivalDuelFor(month, pair = rivalPair()) {
+  if (!pair) return null;
+  const a = rivalMonthStats(pair.me, month), b = rivalMonthStats(pair.rival, month);
+  const locked = rivalLockedIn(month), enough = a.matches >= RIVAL_MIN_GAMES && b.matches >= RIVAL_MIN_GAMES;
+  const rr = rivalRows(a, b), m = rr.rows.filter(r => r.scored && r.lead === 'mine').length, t = rr.rows.filter(r => r.scored && r.lead === 'theirs').length;
+  return { month, locked, enough, valid: locked && enough, rows: rr.rows, m, t, res: locked && enough ? rivalDuelClassify(m, t) : 'none', games: { mine: a.matches, theirs: b.matches } };
+}
+// O mês já fechou? Passou o dia RIVAL_CLOSE_DAY do mês seguinte e nenhum campeonato daquele mês continua em andamento.
+function rivalMonthClosed(m) {
+  if (localDate() < `${monthShift(m, 1)}-${pad2(RIVAL_CLOSE_DAY)}`) return false;
+  return !(st.champs || []).some(c => !c.freeMode && c.status === 'active' && String(c.date || '').slice(0, 7) === m);
+}
+// Os meses fechados que ainda não têm resultado guardado, do mês em que o rival atual foi escolhido em diante (os 6 mais novos), do mais antigo ao mais novo.
+function rivalMonthsDue() {
+  const since = rivalSince();
+  if (!since) return [];
+  const last = monthShift(localDate().slice(0, 7), -1), known = st.rivalDoc?.duels || {}, out = [];
+  for (let m = localDate(new Date(since)).slice(0, 7); m <= last; m = monthShift(m, 1)) if (!known[m] && rivalMonthClosed(m)) out.push(m);
+  return out.slice(-6);
+}
+// Há quantos meses inteiros o rival atual foi escolhido (a mesma conta do servidor, que é quem dá as badges de tempo).
+function rivalTenureMonths() {
+  const since = rivalSince();
+  if (!since) return 0;
+  const a = new Date(since), b = new Date();
+  let n = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+  if (b.getUTCDate() < a.getUTCDate()) n--;
+  return Math.max(0, n);
+}
+const rivalResultSide = res => (res === 'mao' || res === 'trator' ? 'win' : res === 'aluno' || res === 'fora' ? 'lose' : '');
+// A sequência de duelos do mês seguidos (ganhos ou perdidos) contra o rival atual, a partir do mês em que ele foi escolhido; mês sem duelo válido não conta nem quebra, empate quebra.
+function rivalStreak() {
+  const duels = st.rivalDoc?.duels || {}, rival = rivalGet(), since = rivalSince(), from = since ? localDate(new Date(since)).slice(0, 7) : '';
+  let side = '', n = 0;
+  for (const k of Object.keys(duels).filter(k => k >= from).sort().reverse()) {
+    const e = duels[k];
+    if (!e || e.res === 'none') continue;
+    const sd = rivalResultSide(e.res);
+    if (e.r !== rival || !sd || (side && sd !== side)) break;
+    side = sd; n++;
+  }
+  return { side, n };
+}
+// O que a pessoa perde se trocar de rival (ou tirá-lo) agora: o duelo do mês (se o 1º campeonato do mês já começou e o rival já estava escolhido antes), a sequência de duelos e o tempo de
+// rivalidade. As conquistas que ela já ganhou continuam dela. Lista vazia = nada a perder.
+function rivalChangeLoss() {
+  if (!rivalGet()) return [];
+  const loss = [], month = localDate().slice(0, 7), sk = rivalStreak(), tenure = rivalTenureMonths();
+  if (rivalFirstChampDate(month) && rivalLockedIn(month)) loss.push(`o duelo de ${monthLabel(month)} (o primeiro campeonato do mês já foi jogado)`);
+  if (sk.n >= 1) loss.push(`a sequência de ${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganhos' : 'perdidos'} (Dono do Rival e Sombra do Rival)`);
+  if (tenure >= 1) loss.push(`o tempo de rivalidade (${tenure} ${tenure === 1 ? 'mês' : 'meses'}, para Rival de Estimação, Arquirrival e Rivalidade Histórica)`);
+  return loss;
+}
+// As badges do rival que o jogador já ganhou (contagens públicas da liga).
+const rivalAwardsOf = key => st.rivalPublic?.[key]?.awards || {};
+// Manda ao servidor o que só o app sabe: os meses de duelo que fecharam, quem está na frente no número de conquistas e o aviso de que vale conferir o tempo com o rival. Só no PRÓPRIO
+// perfil, com tudo carregado, e sem repetir: depois de salvar, o documento da conta traz o histórico e o que já foi mandado não é mandado de novo.
+async function rivalProgressSync() {
+  if (!DB || !st.leagueId || st._rivalSyncing || (st._rivalSyncFail && Date.now() - st._rivalSyncFail < 10 * 60000)) return;
+  if (!(st.ready && st.playersReady && st.ranksReady && st.cfgReady && st.rivalReady && st.rivalPubReady) || !st.rivalDoc) return;
+  const pair = rivalPair();
+  if (!pair) return;
+  const sent = st._rivalSent || (st._rivalSent = new Set());
+  const duels = rivalMonthsDue().filter(m => !sent.has(m)).map(m => { const d = rivalDuelFor(m, pair), none = d.res === 'none'; return { month: m, res: d.res, m: none ? 0 : d.m, t: none ? 0 : d.t }; });
+  const c = rivalCompare(), lead = c ? (c.diff > 0 ? 'mine' : c.diff < 0 ? 'theirs' : 'tie') : '';
+  const leadSend = !!lead && lead !== 'tie' && lead !== (st.rivalDoc.lead || '');
+  const mineAwards = rivalAwardsOf(st.userDoc.playerKey), months = rivalTenureMonths();
+  const tenure = [[3, 'rival_3m'], [6, 'rival_6m'], [12, 'rival_12m']].some(([n, id]) => months >= n && !(Number(mineAwards[id]) >= 1));
+  if (!duels.length && !leadSend && !tenure) return;
+  st._rivalSyncing = true;
+  duels.forEach(d => sent.add(d.month));
+  try {
+    await callFn('saveRivalProgress', { liga: st.leagueId, duels, ...(leadSend ? { lead } : {}), ...(tenure ? { tenure: true } : {}) });
+    st._rivalSyncFail = 0;
+  } catch(e) {
+    st._rivalSyncFail = Date.now();
+    duels.forEach(d => sent.delete(d.month));
+  } finally { st._rivalSyncing = false; }
 }
 const rivalInitials = n => String(n).trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
 // A faixa dentro do card Conquistas da aba EU: convite para escolher o rival ou o placar e o botão Comparar.
