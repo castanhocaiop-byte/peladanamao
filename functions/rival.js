@@ -11,10 +11,10 @@
 //   - lead: quem estava na frente no número de conquistas na última vez ("mine" | "theirs" | "");
 //   - duels: o resultado de cada mês já fechado (res: trator, mao, aluno, fora, empate ou none; m = números que a conta levou, t = os que o
 //     rival levou). Quem confere o mês é o app (ele tem os campeonatos); o servidor só confere se o formato e as contas fazem sentido.
-// O que a liga toda vê fica em leagues/{liga}/rival_public/{chave do jogador}: { awards, alvo, declarada }.
+// O que a liga toda vê fica em leagues/{liga}/rival_public/{chave do jogador}: { awards, alvo, publico, declarada }.
 //   - awards: quantas vezes cada badge do rival foi conquistada (AWARD_IDS);
-//   - alvo / declarada: calculadas SÓ aqui (computeFlags): "Alvo da Galera" (3 ou mais jogadores escolheram este) e "Rivalidade
-//     Declarada" (os dois se escolheram). Ninguém vê quem escolheu quem.
+//   - alvo / publico / declarada: calculadas SÓ aqui (computeFlags): "Alvo da Galera" (3 ou mais jogadores escolheram este), "Inimigo
+//     Público" (7 ou mais) e "Rivalidade Declarada" (os dois se escolheram). Ninguém vê quem escolheu quem.
 
 // As badges do rival que viram contagem em rival_public/{chave}.awards.
 const AWARD_IDS = [
@@ -30,6 +30,7 @@ const MAX_DUELS_PER_CALL = 12;            // meses que o app manda de uma vez
 const KEEP_MONTHS = 24;                   // meses de histórico que o servidor guarda
 const STREAK_LENGTH = 3;                  // duelos do mês seguidos (contra o mesmo rival) para Dono do Rival e Sombra do Rival
 const ALVO_MIN = 3;                       // jogadores que escolheram o mesmo para ser "Alvo da Galera"
+const PUBLICO_MIN = 7;                    // ... para ser "Inimigo Público" (tem de ser pelo menos ALVO_MIN: quem é Inimigo Público também é Alvo da Galera)
 const TENURE = [[3, "rival_3m"], [6, "rival_6m"], [12, "rival_12m"]]; // meses com o mesmo rival
 const MAX_NUMBERS = 20;                   // teto de números por duelo (o app compara no máximo 10)
 
@@ -144,10 +145,11 @@ function mergeAwards(awards, gains, once = []) {
   return out;
 }
 
-// "Alvo da Galera" e "Rivalidade Declarada", a partir de quem escolheu quem. `rivals`: [{ uid, ownKey, rivalKey }]; `active`: chaves dos
+// "Alvo da Galera", "Inimigo Público" e "Rivalidade Declarada", a partir de quem escolheu quem. `rivals`: [{ uid, ownKey, rivalKey }]; `active`: chaves dos
 // jogadores ativos do elenco (quem saiu do elenco ou ficou inativo não conta, nem como quem escolhe nem como escolhido). Vários cadastros
 // ligados ao mesmo jogador contam como UM jogador.
 //   alvo: chaves escolhidas por ALVO_MIN jogadores diferentes ou mais;
+//   publico: chaves escolhidas por PUBLICO_MIN jogadores diferentes ou mais (sempre também estão em alvo);
 //   declarada: chaves dos dois lados de cada par que se escolheu um ao outro;
 //   mutualUids: contas cuja escolha é correspondida (o servidor grava mutual: true nelas).
 function computeFlags(rivals, active) {
@@ -158,12 +160,13 @@ function computeFlags(rivals, active) {
     choosers.get(r.rivalKey).add(r.ownKey);
   }
   const alvo = new Set([...choosers].filter(([, who]) => who.size >= ALVO_MIN).map(([key]) => key));
+  const publico = new Set([...choosers].filter(([, who]) => who.size >= PUBLICO_MIN).map(([key]) => key));
   const picks = new Set(live.map(r => `${r.ownKey}>${r.rivalKey}`));
   const declarada = new Set(), mutualUids = new Set();
   for (const r of live) {
     if (picks.has(`${r.rivalKey}>${r.ownKey}`)) { declarada.add(r.ownKey); mutualUids.add(r.uid); } // o par espelhado marca o outro lado na sua vez
   }
-  return { alvo, declarada, mutualUids };
+  return { alvo, publico, declarada, mutualUids };
 }
 
 // O jogador mudou de chave (renomear no elenco, anonimizar o nome): as escolhas feitas por ele e as que apontam para ele passam para a
@@ -181,15 +184,16 @@ function renameKeys(rivals, from, to) {
   return out;
 }
 
-// O cadastro público de um jogador depois da conta: mantém as contagens e põe as marcas (alvo e declarada). `null` = nada a gravar.
+// O cadastro público de um jogador depois da conta: mantém as contagens e põe as marcas (alvo, publico e declarada). `null` = nada a gravar.
+// Cadastro antigo, sem o campo publico, vale como "não é Inimigo Público" (nada a reescrever).
 function publicDoc(existing, flags) {
-  const alvo = flags.alvo === true, declarada = flags.declarada === true;
-  if (!existing && !alvo && !declarada) return null;
-  if (existing && (existing.alvo === true) === alvo && (existing.declarada === true) === declarada) return null;
-  return { awards: { ...(existing?.awards || {}) }, alvo, declarada };
+  const alvo = flags.alvo === true, publico = flags.publico === true, declarada = flags.declarada === true;
+  if (!existing && !alvo && !publico && !declarada) return null;
+  if (existing && (existing.alvo === true) === alvo && (existing.publico === true) === publico && (existing.declarada === true) === declarada) return null;
+  return { awards: { ...(existing?.awards || {}) }, alvo, publico, declarada };
 }
 
 module.exports = {
-  AWARD_IDS, RESULT_AWARD, WIN, LOSE, MAX_DUELS_PER_CALL, KEEP_MONTHS, STREAK_LENGTH, ALVO_MIN, TENURE,
+  AWARD_IDS, RESULT_AWARD, WIN, LOSE, MAX_DUELS_PER_CALL, KEEP_MONTHS, STREAK_LENGTH, ALVO_MIN, PUBLICO_MIN, TENURE,
   monthOf, resultFits, parseDuels, runLength, applyDuels, applyLead, monthsBetween, tenureAwards, mergeAwards, computeFlags, renameKeys, publicDoc,
 };

@@ -209,7 +209,7 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   // ═════════ parte pura: functions/rival.js ═════════
   check('AWARD_IDS: as 11 badges que viram contagem, sem repetir', rival.AWARD_IDS.length === 11 && new Set(rival.AWARD_IDS).size === 11);
   check('RESULT_AWARD: cada resultado dá a sua badge', JSON.stringify(rival.RESULT_AWARD) === '{"trator":"duelo_trator","mao":"duelo_mao","aluno":"duelo_aluno","fora":"duelo_fora_liga"}');
-  check('constantes: 12 meses por chamada, 24 de histórico, sequência de 3, alvo com 3', rival.MAX_DUELS_PER_CALL === 12 && rival.KEEP_MONTHS === 24 && rival.STREAK_LENGTH === 3 && rival.ALVO_MIN === 3);
+  check('constantes: 12 meses por chamada, 24 de histórico, sequência de 3, alvo com 3, inimigo público com 7 (nunca menos que o alvo: quem é inimigo público também é alvo)', rival.MAX_DUELS_PER_CALL === 12 && rival.KEEP_MONTHS === 24 && rival.STREAK_LENGTH === 3 && rival.ALVO_MIN === 3 && rival.PUBLICO_MIN === 7 && rival.PUBLICO_MIN >= rival.ALVO_MIN);
   check('monthOf: pega ano e mês de uma data', rival.monthOf('2026-10-20T10:00:00.000Z') === '2026-10' && rival.monthOf('2026-10') === '2026-10' && rival.monthOf(undefined) === '' && rival.monthOf(null) === '');
 
   const fits = (res, m, t) => rival.resultFits(res, m, t);
@@ -326,7 +326,30 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('computeFlags: a conta repetida da ana também tem a escolha correspondida', [...fl.mutualUids].sort().join() === '1,2,9');
   fl = rival.computeFlags([rv('1', 'ana', 'ana'), rv('2', '', 'bia'), rv('3', 'bia', ''), rv('4', 'bia', undefined), null, undefined], act('ana', 'bia'));
   check('computeFlags: escolha em si mesmo, vazia ou sem dono é ignorada, e lixo na lista não quebra', fl.alvo.size === 0 && fl.declarada.size === 0);
-  check('computeFlags: lista vazia', (() => { const e = rival.computeFlags([], act()); return e.alvo.size === 0 && e.declarada.size === 0 && e.mutualUids.size === 0; })());
+  check('computeFlags: lista vazia', (() => { const e = rival.computeFlags([], act()); return e.alvo.size === 0 && e.publico.size === 0 && e.declarada.size === 0 && e.mutualUids.size === 0; })());
+
+  // Inimigo Público (pedido do dono, 20/10/2026): 7 ou mais jogadores escolheram o mesmo
+  const pnames = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'], pAct = act('dani', 'eli', ...pnames);
+  const pMany = (n, target = 'dani') => pnames.slice(0, n).map((k, i) => rv(String(i + 1), k, target));
+  const pInside = f => [...f.publico].every(k => f.alvo.has(k)); // quem é Inimigo Público também é Alvo da Galera
+  fl = rival.computeFlags(pMany(6), pAct);
+  check('computeFlags: 6 jogadores escolheram o mesmo: Alvo da Galera, mas ainda não é Inimigo Público', [...fl.alvo].join() === 'dani' && fl.publico.size === 0, [[...fl.alvo], [...fl.publico]]);
+  fl = rival.computeFlags(pMany(7), pAct);
+  check('computeFlags: 7 jogadores escolheram o mesmo: Inimigo Público (e continua Alvo da Galera)', [...fl.publico].join() === 'dani' && [...fl.alvo].join() === 'dani' && fl.declarada.size === 0 && fl.mutualUids.size === 0 && pInside(fl), [[...fl.publico], [...fl.alvo]]);
+  fl = rival.computeFlags(pMany(10), pAct);
+  check('computeFlags: 10 jogadores (mais que o mínimo): continua Inimigo Público', [...fl.publico].join() === 'dani' && [...fl.alvo].join() === 'dani' && pInside(fl));
+  fl = rival.computeFlags([...pMany(6), rv('99', 'p1', 'dani')], pAct);
+  check('computeFlags: a 7ª conta é do MESMO jogador de uma das 6 (p1 duas vezes): são 6 pessoas, ainda não é Inimigo Público', fl.publico.size === 0 && [...fl.alvo].join() === 'dani');
+  fl = rival.computeFlags(pMany(7), act('dani', ...pnames.slice(0, 6)));
+  check('computeFlags: o 7º que escolheu saiu do elenco (ou ficou inativo): só 6 contam, não é Inimigo Público', fl.publico.size === 0 && [...fl.alvo].join() === 'dani');
+  fl = rival.computeFlags(pMany(7), act(...pnames));
+  check('computeFlags: o escolhido saiu do elenco (ou ficou inativo): não é Inimigo Público nem Alvo da Galera', fl.publico.size === 0 && fl.alvo.size === 0);
+  fl = rival.computeFlags([...pMany(7), rv('a', 'p8', 'eli'), rv('b', 'p9', 'eli'), rv('c', 'p10', 'eli')], pAct);
+  check('computeFlags: cada escolhido é contado sozinho: 7 escolhas no dani (Inimigo Público e Alvo) e 3 no eli (só Alvo da Galera)', [...fl.alvo].sort().join() === 'dani,eli' && [...fl.publico].join() === 'dani' && pInside(fl), [[...fl.alvo], [...fl.publico]]);
+  fl = rival.computeFlags([...pMany(6), rv('x', 'dani', 'p1'), rv('y', 'eli', 'p1')], pAct);
+  check('computeFlags: quem escolhe e é escolhido ao mesmo tempo não atrapalha a conta (6 no dani + dani e eli escolhendo o p1: dani não passa de 6)', fl.publico.size === 0 && [...fl.alvo].join() === 'dani', [[...fl.alvo], [...fl.publico]]);
+  fl = rival.computeFlags([...pMany(6), rv('x', 'eli', 'dani')], pAct);
+  check('computeFlags: o 7º jogador diferente (eli) fecha os 7: Inimigo Público', [...fl.publico].join() === 'dani');
 
   const mapOf = obj => new Map(Object.entries(obj));
   const rn = rival.renameKeys(mapOf({ u1: { ownKey: 'ana', rivalKey: 'bia', since: 's', mutual: true, lead: 'mine', duels: { '2026-03': { r: 'bia', res: 'mao', m: 3, t: 1 } } }, u2: { ownKey: 'caio', rivalKey: 'ana', duels: {} }, u3: { ownKey: 'dani', rivalKey: 'bia', duels: { '2026-03': { r: 'ana', res: 'mao', m: 3, t: 1 } } }, u4: { ownKey: 'eli', rivalKey: 'bia', duels: {} } }), 'ana', 'ana2');
@@ -335,9 +358,13 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('renameKeys: só os meses contra o jogador que mudou levam a chave nova; os outros meses (e as entradas vazias) ficam como estavam', (() => { const o = rival.renameKeys(mapOf({ u: { ownKey: 'caio', rivalKey: 'ana', duels: { '2026-02': { r: 'bia', res: 'mao', m: 3, t: 1 }, '2026-03': { r: 'ana', res: 'mao', m: 3, t: 1 }, '2026-04': null } } }), 'ana', 'ana2'); return o.u.duels['2026-02'].r === 'bia' && o.u.duels['2026-03'].r === 'ana2' && o.u.duels['2026-04'] === null; })());
 
   check('publicDoc: sem documento e sem marca, nada a gravar', rival.publicDoc(undefined, { alvo: false, declarada: false }) === null && rival.publicDoc(null, {}) === null);
-  check('publicDoc: marca nova cria o documento com as contagens vazias', JSON.stringify(rival.publicDoc(undefined, { alvo: true, declarada: false })) === '{"awards":{},"alvo":true,"declarada":false}');
+  check('publicDoc: marca nova cria o documento com as contagens vazias', JSON.stringify(rival.publicDoc(undefined, { alvo: true, declarada: false })) === '{"awards":{},"alvo":true,"publico":false,"declarada":false}');
   check('publicDoc: marcas iguais às que já estão: nada a gravar', rival.publicDoc({ awards: { duelo_mao: 1 }, alvo: true, declarada: false }, { alvo: true, declarada: false }) === null && rival.publicDoc({ awards: {} }, { alvo: false, declarada: false }) === null);
-  check('publicDoc: marca que mudou mantém as contagens (e a marca que sumiu fica falsa em vez de apagar o documento)', JSON.stringify(rival.publicDoc({ awards: { duelo_mao: 2 }, alvo: true, declarada: true }, { alvo: false, declarada: true })) === '{"awards":{"duelo_mao":2},"alvo":false,"declarada":true}');
+  check('publicDoc: marca que mudou mantém as contagens (e a marca que sumiu fica falsa em vez de apagar o documento)', JSON.stringify(rival.publicDoc({ awards: { duelo_mao: 2 }, alvo: true, declarada: true }, { alvo: false, declarada: true })) === '{"awards":{"duelo_mao":2},"alvo":false,"publico":false,"declarada":true}');
+  check('publicDoc: só o Inimigo Público (sem as outras marcas) já cria o documento', JSON.stringify(rival.publicDoc(undefined, { alvo: false, publico: true, declarada: false })) === '{"awards":{},"alvo":false,"publico":true,"declarada":false}');
+  check('publicDoc: virar Inimigo Público muda o documento e mantém as contagens; deixar de ser tira só a marca, sem apagar o documento', JSON.stringify(rival.publicDoc({ awards: { duelo_mao: 2 }, alvo: true, declarada: false }, { alvo: true, publico: true, declarada: false })) === '{"awards":{"duelo_mao":2},"alvo":true,"publico":true,"declarada":false}' && JSON.stringify(rival.publicDoc({ awards: { duelo_mao: 2 }, alvo: true, publico: true, declarada: false }, { alvo: true, publico: false, declarada: false })) === '{"awards":{"duelo_mao":2},"alvo":true,"publico":false,"declarada":false}');
+  check('publicDoc: cadastro antigo (sem o campo publico) vale como "não é Inimigo Público": nada a reescrever; com as marcas iguais (inclusive publico) também nada', rival.publicDoc({ awards: {}, alvo: true, declarada: false }, { alvo: true, publico: false, declarada: false }) === null && rival.publicDoc({ awards: {}, alvo: true, publico: true, declarada: false }, { alvo: true, publico: true, declarada: false }) === null && rival.publicDoc({ awards: {} }, { alvo: false, publico: false, declarada: false }) === null);
+  check('publicDoc: marca com valor que não é true de verdade (texto, número) não vale; e uma marca que muda sozinha (só publico, só declarada) reescreve', rival.publicDoc(undefined, { alvo: 'sim', publico: 1, declarada: 'true' }) === null && rival.publicDoc({ awards: {}, alvo: true, publico: false, declarada: false }, { alvo: true, publico: false, declarada: true }) !== null && rival.publicDoc({ awards: {}, alvo: false, publico: false, declarada: false }, { alvo: false, publico: true, declarada: false }) !== null);
 
   // ═════════ função setRival ═════════
   resetRival();
@@ -424,6 +451,43 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   await setR('u_eli', 'dani');
   await setR('u_dani', 'ana');
   check('alvo: o alvo pode escolher o próprio rival sem perder a marca; e se a escolha dele é correspondida (ana↔dani) os dois ficam com a Rivalidade Declarada, sem a ana virar alvo', PUB('dani').alvo === true && PUB('dani').declarada === true && PUB('ana').alvo === false && PUB('ana').declarada === true, [PUB('dani'), PUB('ana')]);
+
+  // Inimigo Público (pedido do dono, 20/10/2026): 7 ou mais jogadores escolhem o mesmo
+  resetRival();
+  for (const k of ['f1', 'f2', 'f3']) { store.set('users/u_' + k, { email: k + '@x.com', role: 'pending', playerKey: k, leagues: { L: { role: 'player', playerKey: k } } }); store.set(REG + k, { name: k.toUpperCase(), added: '2026-01-01', active: true }); }
+  for (const u of ['u_ana', 'u_bia', 'u_caio', 'u_eli', 'u_f1', 'u_f2']) await setR(u, 'dani');
+  check('inimigo público: 6 escolhas fazem o Alvo da Galera, mas ainda não o Inimigo Público', PUB('dani').alvo === true && PUB('dani').publico === false, PUB('dani'));
+  await setR('u_ana2', 'dani');
+  check('inimigo público: a segunda conta da ana (mesmo jogador) não vira a 7ª pessoa', PUB('dani').publico === false && PUB('dani').alvo === true && [...store.keys()].filter(k => k.startsWith('leagues/L/rivals/')).length === 7, PUB('dani'));
+  await setR('u_f3', 'dani');
+  check('inimigo público: a 7ª pessoa torna o jogador Inimigo Público (e ele continua Alvo da Galera), sem dizer quem escolheu', PUB('dani').publico === true && PUB('dani').alvo === true && PUB('dani').declarada === false && !/ana|bia|caio|eli|f1|f2|f3/.test(JSON.stringify(PUB('dani'))), PUB('dani'));
+  check('inimigo público: quem escolheu não fica com marca nenhuma', ['ana', 'bia', 'caio', 'eli', 'f1', 'f2', 'f3'].every(k => !PUB(k)));
+  await setR('u_f3', 'eli');
+  check('inimigo público: se um dos 7 troca de rival, só a marca de Inimigo Público sai (o Alvo da Galera fica com 6) e o documento continua', PUB('dani').publico === false && PUB('dani').alvo === true, PUB('dani'));
+  await setR('u_dani', 'ana');
+  store.set('leagues/L/rivals/u_dani', { ...RV('u_dani'), since: sinceOf(8) });
+  await prog('u_dani', { duels: [{ month: monthAgo(3), res: 'mao', m: 3, t: 1 }] });
+  check('inimigo público: o app gravar as contagens do duelo de quem é SÓ Alvo da Galera (6 escolhas) não inventa a marca de Inimigo Público', PUB('dani').publico === false && PUB('dani').alvo === true && PUB('dani').awards.duelo_mao === 1, PUB('dani'));
+  await setR('u_f3', 'dani');
+  check('inimigo público: volta quando o 7º escolhe de novo', PUB('dani').publico === true && PUB('dani').alvo === true);
+  store.set(REG + 'f2', { name: 'F2', added: '2026-01-01', active: false });
+  const syPub = await syncR('u_adm', { liga: 'L' });
+  check('inimigo público: um dos 7 ficou inativo no elenco: o admin refaz as marcas e a de Inimigo Público sai (a de Alvo da Galera fica)', syPub.changed === true && PUB('dani').publico === false && PUB('dani').alvo === true, PUB('dani'));
+  store.set(REG + 'f2', { name: 'F2', added: '2026-01-01', active: true });
+  await syncR('u_adm', { liga: 'L' });
+  check('inimigo público: …e volta quando ele volta ao elenco', PUB('dani').publico === true && PUB('dani').alvo === true);
+  await prog('u_dani', { duels: [{ month: monthAgo(2), res: 'mao', m: 3, t: 1 }] });
+  check('inimigo público: o app gravar as contagens do duelo mantém as marcas do servidor (Alvo da Galera, Inimigo Público e a Rivalidade Declarada com a ana)', PUB('dani').publico === true && PUB('dani').alvo === true && PUB('dani').declarada === true && PUB('dani').awards.duelo_mao === 2, PUB('dani'));
+  store.set(REG + 'daniel', { name: 'Daniel', added: '2026-01-01', active: true });
+  store.delete(REG + 'dani');
+  store.set('users/u_dani', { ...store.get('users/u_dani'), playerKey: 'daniel', leagues: { L: { role: 'player', playerKey: 'daniel' } } });
+  await syncR('u_adm', { liga: 'L', rename: { from: 'dani', to: 'daniel' } });
+  check('inimigo público: renomear o jogador leva as marcas e as contagens para a chave nova (a antiga some)', !PUB('dani') && PUB('daniel').publico === true && PUB('daniel').alvo === true && PUB('daniel').awards.duelo_mao === 2, [PUB('dani'), PUB('daniel')]);
+  resetRival();
+  await setR('u_ana', 'dani'); await setR('u_bia', 'dani'); await setR('u_caio', 'dani');
+  store.set('leagues/L/rival_public/dani', { awards: { duelo_mao: 1 }, alvo: true, declarada: false });
+  await syncR('u_adm', { liga: 'L' });
+  check('inimigo público: cadastro antigo (sem o campo publico), com as marcas certas, não é reescrito à toa', JSON.stringify(PUB('dani')) === '{"awards":{"duelo_mao":1},"alvo":true,"declarada":false}', PUB('dani'));
 
   // quem saiu do elenco não conta
   resetRival();

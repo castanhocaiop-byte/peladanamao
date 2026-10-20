@@ -1034,12 +1034,12 @@ exports.notifyStarRatings = onCall(CALLABLE, async request => {
 //
 // O jogador escolhe um rival na liga. A escolha fica em leagues/{liga}/rivals/{uid}: só a própria conta lê e só o servidor grava (ver
 // firestore.rules). O que a liga toda vê fica em leagues/{liga}/rival_public/{chave do jogador}: as badges do rival que o jogador já
-// ganhou e as marcas "Alvo da Galera" e "Rivalidade Declarada", que SÓ esta parte calcula, sem mostrar quem escolheu quem. As contas
+// ganhou e as marcas "Alvo da Galera", "Inimigo Público" e "Rivalidade Declarada", que SÓ esta parte calcula, sem mostrar quem escolheu quem. As contas
 // estão em rival.js; aqui fica a parte que mexe no banco.
 
 // Lê o elenco, as escolhas de rival e o cadastro público da liga numa transação, deixa `mutate` trocar documentos (devolve
 // { rivals: { [uid]: documento | null }, pub: { [chave]: documento | null }, result }) e, antes de gravar, refaz as marcas: "mutual" em cada
-// escolha e alvo/declarada no cadastro público. Duas escolhas ao mesmo tempo não se perdem (a transação repete).
+// escolha e alvo/publico/declarada no cadastro público. Duas escolhas ao mesmo tempo não se perdem (a transação repete).
 async function rivalTransaction(liga, mutate) {
   const base = `leagues/${liga}`;
   return db.runTransaction(async tx => {
@@ -1068,7 +1068,7 @@ async function rivalTransaction(liga, mutate) {
       if ((d.mutual === true) !== mutual) { rivals.set(uid, { ...d, mutual }); touchedRivals.add(uid); }
     }
     for (const key of new Set([...pub.keys(), ...flags.alvo, ...flags.declarada])) {
-      const doc = rivalLib.publicDoc(pub.get(key), { alvo: flags.alvo.has(key), declarada: flags.declarada.has(key) });
+      const doc = rivalLib.publicDoc(pub.get(key), { alvo: flags.alvo.has(key), publico: flags.publico.has(key), declarada: flags.declarada.has(key) });
       if (doc) { pub.set(key, doc); touchedPub.add(key); }
     }
     for (const uid of touchedRivals) {
@@ -1106,7 +1106,7 @@ function moveRivalKey(rivals, pub, from, to) {
   const out = { rivals: rivalLib.renameKeys(rivals, from, to) };
   if (pub.has(from)) {
     const moved = pub.get(from), target = pub.get(to);
-    out.pub = { [from]: null, [to]: { awards: rivalLib.mergeAwards(target?.awards, moved.awards), alvo: false, declarada: false } };
+    out.pub = { [from]: null, [to]: { awards: rivalLib.mergeAwards(target?.awards, moved.awards), alvo: false, publico: false, declarada: false } };
   }
   return out;
 }
@@ -1187,13 +1187,13 @@ exports.saveRivalProgress = onCall(CALLABLE, async request => {
     const changedDoc = accepted.length > 0 || lead.lead !== (cur.lead || "");
     const changedPub = JSON.stringify(awards) !== JSON.stringify(before?.awards || {});
     if (changedDoc) tx.set(ref, { ...cur, duels: applied.history, lead: lead.lead });
-    if (changedPub) tx.set(pubRef, { alvo: before?.alvo === true, declarada: before?.declarada === true, awards });
+    if (changedPub) tx.set(pubRef, { alvo: before?.alvo === true, publico: before?.publico === true, declarada: before?.declarada === true, awards });
     return { ok: true, accepted, skipped: parsed.skipped, gains, awards };
   });
 });
 
 // Depois que o admin renomeia ou remove um jogador do elenco, o app chama esta função: se veio { rename: { from, to } }, as escolhas de
-// rival e as badges do rival do jogador passam para a chave nova; sem rename só refaz as marcas (Alvo da Galera e Rivalidade Declarada).
+// rival e as badges do rival do jogador passam para a chave nova; sem rename só refaz as marcas (Alvo da Galera, Inimigo Público e Rivalidade Declarada).
 // Só admin da liga.
 exports.syncRivals = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);

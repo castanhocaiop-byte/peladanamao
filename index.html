@@ -1185,8 +1185,9 @@ const BADGE_CATALOG = [
   { id:'fregues',    emoji:'🎣', label:'Freguês',    desc:'Perdeu 5+ jogos para o mesmo jogador, em times opostos, e pelo menos 3 a mais do que ganhou', visible: () => h2hOn(), check: s => s.h2hFregues },
   { id:'tira_teima', emoji:'⚖️', label:'Tira-teima', desc:'Histórico empatado (as mesmas vitórias e derrotas) contra um jogador depois de 6+ jogos em times opostos', visible: () => h2hOn(), check: s => s.h2hTiraTeima },
   { id:'classico',   emoji:'🔥', label:'Clássico',   desc:'20+ jogos contra o mesmo jogador, em times opostos', visible: () => h2hOn(), check: s => s.h2hClassico },
-  // rival — as duas marcas que só o servidor calcula (ninguém vê quem escolheu quem)
+  // rival — as três marcas que só o servidor calcula (ninguém vê quem escolheu quem)
   { id:'alvo_galera',     emoji:'🎯', label:'Alvo da Galera',        desc:'Escolhido como rival por 3 ou mais jogadores (ninguém sabe quem)', visible: () => rivalBadgesShown(), check: s => s.rivalAlvo },
+  { id:'inimigo_publico', emoji:'🚨', label:'Inimigo Público',       desc:'Escolhido como rival por 7 ou mais jogadores (ninguém sabe quem)', visible: () => rivalBadgesShown(), check: s => s.rivalPublico },
   { id:'rival_declarada', emoji:'🤝', label:'Rivalidade Declarada',  desc:'Você e o seu rival se escolheram como rivais', visible: () => rivalBadgesShown(), check: s => s.rivalDeclarada },
   // rival — duelo do mês, sequências, virada e tempo com o mesmo rival (o app manda ao servidor; as contagens ficam no cadastro público do jogador)
   { id:'duelo_aluno',     emoji:'📚', label:'Aluno do Rival',        desc:'O seu rival foi melhor que você na maioria dos números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_aluno') },
@@ -3223,7 +3224,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
-        ${li('<strong>Rival:</strong> se você escolher um rival, a escolha (quem é o seu rival e desde quando) fica guardada na sua conta, no servidor, e só você a vê: nem o admin nem o seu rival (ele não é avisado). Se vocês dois se escolherem, o app avisa os dois; se 3 ou mais jogadores escolherem a mesma pessoa, ela ganha a conquista "Alvo da Galera", sem dizer quem escolheu. A conta também guarda o resultado de cada duelo do mês contra o rival (quantos números cada um levou) e quem estava na frente no número de conquistas; a liga vê só as conquistas que isso gera (por exemplo "Passei o Trator"), nunca quem era o rival. A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro, presença, destaques da votação, nota do grupo e as vitórias, empates e derrotas dos times em que jogou) e, no frente a frente, os jogos em que os dois estavam em times opostos. Se você compartilhar a imagem da comparação ou do duelo, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado). Ao sair da liga ou excluir a conta, a sua escolha e o seu histórico de duelos são apagados; as conquistas do rival que você já ganhou continuam no cadastro do jogador.')}
+        ${li('<strong>Rival:</strong> se você escolher um rival, a escolha (quem é o seu rival e desde quando) fica guardada na sua conta, no servidor, e só você a vê: nem o admin nem o seu rival (ele não é avisado). Se vocês dois se escolherem, o app avisa os dois; se 3 ou mais jogadores escolherem a mesma pessoa, ela ganha a conquista "Alvo da Galera" (e com 7 ou mais, a "Inimigo Público"), sem dizer quem escolheu. A conta também guarda o resultado de cada duelo do mês contra o rival (quantos números cada um levou) e quem estava na frente no número de conquistas; a liga vê só as conquistas que isso gera (por exemplo "Passei o Trator"), nunca quem era o rival. A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro, presença, destaques da votação, nota do grupo e as vitórias, empates e derrotas dos times em que jogou) e, no frente a frente, os jogos em que os dois estavam em times opostos. Se você compartilhar a imagem da comparação ou do duelo, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado). Ao sair da liga ou excluir a conta, a sua escolha e o seu histórico de duelos são apagados; as conquistas do rival que você já ganhou continuam no cadastro do jogador.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -12043,7 +12044,7 @@ function mBadgeInfo() {
 /* ── Rival ───────────────────────────────────────────────────────────────────────────────
    Comparar as minhas conquistas e os meus números com os de outro jogador da liga, o duelo do mês e o frente a frente. A escolha do rival fica no SERVIDOR (item 36):
    leagues/{liga}/rivals/{uid}, que só a própria conta lê (nem o admin, nem o rival) e só a função setRival grava. O rival NÃO é avisado; só se os dois se escolherem
-   (Rivalidade Declarada) os dois ficam sabendo, e com 3 ou mais escolhas o jogador ganha o Alvo da Galera (ninguém vê quem escolheu). A comparação usa o que a liga já
+   (Rivalidade Declarada) os dois ficam sabendo, e com 3 ou mais escolhas o jogador ganha o Alvo da Galera e com 7 ou mais o Inimigo Público (ninguém vê quem escolheu). A comparação usa o que a liga já
    mostra a todos (as conquistas e os números de cada um, com as mesmas regras para os dois lados) e só aparece no PRÓPRIO perfil (nunca na simulação do admin). */
 const RIVAL_STORE = 'aceoma_rival'; // onde a escolha ficava antes (só no aparelho): hoje só serve para levar a escolha antiga para o servidor, uma vez
 const rivalStoreKey = () => (st.authUser?.uid && st.leagueId ? `${st.authUser.uid}_${st.leagueId}` : '');
@@ -12094,13 +12095,13 @@ function rivalPlayer() {
   const key = rivalGet();
   return key ? rivalCandidates().find(p => playerKey(p.name) === key) || null : null;
 }
-// As badges que só falam do rival (as 6 do duelo e da sequência, as 2 da virada, as 3 do tempo, Alvo da Galera e Rivalidade Declarada): não entram na comparação de conquistas, que seria
+// As badges que só falam do rival (as 6 do duelo e da sequência, as 2 da virada, as 3 do tempo, Alvo da Galera, Inimigo Público e Rivalidade Declarada): não entram na comparação de conquistas, que seria
 // circular (ganhar uma delas mudaria o próprio placar). As do frente a frente são normais.
-const RIVAL_ONLY_IDS = ['alvo_galera', 'rival_declarada', 'duelo_aluno', 'duelo_fora_liga', 'duelo_mao', 'duelo_trator', 'duelo_dono', 'duelo_sombra', 'rival_passou', 'rival_ultrapassada', 'rival_3m', 'rival_6m', 'rival_12m'];
+const RIVAL_ONLY_IDS = ['alvo_galera', 'inimigo_publico', 'rival_declarada', 'duelo_aluno', 'duelo_fora_liga', 'duelo_mao', 'duelo_trator', 'duelo_dono', 'duelo_sombra', 'rival_passou', 'rival_ultrapassada', 'rival_3m', 'rival_6m', 'rival_12m'];
 // O que a liga sabe do rival de um jogador (cadastro público, só contagens e marcas), no formato das contas das conquistas.
 function rivalPublicStats(name) {
   const p = st.rivalPublic?.[playerKey(name)] || {};
-  return { rivalAwards: p.awards || {}, rivalAlvo: p.alvo === true, rivalDeclarada: p.declarada === true };
+  return { rivalAwards: p.awards || {}, rivalAlvo: p.alvo === true, rivalPublico: p.publico === true, rivalDeclarada: p.declarada === true };
 }
 const rivalAward = (s, id) => (Number(s.rivalAwards?.[id]) || 0) >= 1;
 // As badges do rival (as que faltam, trancadas) só aparecem para quem usa o rival ou já ganhou alguma; as do frente a frente valem para todos.
@@ -12434,11 +12435,14 @@ const rivalRowHtml = (r, last) => `<div style="display:grid;grid-template-column
     <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${esc(r.label)}</div>
     <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'theirs' ? '#4db8ff' : 'var(--text)'}">${esc(r.theirs)}</div></div>`;
 const rivalInfoBox = (color, html) => `<div style="padding:9px 12px;margin-bottom:10px;border-radius:10px;border:1px solid ${color}55;background:${color}14;font-size:12px;line-height:1.5;color:var(--text2)">${html}</div>`;
-// Os avisos do alto da janela: "Rivalidade declarada" (os dois se escolheram: só aí o rival fica sabendo) e "Alvo da Galera" (3 ou mais jogadores escolheram você; nunca dizemos quem).
+// Os avisos do alto da janela: "Rivalidade declarada" (os dois se escolheram: só aí o rival fica sabendo) e "Inimigo Público" (7 ou mais jogadores escolheram você) ou, com menos escolhas, "Alvo da Galera"
+// (3 ou mais); só o maior dos dois aparece e nunca dizemos quem escolheu.
 function rivalNotices(rivalName) {
   let out = '';
   if (st.rivalDoc?.mutual === true && rivalGet()) out += rivalInfoBox('#00d67f', `🤝 <b style="color:var(--text)">Rivalidade declarada!</b> ${esc(rivalName)} também escolheu você como rival.`);
-  if (st.rivalPublic?.[st.userDoc?.playerKey]?.alvo === true) out += rivalInfoBox('#f0b429', `🎯 <b style="color:var(--text)">Alvo da Galera:</b> 3 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
+  const mine = st.rivalPublic?.[st.userDoc?.playerKey];
+  if (mine?.publico === true) out += rivalInfoBox('#ff5c5c', `🚨 <b style="color:var(--text)">Inimigo Público:</b> 7 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
+  else if (mine?.alvo === true) out += rivalInfoBox('#f0b429', `🎯 <b style="color:var(--text)">Alvo da Galera:</b> 3 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
   return out;
 }
 // O texto do alerta ao trocar ou tirar o rival com progresso a perder (as conquistas que já foram ganhas continuam da pessoa).

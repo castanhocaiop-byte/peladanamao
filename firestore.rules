@@ -157,7 +157,7 @@ service cloud.firestore {
     }
 
     // O que a liga toda vê do rival, por jogador (docId = chave do jogador): as badges do rival que ele já ganhou (awards) e as marcas
-    // "Alvo da Galera" e "Rivalidade Declarada" (alvo, declarada). Ninguém vê quem escolheu quem. Só o servidor grava.
+    // "Alvo da Galera", "Inimigo Público" e "Rivalidade Declarada" (alvo, publico, declarada). Ninguém vê quem escolheu quem. Só o servidor grava.
     match /leagues/{leagueId}/rival_public/{key} {
       allow read: if isLeagueActiveUser(leagueId);
       allow write: if false;

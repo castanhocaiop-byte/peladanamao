@@ -1140,6 +1140,28 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     const par3 = await Promise.all([setR(U.pl1.token, 'caio'), setR(U.pl2.token, 'caio'), setR(U.admA.token, 'caio')]);
     check('rival: três escolhas ao mesmo tempo no mesmo jogador → Alvo da Galera (nenhuma se perde)', par3.every(x => x.status === 200) && (await pub('caio')).alvo === true, [par3.map(x => x.status), await pub('caio')]);
 
+    // Inimigo Público: 7 jogadores diferentes escolhem o mesmo (4 contas novas, jogadores do elenco, tiradas no fim para não mexer nos testes de baixo)
+    const extras = [];
+    for (const n of [4, 5, 6, 7]) {
+      const ux = await newUser(`rival${n}@teste.invalid`);
+      await db.set('owner', `leagues/la/player_registry/rv${n}`, { name: `Rv ${n}`, active: true });
+      await db.set('owner', 'users/' + ux.uid, { email: ux.email, displayName: 'rv' + n, role: 'pending', createdAt: NOW, leagues: { la: { role: 'player', playerKey: 'rv' + n, joinedAt: NOW } } });
+      extras.push(ux);
+    }
+    for (const ux of extras.slice(0, 3)) await setR(ux.token, 'caio');
+    check('rival/inimigo público: com 6 escolhas o caio é Alvo da Galera, mas ainda não Inimigo Público', (await pub('caio')).alvo === true && (await pub('caio')).publico === false, await pub('caio'));
+    r = await setR(extras[3].token, 'caio');
+    const inim = await pub('caio');
+    check('rival/inimigo público: a 7ª escolha torna o caio Inimigo Público (e continua Alvo da Galera), sem dizer quem escolheu', r.status === 200 && inim.publico === true && inim.alvo === true && !JSON.stringify(inim).match(/pl_um|ana|adm_jog|rv\d/), inim);
+    check('rival/regras: o cadastro público com a marca nova é lido por quem é da liga e continua sem gravação direta (jogador e admin) → recusada', okW(await db.get(U.pl2.token, 'leagues/la/rival_public/caio')) && no(await db.set(U.pl1.token, 'leagues/la/rival_public/caio', { awards: {}, alvo: true, publico: true, declarada: false })) && no(await db.update(U.admA.token, 'leagues/la/rival_public/caio', { publico: false })) && (await pub('caio')).publico === true);
+    for (const ux of extras) await setR(ux.token, '');
+    check('rival/inimigo público: quando as 4 contas novas desistem, a marca de Inimigo Público sai e o Alvo da Galera fica (3 escolhas)', (await pub('caio')).publico === false && (await pub('caio')).alvo === true, await pub('caio'));
+    for (const [i, ux] of extras.entries()) {
+      await db.del('owner', 'leagues/la/rivals/' + ux.uid);
+      await db.del('owner', 'users/' + ux.uid);
+      await db.del('owner', `leagues/la/player_registry/rv${i + 4}`);
+    }
+
     // volta ao par recíproco pl_um × ana (o teste acima deixou os dois escolhendo o caio)
     await setR(U.pl1.token, 'ana'); await setR(U.pl2.token, 'pl_um');
 
