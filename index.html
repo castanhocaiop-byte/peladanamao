@@ -12290,9 +12290,9 @@ function rivalH2H() {
 /* ── Duelo do mês (item 36) ──────────────────────────────────────────────────────────────────────────────────────────────────
    Todo mês, eu e o meu rival somos comparados nos números do mês (os campeonatos concluídos com data naquele mês). Vale se o rival já estava escolhido ANTES do primeiro campeonato do mês
    e se os dois jogaram pelo menos RIVAL_MIN_GAMES jogos. Só contam os números que tiveram um vencedor: "maioria" = levei mais números que ele (com 3 ou mais decididos), "todos" = ele não levou
-   nenhum (com 4 ou mais), empate não dá nada. O mês fecha no dia RIVAL_CLOSE_DAY do mês seguinte (dá tempo de fechar a votação de destaques do último campeonato) e sem campeonato em andamento;
+   nenhum (com 4 ou mais), empate não dá nada. O mês fecha no ÚLTIMO DIA do mês (só espera um campeonato do mês ainda em andamento ou com a votação de destaques aberta);
    aí o app manda o resultado ao servidor (saveRivalProgress), que guarda o histórico e soma as badges. Quem troca de rival depois do 1º campeonato do mês perde o duelo daquele mês. */
-const RIVAL_MIN_GAMES = 3, RIVAL_CLOSE_DAY = 5;
+const RIVAL_MIN_GAMES = 3;
 const pad2 = n => String(n).padStart(2, '0');
 const localDate = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; // AAAA-MM-DD no horário do aparelho
 const monthShift = (m, n) => { const t = (+m.slice(0, 4)) * 12 + (+m.slice(5, 7) - 1) + n; return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`; };
@@ -12349,10 +12349,12 @@ function rivalDuelFor(month, pair = rivalPair()) {
   const rr = rivalRows(a, b), m = rr.rows.filter(r => r.scored && r.lead === 'mine').length, t = rr.rows.filter(r => r.scored && r.lead === 'theirs').length;
   return { month, locked, enough, valid: locked && enough, rows: rr.rows, m, t, res: locked && enough ? rivalDuelClassify(m, t) : 'none', games: { mine: a.matches, theirs: b.matches } };
 }
-// O mês já fechou? Passou o dia RIVAL_CLOSE_DAY do mês seguinte e nenhum campeonato daquele mês continua em andamento.
+// O mês já fechou? Passou o ÚLTIMO DIA do mês, no aparelho e também no horário de Brasília (o do servidor, que só aceita mês já passado: assim nunca mandamos um mês que ele ainda recusaria),
+// e nenhum campeonato daquele mês continua em andamento nem com a votação de destaques aberta (ela dura VOTE_DAYS dias: sem esperar, a Bola Cheia e a Bola Murcha do último campeonato ficariam de fora).
+const brtMonth = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 7);
 function rivalMonthClosed(m) {
-  if (localDate() < `${monthShift(m, 1)}-${pad2(RIVAL_CLOSE_DAY)}`) return false;
-  return !(st.champs || []).some(c => !c.freeMode && c.status === 'active' && String(c.date || '').slice(0, 7) === m);
+  if (localDate().slice(0, 7) <= m || brtMonth() <= m) return false;
+  return !(st.champs || []).some(c => !c.freeMode && String(c.date || '').slice(0, 7) === m && (c.status === 'active' || (c.status === 'completed' && c.voting && !isVotingClosed(c))));
 }
 // Os meses fechados que ainda não têm resultado guardado, do mês em que o rival atual foi escolhido em diante (os 6 mais novos), do mais antigo ao mais novo.
 function rivalMonthsDue() {
@@ -12497,7 +12499,7 @@ function rivalDuelView() {
     : `Nenhum duelo fechado ainda com ${rival}. 3 duelos ganhos seguidos dão 👑 Dono do Rival; 3 perdidos, 👤 Sombra do Rival.`;
   const hist = Object.entries(st.rivalDoc?.duels || {}).filter(([, e]) => e && e.res !== 'none').sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
   const nameOf = key => (st.players || []).find(p => playerKey(p.name) === key)?.name || 'rival';
-  const histHtml = hist.length ? hist.map(([k, e]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text2);overflow-wrap:anywhere">${esc(monthLabel(k))} · contra ${esc(nameOf(e.r))}</span><b style="color:var(--text);white-space:nowrap">${esc(rivalResLabel(e.res))} (${e.m} × ${e.t})</b></div>`).join('') : '<div style="font-size:12px;color:var(--text3)">Nenhum mês fechado ainda: o primeiro duelo fecha no dia ' + RIVAL_CLOSE_DAY + ' do mês seguinte.</div>';
+  const histHtml = hist.length ? hist.map(([k, e]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text2);overflow-wrap:anywhere">${esc(monthLabel(k))} · contra ${esc(nameOf(e.r))}</span><b style="color:var(--text);white-space:nowrap">${esc(rivalResLabel(e.res))} (${e.m} × ${e.t})</b></div>`).join('') : '<div style="font-size:12px;color:var(--text3)">Nenhum mês fechado ainda: o primeiro duelo fecha no último dia do mês.</div>';
   return `<div style="font-size:14px;font-weight:800;margin-bottom:6px">🗓️ Duelo de ${monthLabel(month)}</div>
     ${status ? rivalInfoBox('#f0b429', status) : ''}
     ${live ? `<div style="font-size:12px;color:var(--text2);line-height:1.5">${live}</div>` : ''}
@@ -12505,7 +12507,7 @@ function rivalDuelView() {
     ${rivalSection('Seu progresso com ' + rival, `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.6;color:var(--text2)">🔁 ${streak}<br>⏳ ${tenure >= 1 ? `Rival há ${meses(tenure)}` : 'Rival há menos de 1 mês'}: 3 meses dão 🐕 Rival de Estimação, 6 dão ⚔️ Arquirrival e 12 dão 🏛️ Rivalidade Histórica.</div>`)}
     ${rivalSection('Meses que já fecharam', `<div>${histHtml}</div>`)}
     ${d.rows.length ? `<button onclick="openMjRivalDuel()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar duelo</button>` : ''}
-    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Vale se o rival já estava escolhido antes do primeiro campeonato do mês e se os dois jogaram ${RIVAL_MIN_GAMES} jogos ou mais. Só contam os números que tiveram um vencedor: levar mais que ele é Rival na Mão; levar todos (4 ou mais) é Passei o Trator. O mês fecha no dia ${RIVAL_CLOSE_DAY} do mês seguinte, quando você abrir o app. Trocar de rival depois do primeiro campeonato do mês perde o duelo daquele mês.</div>`;
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Vale se o rival já estava escolhido antes do primeiro campeonato do mês e se os dois jogaram ${RIVAL_MIN_GAMES} jogos ou mais. Só contam os números que tiveram um vencedor: levar mais que ele é Rival na Mão; levar todos (4 ou mais) é Passei o Trator. O mês fecha no último dia do mês, e o resultado entra quando você abrir o app depois disso. Trocar de rival depois do primeiro campeonato do mês perde o duelo daquele mês.</div>`;
 }
 // O cartão do duelo do mês para compartilhar (Story e Feed, a mesma janela dos outros): a tabela do mês, com o título do mês. Fecha a janela do rival antes.
 function openMjRivalDuel() {

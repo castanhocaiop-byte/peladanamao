@@ -22,11 +22,12 @@ const eligCode = slice('function badgeEligibleCount(b) {', 'function goallessStr
 const keyCode = slice('const playerKey = name =>', '\n\n');
 const escCode = slice('const esc = s =>', 'function toast(');
 const tierCode = slice('const MJ_TIERS = {', 'let _mjBlobs');
+const voteCode = slice('const VOTE_DAYS = 3;', 'function votingUsed(cat) {'); // a votação de destaques de verdade (prazo de 3 dias)
 
 // ── um relógio falso: tudo que o código pergunta de "agora" (new Date(), Date.now()) vem daqui ──
 const RealDate = Date;
 const clock = { now: RealDate.parse('2026-11-10T15:00:00.000Z') };
-const OFFSET = -3 * 3600000; // o aparelho está no horário de Brasília (UTC−3): de madrugada o dia dele ainda é o anterior ao de UTC
+let OFFSET = -3 * 3600000; // o aparelho está no horário de Brasília (UTC−3): de madrugada o dia dele ainda é o anterior ao de UTC (cada teste pode pôr outro fuso em makeEnv)
 const shifted = d => new RealDate(d.getTime() + OFFSET);
 class FakeDate extends RealDate {
   constructor(...a) { if (a.length) super(...a); else super(clock.now); }
@@ -63,7 +64,8 @@ const SINCE = '2026-09-15T12:00:00.000Z'; // o rival foi escolhido em 15/09 (mei
 const ISO = d => `${d}T12:00:00.000Z`;
 
 function makeEnv({ champs = [], players = PLAYERS, me = 'ana', rival = 'bruno', since = SINCE, duels = {}, lead = '', pub = {}, db = {}, fn = null, now, sim = null, noRivalDoc = false,
-  ready = true, voting = false, peer = false, groupStars = {}, stats = {}, badges = null, awardsOf = null } = {}) {
+  ready = true, voting = false, peer = false, groupStars = {}, stats = {}, badges = null, awardsOf = null, utcOffset = -3 } = {}) {
+  OFFSET = utcOffset * 3600000;
   if (now) clock.now = RealDate.parse(now); else clock.now = RealDate.parse('2026-11-10T15:00:00.000Z');
   const calls = { fn: [], toasts: [], renders: 0, confirms: [], shared: [] };
   const BASE = ['b1', 'b2', 'b3', 'b4'].map(id => ({ id, emoji: '⭐', label: id, desc: id }));
@@ -82,8 +84,8 @@ function makeEnv({ champs = [], players = PLAYERS, me = 'ana', rival = 'bruno', 
     pixCopyText: async () => true, document: { querySelectorAll: () => [] },
   };
   const names = Object.keys(env);
-  const body = escCode + '\n' + keyCode + '\n' + eligCode + '\n' + tierCode + '\n' + rivalCode + `
-return { rivalGet, rivalSince, rivalSet, rivalPair, rivalCandidates, rivalCompare, rivalNumbers, rivalRows, rivalStatsOf, rivalStarOf, RIVAL_NUMBER_ROWS, RIVAL_MIN_GAMES, RIVAL_CLOSE_DAY,
+  const body = escCode + '\n' + keyCode + '\n' + eligCode + '\n' + tierCode + '\n' + voteCode + '\n' + rivalCode + `
+return { rivalGet, rivalSince, rivalSet, rivalPair, rivalCandidates, rivalCompare, rivalNumbers, rivalRows, rivalStatsOf, rivalStarOf, RIVAL_NUMBER_ROWS, RIVAL_MIN_GAMES, brtMonth,
   pad2, localDate, monthShift, monthLabel, rivalMonthStats, rivalFirstChampDate, rivalLockedIn, rivalDuelClassify, rivalDuelFor, rivalMonthClosed, rivalMonthsDue, rivalTenureMonths, rivalStreak,
   rivalChangeLoss, rivalAwardsOf, rivalProgressSync, matchRecord, openMjRivalDuel, rivalSync };`;
   const api = new Function(...names, body)(...names.map(n => env[n]));
@@ -108,7 +110,7 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   check('localDate é o dia do aparelho: 01:00 em UTC de 10/11 ainda é dia 9 no aparelho (UTC−3)', (() => { const z = makeEnv({ now: '2026-11-10T01:00:00.000Z' }); return z.api.localDate() === '2026-11-09'; })());
   check('pad2, monthShift e localDate: meses que viram o ano, para frente e para trás', A.pad2(3) === '03' && A.pad2(12) === '12' && A.monthShift('2026-11', 1) === '2026-12' && A.monthShift('2026-12', 1) === '2027-01' && A.monthShift('2026-01', -1) === '2025-12' && A.monthShift('2026-03', -14) === '2025-01' && A.monthShift('2026-06', 0) === '2026-06' && makeEnv().api.localDate() === '2026-11-10');
   check('monthLabel: o nome do mês e, fora do ano de hoje, o ano', A.monthLabel('2026-10') === 'outubro' && A.monthLabel('2026-03') === 'março' && A.monthLabel('2025-12') === 'dezembro de 2025' && A.monthLabel('2027-01') === 'janeiro de 2027');
-  check('RIVAL_MIN_GAMES é 3 e o mês fecha no dia 5', A.RIVAL_MIN_GAMES === 3 && A.RIVAL_CLOSE_DAY === 5);
+  check('RIVAL_MIN_GAMES é 3 e não existe mais "dia de fechamento" (o mês fecha no último dia do mês)', A.RIVAL_MIN_GAMES === 3 && !/RIVAL_CLOSE_DAY/.test(html));
 
   // ══ 3. O PRIMEIRO CAMPEONATO DO MÊS E A TRAVA ═════════════════════════════════════════════════════
   const first = champs => makeEnv({ champs }).api.rivalFirstChampDate('2026-10');
@@ -179,16 +181,28 @@ const tick = () => new Promise(r => setTimeout(r, 15));
 
   // ══ 6. O MÊS FECHA E OS MESES QUE FALTAM ═══════════════════════════════════════════════════════════
   const closed = (m, o = {}) => makeEnv(o).api.rivalMonthClosed(m);
-  check('o mês fecha no dia 5 do mês seguinte: dia 4 ainda não, dia 5 sim', closed('2026-10', { now: '2026-11-04T15:00:00.000Z' }) === false && closed('2026-10', { now: '2026-11-05T15:00:00.000Z' }) === true && closed('2026-10', { now: '2026-12-20T15:00:00.000Z' }) === true);
+  check('o mês fecha no ÚLTIMO DIA do mês: 31/10 (ainda é outubro) não fechou; 1º/11 já fechou, e segue fechado depois', closed('2026-10', { now: '2026-10-31T15:00:00.000Z' }) === false && closed('2026-10', { now: '2026-11-01T15:00:00.000Z' }) === true && closed('2026-10', { now: '2026-12-20T15:00:00.000Z' }) === true);
   check('o mês de hoje e os futuros não fecham', closed('2026-11', { now: '2026-11-30T15:00:00.000Z' }) === false && closed('2026-12', { now: '2026-11-10T15:00:00.000Z' }) === false);
   check('campeonato ainda em andamento no mês segura o fechamento (um agendado não segura)', closed('2026-10', { champs: [camp('x', '2026-10-28', { status: 'active' })] }) === false && closed('2026-10', { champs: [camp('x', '2026-10-28', { status: 'preset' })] }) === true && closed('2026-10', { champs: [camp('x', '2026-10-28', { status: 'active', free: true })] }) === true);
-  check('o dia 5 começa à meia-noite do APARELHO: 02:59 em UTC de 5/11 ainda é dia 4 (não fechou); 03:00 já é dia 5 (fechou)', closed('2026-10', { now: '2026-11-05T02:59:00.000Z' }) === false && closed('2026-10', { now: '2026-11-05T03:00:00.000Z' }) === true);
-  check('virada do ano: dezembro fecha em 5 de janeiro', closed('2026-12', { now: '2027-01-04T15:00:00.000Z' }) === false && closed('2026-12', { now: '2027-01-05T15:00:00.000Z' }) === true);
+  check('o fechamento acontece à meia-noite do APARELHO (UTC−3): 02:59 em UTC de 1/11 ainda é 31/10 (não fechou); 03:00 já é 1/11 (fechou)', closed('2026-10', { now: '2026-11-01T02:59:00.000Z' }) === false && closed('2026-10', { now: '2026-11-01T03:00:00.000Z' }) === true);
+  check('virada do ano: dezembro fecha em 1º de janeiro', closed('2026-12', { now: '2026-12-31T20:00:00.000Z' }) === false && closed('2026-12', { now: '2027-01-01T15:00:00.000Z' }) === true);
+  check('aparelho FORA do horário de Brasília (UTC+1): meia-noite de 1/11 lá é 21h de 31/10 em Brasília, e o servidor ainda não aceita outubro: não fecha; só fecha quando passa também em Brasília', closed('2026-10', { now: '2026-10-31T23:30:00.000Z', utcOffset: 1 }) === false && closed('2026-10', { now: '2026-11-01T03:30:00.000Z', utcOffset: 1 }) === true && makeEnv({ now: '2026-10-31T23:30:00.000Z', utcOffset: 1 }).api.brtMonth() === '2026-10' && makeEnv({ now: '2026-11-01T03:00:00.000Z' }).api.brtMonth() === '2026-11');
+  check('aparelho ATRÁS de Brasília (UTC−5): só fecha quando a meia-noite chega no aparelho (já passou em Brasília)', closed('2026-10', { now: '2026-11-01T04:30:00.000Z', utcOffset: -5 }) === false && closed('2026-10', { now: '2026-11-01T05:00:00.000Z', utcOffset: -5 }) === true);
+  // votação de destaques aberta (dura 3 dias): o mês espera ela fechar para a Bola Cheia e a Bola Murcha do último campeonato não ficarem de fora
+  const comVoto = (date, voting, o = {}) => ({ ...camp('v1', date, o), voting });
+  const votoAberto = { pos: true, neg: true, openedAt: '2026-10-30T12:00:00.000Z' }; // abriu em 30/10: o prazo (3 dias) vai até 2/11 às 12h
+  check('campeonato do mês com a votação de destaques ABERTA segura o fechamento do mês (1º/11 às 12h ainda não); depois do prazo (3/11) fecha', closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto)] }) === false && closed('2026-10', { now: '2026-11-03T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto)] }) === true);
+  check('votação fechada antes do prazo (closedAt) não segura; campeonato sem votação não segura; votação aberta de OUTRO mês ou do plano gratuito não segura', closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-10-28', { ...votoAberto, closedAt: '2026-10-31T10:00:00.000Z' })] }) === true && closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [camp('x', '2026-10-28')] }) === true && closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-09-30', votoAberto)] }) === true && closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto, { free: true })] }) === true);
+  check('só o campeonato CONCLUÍDO com votação aberta segura (o agendado com votação não)', closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto, { status: 'preset' })] }) === true);
+  check('com vários campeonatos no banco, o que segura pode estar em qualquer posição da lista (não só o primeiro): em andamento no fim da lista, ou votação aberta no meio', closed('2026-10', { champs: [camp('a', '2026-10-07'), camp('b', '2026-10-14'), camp('x', '2026-10-28', { status: 'active' })] }) === false && closed('2026-10', { now: '2026-11-01T15:00:00.000Z', champs: [camp('a', '2026-10-07'), comVoto('2026-10-28', votoAberto), camp('c', '2026-09-30')] }) === false && closed('2026-10', { champs: [camp('a', '2026-10-07'), camp('b', '2026-10-14'), camp('c', '2026-09-30', { status: 'active' })] }) === true);
+  check('o limite exato do fuso de Brasília: 02:59 em UTC de 1/11 ainda é 31/10 lá (aparelho em UTC+1, já em novembro: não fecha); 03:00 em UTC é 0h de 1/11 em Brasília (fecha)', closed('2026-10', { now: '2026-11-01T02:59:00.000Z', utcOffset: 1 }) === false && closed('2026-10', { now: '2026-11-01T03:00:00.000Z', utcOffset: 1 }) === true && makeEnv({ now: '2026-11-01T02:59:59.000Z' }).api.brtMonth() === '2026-10' && makeEnv({ now: '2026-11-01T03:00:00.000Z' }).api.brtMonth() === '2026-11');
   check('campeonato em andamento de OUTRO mês não segura o fechamento de outubro (só o do próprio mês segura)', closed('2026-10', { champs: [camp('x', '2026-11-08', { status: 'active' })] }) === true && closed('2026-10', { champs: [camp('x', '2026-10-28', { status: 'active' })] }) === false);
   const due = o => makeEnv(o).api.rivalMonthsDue();
   check('os meses a conferir: do mês em que o rival foi escolhido até o mês passado, só os fechados e ainda sem resultado guardado, do mais antigo ao mais novo', JSON.stringify(due({ since: ISO('2026-07-20'), now: '2026-11-10T15:00:00.000Z', duels: { '2026-08': { r: 'bruno', res: 'none', m: 0, t: 0 } } })) === '["2026-07","2026-09","2026-10"]');
   check('só os 6 meses mais novos (quem volta depois de muito tempo não manda a vida inteira)', JSON.stringify(due({ since: ISO('2025-01-10'), now: '2026-11-10T15:00:00.000Z' })) === '["2026-05","2026-06","2026-07","2026-08","2026-09","2026-10"]');
-  check('rival escolhido neste mês: nenhum mês a conferir; sem rival: nada; dia 4 do mês: o mês passado ainda não fechou', due({ since: ISO('2026-11-03') }).length === 0 && due({ noRivalDoc: true }).length === 0 && JSON.stringify(due({ since: ISO('2026-09-15'), now: '2026-11-04T15:00:00.000Z' })) === '["2026-09"]');
+  check('rival escolhido neste mês: nenhum mês a conferir; sem rival: nada', due({ since: ISO('2026-11-03') }).length === 0 && due({ noRivalDoc: true }).length === 0);
+  check('no último dia do mês o mês de hoje ainda não entra; no dia 1º do mês seguinte ele entra', JSON.stringify(due({ since: ISO('2026-09-15'), now: '2026-10-31T15:00:00.000Z' })) === '["2026-09"]' && JSON.stringify(due({ since: ISO('2026-09-15'), now: '2026-11-01T15:00:00.000Z' })) === '["2026-09","2026-10"]');
+  check('o mês com a votação de destaques aberta espera (1º/11) e entra quando ela fecha (3/11)', JSON.stringify(due({ since: ISO('2026-09-15'), now: '2026-11-01T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto)] })) === '["2026-09"]' && JSON.stringify(due({ since: ISO('2026-09-15'), now: '2026-11-03T15:00:00.000Z', champs: [comVoto('2026-10-28', votoAberto)] })) === '["2026-09","2026-10"]');
 
   // ══ 7. SEQUÊNCIA, TEMPO COM O RIVAL E O QUE SE PERDE AO TROCAR ═════════════════════════════════════
   const dl = (month, res, r = 'bruno') => [month, { r, res, m: 3, t: 1 }];
