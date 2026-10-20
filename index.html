@@ -2271,6 +2271,11 @@ const MJ_KINDS = {
     file: { story: 'rival-numeros-pelada-na-mao-story.png', feed: 'rival-numeros-pelada-na-mao.png' }, draw: { feed: drawMjRivalNumCard, story: drawMjRivalNumStory },
     text: d => `Meus números x os do meu rival no Pelada na Mão ⚔️${mjRivalNumVerdict(d) ? ' ' + mjRivalNumVerdict(d) : ''}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalNumCaption(d),
   },
+  rivalduel: {
+    title: '📤 Duelo do mês', busy: 'Montando o duelo…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Duelo do mês contra o meu rival no Pelada na Mão', shareTitle: 'Meu duelo do mês no Pelada na Mão',
+    file: { story: 'duelo-pelada-na-mao-story.png', feed: 'duelo-pelada-na-mao.png' }, draw: { feed: drawMjRivalNumCard, story: drawMjRivalNumStory },
+    text: d => `Meu duelo do mês contra o meu rival no Pelada na Mão ⚔️${mjRivalNumVerdict(d) ? ' ' + mjRivalNumVerdict(d) : ''}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalDuelCaption(d),
+  },
 };
 const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
@@ -2376,6 +2381,7 @@ function mjRivalNumData(s = {}) {
     photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '',
     initials: ini(name), rivalName, rivalInitials: ini(rivalName),
     rows, mineLead, theirsLead, scored, status, tier, tone: MJ_TIERS[tier],
+    title: String(s.title || '').trim(), // só o duelo do mês usa: o mês no alto do cartão
   };
 }
 // Quem está na frente nos números, em primeira pessoa (o cartão e a legenda são de quem compartilha). Vazio quando nenhuma linha disputa.
@@ -2754,7 +2760,7 @@ function drawMjRivalNumCard(ctx, c, photoImg, logoImg, opts = {}) {
     ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
-  ctx.fillText('EU × MEU RIVAL · OS NÚMEROS', cx, 214);
+  ctx.fillText(c.title ? 'EU × MEU RIVAL · ' + c.title : 'EU × MEU RIVAL · OS NÚMEROS', cx, 214);
 
   // os dois lados (foto minha ou iniciais; só as iniciais do rival) e quem está na frente
   const sides = [{ x: 270, ini: c.initials, photo: photoImg, name: c.name, ring: accent }, { x: 810, ini: c.rivalInitials, photo: null, name: c.rivalName, ring: MJ_MUTED }];
@@ -2939,6 +2945,10 @@ function mjRivalCaption(d) {
 function mjRivalNumCaption(d) {
   const v = mjRivalNumVerdict(d);
   return `Eu x meu rival no Pelada na Mão ⚔️\n${v ? v + '\n' : ''}Quem é o destaque de verdade na sua pelada? Compare os seus números: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjRivalDuelCaption(d) {
+  const v = mjRivalNumVerdict(d);
+  return `Duelo do mês contra o meu rival no Pelada na Mão ⚔️\n${v ? v + '\n' : ''}Quem é o destaque de verdade na sua pelada? Dispute o seu duelo: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
 async function copyMjCaption() {
   if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
@@ -3213,7 +3223,7 @@ function openPrivacyPolicy() {
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
-        ${li('<strong>Rival:</strong> se você escolher um rival para comparar conquistas e números, a escolha fica guardada só neste aparelho (nada é enviado ao servidor e o outro jogador não é avisado). A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro e as vitórias, empates e derrotas dos times em que jogou). Se você compartilhar a imagem da comparação, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado).')}
+        ${li('<strong>Rival:</strong> se você escolher um rival, a escolha (quem é o seu rival e desde quando) fica guardada na sua conta, no servidor, e só você a vê: nem o admin nem o seu rival (ele não é avisado). Se vocês dois se escolherem, o app avisa os dois; se 3 ou mais jogadores escolherem a mesma pessoa, ela ganha a conquista "Alvo da Galera", sem dizer quem escolheu. A conta também guarda o resultado de cada duelo do mês contra o rival (quantos números cada um levou) e quem estava na frente no número de conquistas; a liga vê só as conquistas que isso gera (por exemplo "Passei o Trator"), nunca quem era o rival. A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro, presença, destaques da votação, nota do grupo e as vitórias, empates e derrotas dos times em que jogou) e, no frente a frente, os jogos em que os dois estavam em times opostos. Se você compartilhar a imagem da comparação ou do duelo, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado). Ao sair da liga ou excluir a conta, a sua escolha e o seu histórico de duelos são apagados; as conquistas do rival que você já ganhou continuam no cadastro do jogador.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -4820,6 +4830,7 @@ async function deleteRegisteredPlayer(key) {
     await ldoc(`player_registry/${key}`).delete();
     await saveContact(key, ''); // sem jogador, sem contato (LGPD)
     starSync(); // as notas de estrelas que ele deu deixam de valer e a média dos outros é refeita
+    rivalSync(); // as escolhas de rival dele e as que apontam para ele saem, e as marcas (Alvo da Galera, Rivalidade Declarada) são refeitas
   } catch(e) { toast('Erro ao remover: ' + (e?.message||e)); }
 }
 
@@ -4957,7 +4968,7 @@ async function renamePlayer() {
     }
 
     await Promise.all(updates);
-    if (newKey !== oldKey) starSync({from: oldKey, to: newKey});
+    if (newKey !== oldKey) { starSync({from: oldKey, to: newKey}); rivalSync({from: oldKey, to: newKey}); }
 
     st.modal = null;
     render();
@@ -8608,6 +8619,14 @@ function mAdminPanel() {
             <div style="display:flex;gap:8px">
               <button onclick="saveAppCfg({peerStars:true})" style="${tog(!!cfg.peerStars)}">Ligada</button>
               <button onclick="saveAppCfg({peerStars:false})" style="${tog(!cfg.peerStars)}">Desligada</button>
+            </div>
+          </div>
+          <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">🤜 Badges de confronto direto</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Carrasco (ganhou 5 ou mais jogos do mesmo jogador, em times opostos), Freguês (o contrário), Tira-teima (histórico empatado depois de 6 jogos) e Clássico (20 jogos contra o mesmo jogador). Desligadas, as quatro somem para todo o grupo; o frente a frente com o seu rival continua.</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="saveAppCfg({h2hBadges:true})" style="${tog(cfg.h2hBadges !== false)}">Ligadas</button>
+              <button onclick="saveAppCfg({h2hBadges:false})" style="${tog(cfg.h2hBadges === false)}">Desligadas</button>
             </div>
           </div>
           <div style="margin-top:14px">
@@ -12403,9 +12422,108 @@ async function rivalProgressSync() {
   } finally { st._rivalSyncing = false; }
 }
 const rivalInitials = n => String(n).trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+// ── Interface do rival (item 36): avisos, abas Frente a frente e Duelo do mês, o alerta ao trocar de rival e o cartão do duelo ────────────────────────────────
+const rivalAvatarHtml = (name, color) => `<div style="width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:#161b22;border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${color}">${esc(rivalInitials(name))}</div>`;
+// Uma linha da tabela de números (o meu à esquerda, o nome no meio, o dele à direita; quem está na frente leva a cor).
+const rivalRowHtml = (r, last) => `<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:center;gap:6px;padding:9px 0;${last ? '' : 'border-bottom:1px solid var(--border2);'}">
+    <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'mine' ? '#00d67f' : 'var(--text)'}">${esc(r.mine)}</div>
+    <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${esc(r.label)}</div>
+    <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'theirs' ? '#4db8ff' : 'var(--text)'}">${esc(r.theirs)}</div></div>`;
+const rivalInfoBox = (color, html) => `<div style="padding:9px 12px;margin-bottom:10px;border-radius:10px;border:1px solid ${color}55;background:${color}14;font-size:12px;line-height:1.5;color:var(--text2)">${html}</div>`;
+// Os avisos do alto da janela: "Rivalidade declarada" (os dois se escolheram: só aí o rival fica sabendo) e "Alvo da Galera" (3 ou mais jogadores escolheram você; nunca dizemos quem).
+function rivalNotices(rivalName) {
+  let out = '';
+  if (st.rivalDoc?.mutual === true && rivalGet()) out += rivalInfoBox('#00d67f', `🤝 <b style="color:var(--text)">Rivalidade declarada!</b> ${esc(rivalName)} também escolheu você como rival.`);
+  if (st.rivalPublic?.[st.userDoc?.playerKey]?.alvo === true) out += rivalInfoBox('#f0b429', `🎯 <b style="color:var(--text)">Alvo da Galera:</b> 3 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
+  return out;
+}
+// O texto do alerta ao trocar ou tirar o rival com progresso a perder (as conquistas que já foram ganhas continuam da pessoa).
+function rivalLossText(loss, verb, rivalName) {
+  return `Se você ${verb === 'trocar' ? 'trocar' : 'tirar'} o rival agora, vai perder o progresso com ${rivalName}:\n\n• ${loss.join('\n• ')}\n\nAs conquistas que você já ganhou continuam suas.\n\n${verb === 'trocar' ? 'Trocar' : 'Tirar'} o rival mesmo assim?`;
+}
+// Confirma antes de uma troca (ou remoção) que faz perder progresso; sem nada a perder não pergunta. True = pode seguir.
+function rivalConfirmLoss(verb) {
+  const loss = rivalChangeLoss();
+  return !loss.length || confirm(rivalLossText(loss, verb, rivalPlayer()?.name || 'o rival'));
+}
+const RIVAL_RES_BADGE = { trator: 'duelo_trator', mao: 'duelo_mao', aluno: 'duelo_aluno', fora: 'duelo_fora_liga' };
+function rivalResLabel(res) {
+  const b = BADGE_CATALOG.find(x => x.id === RIVAL_RES_BADGE[res]);
+  return b ? `${b.emoji} ${b.label}` : res === 'empate' ? '🤝 Empate' : 'sem duelo válido';
+}
+const rivalSection = (title, html) => `<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">${title}</div>${html}</div>`;
+// A aba Frente a frente: o retrospecto contra o rival nos jogos em times opostos (e o carrasco e o freguês, se o admin não desligou).
+// Na tela de escolha: se o 1º campeonato do mês já foi jogado, o duelo do mês não vale para um rival escolhido agora.
+function rivalPickNote() {
+  const month = localDate().slice(0, 7);
+  if (!rivalFirstChampDate(month)) return '';
+  return rivalInfoBox('#f0b429', `⚠️ O primeiro campeonato de ${monthLabel(month)} já foi jogado: o duelo de ${monthLabel(month)} não vale para um rival escolhido agora. O duelo dele começa em ${monthLabel(monthShift(month, 1))}.`);
+}
+function rivalH2HView() {
+  const h = rivalH2H();
+  if (!h) return '';
+  const mc = h.status === 'behind' ? '#e6edf3' : '#00d67f', rc = h.status === 'ahead' ? '#e6edf3' : '#4db8ff', diff = h.w - h.l, jogos = n => `${n} jogo${n === 1 ? '' : 's'}`;
+  const side = (name, label, n, color) => `<div style="text-align:center;min-width:0">${rivalAvatarHtml(name, color)}<div style="font-size:12px;font-weight:700;color:var(--text2);overflow-wrap:anywhere">${label}</div><div style="font-size:34px;font-weight:800;line-height:1.1;color:${color}">${n}</div><div style="font-size:11px;color:var(--text3)">vitória${n === 1 ? '' : 's'}</div></div>`;
+  const verdict = h.status === 'none' ? 'Vocês ainda não se enfrentaram.' : h.status === 'ahead' ? `Você leva vantagem: ${jogos(diff)} a mais` : h.status === 'behind' ? `${esc(h.rival)} leva vantagem: ${jogos(-diff)} a mais` : 'Empatados no frente a frente!';
+  const vcol = h.status === 'ahead' ? 'var(--accent)' : h.status === 'behind' ? '#4db8ff' : 'var(--text2)';
+  const extremes = h2hOn() ? [
+    h.carrasco ? `😈 <b style="color:var(--text)">Seu carrasco:</b> ${esc(h.carrasco.name)} (${h.carrasco.l} ${h.carrasco.l === 1 ? 'derrota' : 'derrotas'} × ${h.carrasco.w} ${h.carrasco.w === 1 ? 'vitória' : 'vitórias'} em ${jogos(h.carrasco.games)})` : '',
+    h.fregues ? `🎣 <b style="color:var(--text)">Seu freguês:</b> ${esc(h.fregues.name)} (${h.fregues.w} ${h.fregues.w === 1 ? 'vitória' : 'vitórias'} × ${h.fregues.l} ${h.fregues.l === 1 ? 'derrota' : 'derrotas'} em ${jogos(h.fregues.games)})` : '',
+  ].filter(Boolean) : [];
+  return `<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
+      ${side(h.me, 'Você', h.w, mc)}
+      <div style="font-size:22px;color:var(--text3);font-weight:800">×</div>
+      ${side(h.rival, esc(h.rival), h.l, rc)}
+    </div>
+    <div style="text-align:center;font-size:14px;font-weight:800;color:${vcol};margin-bottom:4px">${verdict}</div>
+    ${h.games ? `<div style="text-align:center;font-size:12px;color:var(--text3)">${h.d} empate${h.d === 1 ? '' : 's'} · ${jogos(h.games)} em times opostos${h.ga + h.gb > 0 ? ` · gols nesses jogos: você ${h.ga} × ${h.gb} ${esc(h.rival)}` : ''}</div>` : ''}
+    ${extremes.length ? rivalSection('Na liga toda', `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.7;color:var(--text2)">${extremes.join('<br>')}</div>`) : ''}
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Só contam os jogos em que vocês dois estavam em times opostos no mesmo campeonato. Carrasco e Freguês valem entre quem já se enfrentou 3 vezes ou mais.</div>`;
+}
+// A aba Duelo do mês: o duelo do mês em andamento (a tabela do mês, se ele vale e como está), o progresso (sequência e tempo com o rival) e os meses que já fecharam.
+function rivalDuelView() {
+  const pair = rivalPair();
+  if (!pair) return '';
+  const month = localDate().slice(0, 7), next = monthShift(month, 1), d = rivalDuelFor(month, pair), sk = rivalStreak(), tenure = rivalTenureMonths(), first = rivalFirstChampDate(month);
+  const rival = esc(pair.rival), meses = n => `${n} ${n === 1 ? 'mês' : 'meses'}`;
+  const status = !first ? `Ainda não houve campeonato em ${monthLabel(month)}. Se ${rival} continuar sendo o seu rival até o primeiro jogo do mês, o duelo vale.`
+    : !d.locked ? `O duelo de ${monthLabel(month)} não vale com este rival: ele foi escolhido depois do primeiro campeonato do mês. O próximo duelo é o de ${monthLabel(next)}.`
+    : !d.enough ? `Para o duelo valer, cada um precisa de ${RIVAL_MIN_GAMES} jogos no mês: você tem ${d.games.mine} e ${rival} tem ${d.games.theirs}.` : '';
+  const live = d.valid ? `Hoje: você leva ${d.m} número${d.m === 1 ? '' : 's'} e ${rival} leva ${d.t}.${d.res !== 'none' ? ` Se o mês fechasse agora: <b style="color:var(--text)">${esc(rivalResLabel(d.res))}</b>.` : ''}` : '';
+  const table = d.rows.length ? `<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:2px 12px;margin-top:8px">${d.rows.map((r, i) => rivalRowHtml(r, i === d.rows.length - 1)).join('')}</div>` : '';
+  const streak = sk.n >= 1 ? `${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganhos' : 'perdidos'} seguidos com ${rival}. Com 3 seguidos: ${sk.side === 'win' ? '👑 Dono do Rival' : '👤 Sombra do Rival'}.`
+    : `Nenhum duelo fechado ainda com ${rival}. 3 duelos ganhos seguidos dão 👑 Dono do Rival; 3 perdidos, 👤 Sombra do Rival.`;
+  const hist = Object.entries(st.rivalDoc?.duels || {}).filter(([, e]) => e && e.res !== 'none').sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
+  const nameOf = key => (st.players || []).find(p => playerKey(p.name) === key)?.name || 'rival';
+  const histHtml = hist.length ? hist.map(([k, e]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text2);overflow-wrap:anywhere">${esc(monthLabel(k))} · contra ${esc(nameOf(e.r))}</span><b style="color:var(--text);white-space:nowrap">${esc(rivalResLabel(e.res))} (${e.m} × ${e.t})</b></div>`).join('') : '<div style="font-size:12px;color:var(--text3)">Nenhum mês fechado ainda: o primeiro duelo fecha no dia ' + RIVAL_CLOSE_DAY + ' do mês seguinte.</div>';
+  return `<div style="font-size:14px;font-weight:800;margin-bottom:6px">🗓️ Duelo de ${monthLabel(month)}</div>
+    ${status ? rivalInfoBox('#f0b429', status) : ''}
+    ${live ? `<div style="font-size:12px;color:var(--text2);line-height:1.5">${live}</div>` : ''}
+    ${table}
+    ${rivalSection('Seu progresso com ' + rival, `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.6;color:var(--text2)">🔁 ${streak}<br>⏳ Rival há ${meses(tenure)}: 3 meses dão 🐕 Rival de Estimação, 6 dão ⚔️ Arquirrival e 12 dão 🏛️ Rivalidade Histórica.</div>`)}
+    ${rivalSection('Meses que já fecharam', `<div>${histHtml}</div>`)}
+    ${d.rows.length ? `<button onclick="openMjRivalDuel()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar duelo</button>` : ''}
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Vale se o rival já estava escolhido antes do primeiro campeonato do mês e se os dois jogaram ${RIVAL_MIN_GAMES} jogos ou mais. Só contam os números que tiveram um vencedor: levar mais que ele é Rival na Mão; levar todos (4 ou mais) é Passei o Trator. O mês fecha no dia ${RIVAL_CLOSE_DAY} do mês seguinte, quando você abrir o app. Trocar de rival depois do primeiro campeonato do mês perde o duelo daquele mês.</div>`;
+}
+// O cartão do duelo do mês para compartilhar (Story e Feed, a mesma janela dos outros): a tabela do mês, com o título do mês. Fecha a janela do rival antes.
+function openMjRivalDuel() {
+  const pair = rivalPair();
+  if (!pair) return;
+  const month = localDate().slice(0, 7), d = rivalDuelFor(month, pair);
+  if (!d || !d.rows.length) return;
+  const myKey = st.userDoc?.playerKey;
+  st.modal = null; render();
+  return openMjShare('rivalduel', mjRivalNumData({ name: pair.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: pair.rival, rows: d.rows, title: `DUELO DE ${monthLabel(month).toUpperCase()}` }));
+}
+// Avisa o servidor que o elenco mudou (jogador removido ou renomeado): as escolhas de rival e as badges do rival dele passam para a chave nova ou saem. Só o admin chama.
+// Falha aqui não atrapalha nada (o servidor refaz as marcas na próxima escolha de rival).
+function rivalSync(rename) {
+  if (!DB || !st.leagueId) return;
+  callFn('syncRivals', { liga: st.leagueId, ...(rename ? { rename } : {}) }).catch(() => {});
+}
 // A faixa dentro do card Conquistas da aba EU: convite para escolher o rival ou o placar e o botão Comparar.
 function rivalStrip(isSimulating) {
-  if (isSimulating || !st.players?.length || !st.userDoc?.playerKey) return '';
+  if (isSimulating || !st.players?.length || !st.userDoc?.playerKey || (DB && !st.rivalReady)) return '';
   const btn = 'flex-shrink:0;padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
   const row = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border2)';
   const c = rivalCompare();
@@ -12414,7 +12532,7 @@ function rivalStrip(isSimulating) {
     return `<div style="${row}"><span style="font-size:18px">⚔️</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas e os seus números com os de um rival da liga.</div>${sg ? `<button onclick="rivalPick('${sg.key}')" style="margin-top:4px;padding:0;border:none;background:none;color:var(--accent);font-size:12px;font-weight:700;text-align:left;cursor:pointer;font-family:inherit;line-height:1.4;overflow-wrap:anywhere">💡 Sugestão: ${esc(sg.name)} (${rivalGapText(sg)})</button>` : ''}</div><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
   }
   const mc = c.diff > 0 ? 'var(--accent)' : 'var(--text)', rc = c.diff < 0 ? '#4db8ff' : 'var(--text)';
-  return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
+  return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}${st.rivalDoc?.mutual === true ? ' 🤝' : ''}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
 }
 function openRival() {
   const myKey = st.userDoc?.playerKey;
@@ -12424,12 +12542,19 @@ function openRival() {
 }
 function rivalPick(key) {
   if (!rivalCandidates().some(p => playerKey(p.name) === key)) return;
-  rivalSet(key);
+  const cur = rivalGet();
+  if (cur && cur !== key && !rivalConfirmLoss('trocar')) return; // trocar de rival com progresso a perder: pergunta antes (as conquistas já ganhas ficam)
+  if (cur !== key) rivalSet(key);
   st.modal = { type: 'rival', picking: false, tab: st.modal?.tab };
   render();
 }
 function rivalChange() { if (st.modal?.type === 'rival') { st.modal.picking = true; render(); } }
-function rivalRemove() { rivalSet(''); st.modal = { type: 'rival', picking: true }; render(); }
+function rivalRemove() {
+  if (!rivalConfirmLoss('tirar')) return;
+  rivalSet('');
+  st.modal = { type: 'rival', picking: true };
+  render();
+}
 // A busca da lista de jogadores só esconde e mostra as linhas (não redesenha a janela).
 function rivalFilter(q) {
   const t = String(q || '').trim().toLowerCase();
@@ -12443,9 +12568,9 @@ function openMjRival() {
   st.modal = null; render();
   return openMjShare('rival', mjRivalData({ name: c.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: c.rival, mine: c.mine, theirs: c.theirs, both: c.both }));
 }
-// As duas abas da comparação: as conquistas (a de sempre) e os números.
+// As quatro abas da comparação: as conquistas (a de sempre), os números, o frente a frente e o duelo do mês.
 function rivalTab(t) {
-  if (st.modal?.type !== 'rival' || st.modal.picking || (t !== 'badges' && t !== 'numbers')) return;
+  if (st.modal?.type !== 'rival' || st.modal.picking || !['badges', 'numbers', 'h2h', 'duel'].includes(t)) return;
   st.modal.tab = t;
   render();
 }
@@ -12484,20 +12609,23 @@ function mRival() {
         <span style="flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</span>
         <span style="font-size:12px;color:var(--text3);flex-shrink:0">${n} conquista${n === 1 ? '' : 's'}</span></button>`;
     }).join('');
-    return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas e os números. A escolha fica só neste aparelho e o outro jogador não é avisado.</div>
+    return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas e os números, disputar o duelo do mês e ver o frente a frente. A escolha fica guardada na sua conta, só você vê, e o outro jogador não é avisado. Se vocês dois se escolherem, os dois ficam sabendo.</div>
+      ${rivalPickNote()}
       ${sugHtml}
       ${rows ? `<input type="search" placeholder="Buscar jogador" oninput="rivalFilter(this.value)" aria-label="Buscar jogador" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit">
       <div id="rival-list" style="display:flex;flex-direction:column;gap:6px">${rows}</div>` : '<div style="padding:20px 0;text-align:center;font-size:13px;color:var(--text3)">Ainda não há outros jogadores na liga para virar seu rival.</div>'}
       ${rivalPlayer() ? '<button onclick="st.modal.picking=false;render()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">← Voltar para a comparação</button>' : ''}`);
   }
-  const tab = m.tab === 'numbers' ? 'numbers' : 'badges';
-  const tabBtn = (id, label) => { const on = tab === id; return `<button onclick="rivalTab('${id}')" aria-pressed="${on}" style="flex:1;padding:10px 6px;border-radius:10px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? '#00d67f18' : 'var(--s2)'};color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">${label}</button>`; };
-  const tabs = `<div style="display:flex;gap:8px;margin-bottom:12px">${tabBtn('badges', '🏅 Conquistas')}${tabBtn('numbers', '📊 Números')}</div>`;
+  const tab = ['numbers', 'h2h', 'duel'].includes(m.tab) ? m.tab : 'badges';
+  const tabBtn = (id, label) => { const on = tab === id; return `<button onclick="rivalTab('${id}')" aria-pressed="${on}" style="padding:10px 6px;border-radius:10px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? '#00d67f18' : 'var(--s2)'};color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">${label}</button>`; };
+  const tabs = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${tabBtn('badges', '🏅 Conquistas')}${tabBtn('numbers', '📊 Números')}${tabBtn('h2h', '🤜 Frente a frente')}${tabBtn('duel', '🗓️ Duelo do mês')}</div>${rivalNotices(c.rival)}`;
   const foot = `<div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="rivalChange()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Trocar rival</button>
       <button onclick="rivalRemove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Remover rival</button>
     </div>
-    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem mostra o nome do seu rival: compartilhe só se ele topar a brincadeira. A escolha do rival fica só neste aparelho e ele não é avisado.</div>`;
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem mostra o nome do seu rival: compartilhe só se ele topar a brincadeira. A escolha do rival fica guardada na sua conta (só você vê) e ele não é avisado, a não ser que vocês dois se escolham.</div>`;
+  if (tab === 'h2h') return shell(`${tabs}${rivalH2HView()}${foot}`);
+  if (tab === 'duel') return shell(`${tabs}${rivalDuelView()}${foot}`);
   const nm = tab === 'numbers' ? rivalNumbers() : null;
   if (nm) {
     const mc = nm.status === 'behind' ? '#e6edf3' : '#00d67f', rc = nm.status === 'ahead' ? '#e6edf3' : '#4db8ff', pl = nm.scored === 1 ? '' : 's';
