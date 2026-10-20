@@ -12231,7 +12231,7 @@ function h2hRecord(champs, a, b) {
     if (!c.teamRosters) continue;
     let ta = null, tb = null;
     for (const [t, roster] of Object.entries(c.teamRosters)) { if (ta === null && roster.includes(a)) ta = t; if (tb === null && roster.includes(b)) tb = t; }
-    if (!ta || !tb || ta === tb) continue;
+    if (!ta || !tb) continue; // (no mesmo time não há jogo um contra o outro: o filtro dos jogos abaixo já deixa de fora)
     for (const m of (c.matches || [])) {
       if (!m.played) continue;
       const aHome = m.home === ta && m.away === tb, bHome = m.home === tb && m.away === ta;
@@ -12329,7 +12329,7 @@ function rivalFirstChampDate(month) {
 // O rival já estava escolhido antes do 1º campeonato do mês? Escolher no dia anterior vale; no mesmo dia ou depois, o duelo daquele mês não conta.
 function rivalLockedIn(month, since = rivalSince()) {
   const first = rivalFirstChampDate(month);
-  return !!since && !!first && localDate(new Date(since)) < first;
+  return !!since && localDate(new Date(since)) < first; // sem campeonato no mês `first` é '' e nenhuma data é menor que ''
 }
 // O resultado do duelo a partir de quantos números cada lado levou: 'trator' (todos, 4 ou mais), 'mao' (maioria), 'fora' (ele levou todos, 4 ou mais), 'aluno' (ele levou a maioria),
 // 'empate' (4 ou mais decididos, metade para cada) ou 'none' (menos de 3 números decididos).
@@ -12385,13 +12385,15 @@ function rivalStreak() {
   }
   return { side, n };
 }
+// "1 duelo do mês ganho", "2 duelos do mês ganhos", "1 duelo do mês perdido", "3 duelos do mês perdidos" (a frase da sequência, no alerta e na aba Duelo do mês).
+const rivalStreakText = sk => `${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganho' : 'perdido'}${sk.n === 1 ? '' : 's'}`;
 // O que a pessoa perde se trocar de rival (ou tirá-lo) agora: o duelo do mês (se o 1º campeonato do mês já começou e o rival já estava escolhido antes), a sequência de duelos e o tempo de
 // rivalidade. As conquistas que ela já ganhou continuam dela. Lista vazia = nada a perder.
 function rivalChangeLoss() {
   if (!rivalGet()) return [];
   const loss = [], month = localDate().slice(0, 7), sk = rivalStreak(), tenure = rivalTenureMonths();
-  if (rivalFirstChampDate(month) && rivalLockedIn(month)) loss.push(`o duelo de ${monthLabel(month)} (o primeiro campeonato do mês já foi jogado)`);
-  if (sk.n >= 1) loss.push(`a sequência de ${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganhos' : 'perdidos'} (Dono do Rival e Sombra do Rival)`);
+  if (rivalLockedIn(month)) loss.push(`o duelo de ${monthLabel(month)} (o primeiro campeonato do mês já foi jogado)`);
+  if (sk.n >= 1) loss.push(`a sequência de ${rivalStreakText(sk)} (Dono do Rival e Sombra do Rival)`);
   if (tenure >= 1) loss.push(`o tempo de rivalidade (${tenure} ${tenure === 1 ? 'mês' : 'meses'}, para Rival de Estimação, Arquirrival e Rivalidade Histórica)`);
   return loss;
 }
@@ -12491,7 +12493,7 @@ function rivalDuelView() {
     : !d.enough ? `Para o duelo valer, cada um precisa de ${RIVAL_MIN_GAMES} jogos no mês: você tem ${d.games.mine} e ${rival} tem ${d.games.theirs}.` : '';
   const live = d.valid ? `Hoje: você leva ${d.m} número${d.m === 1 ? '' : 's'} e ${rival} leva ${d.t}.${d.res !== 'none' ? ` Se o mês fechasse agora: <b style="color:var(--text)">${esc(rivalResLabel(d.res))}</b>.` : ''}` : '';
   const table = d.rows.length ? `<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:2px 12px;margin-top:8px">${d.rows.map((r, i) => rivalRowHtml(r, i === d.rows.length - 1)).join('')}</div>` : '';
-  const streak = sk.n >= 1 ? `${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganhos' : 'perdidos'} seguidos com ${rival}. Com 3 seguidos: ${sk.side === 'win' ? '👑 Dono do Rival' : '👤 Sombra do Rival'}.`
+  const streak = sk.n >= 1 ? `${rivalStreakText(sk)}${sk.n === 1 ? '' : ' seguidos'} com ${rival}. Com 3 seguidos: ${sk.side === 'win' ? '👑 Dono do Rival' : '👤 Sombra do Rival'}.`
     : `Nenhum duelo fechado ainda com ${rival}. 3 duelos ganhos seguidos dão 👑 Dono do Rival; 3 perdidos, 👤 Sombra do Rival.`;
   const hist = Object.entries(st.rivalDoc?.duels || {}).filter(([, e]) => e && e.res !== 'none').sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
   const nameOf = key => (st.players || []).find(p => playerKey(p.name) === key)?.name || 'rival';
@@ -12500,7 +12502,7 @@ function rivalDuelView() {
     ${status ? rivalInfoBox('#f0b429', status) : ''}
     ${live ? `<div style="font-size:12px;color:var(--text2);line-height:1.5">${live}</div>` : ''}
     ${table}
-    ${rivalSection('Seu progresso com ' + rival, `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.6;color:var(--text2)">🔁 ${streak}<br>⏳ Rival há ${meses(tenure)}: 3 meses dão 🐕 Rival de Estimação, 6 dão ⚔️ Arquirrival e 12 dão 🏛️ Rivalidade Histórica.</div>`)}
+    ${rivalSection('Seu progresso com ' + rival, `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.6;color:var(--text2)">🔁 ${streak}<br>⏳ ${tenure >= 1 ? `Rival há ${meses(tenure)}` : 'Rival há menos de 1 mês'}: 3 meses dão 🐕 Rival de Estimação, 6 dão ⚔️ Arquirrival e 12 dão 🏛️ Rivalidade Histórica.</div>`)}
     ${rivalSection('Meses que já fecharam', `<div>${histHtml}</div>`)}
     ${d.rows.length ? `<button onclick="openMjRivalDuel()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar duelo</button>` : ''}
     <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Vale se o rival já estava escolhido antes do primeiro campeonato do mês e se os dois jogaram ${RIVAL_MIN_GAMES} jogos ou mais. Só contam os números que tiveram um vencedor: levar mais que ele é Rival na Mão; levar todos (4 ou mais) é Passei o Trator. O mês fecha no dia ${RIVAL_CLOSE_DAY} do mês seguinte, quando você abrir o app. Trocar de rival depois do primeiro campeonato do mês perde o duelo daquele mês.</div>`;

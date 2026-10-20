@@ -219,6 +219,18 @@ jobs:
         working-directory: functions
         run: node test/rival-test.js
 
+      - name: Testes do app (duelo do mês do rival - números do mês, trava, resultado, mês que fecha, sequência, o que se perde ao trocar de rival e o envio do progresso ao servidor)
+        working-directory: functions
+        run: node test/client-rival-duel-test.js
+
+      - name: Testes do app (rival - frente a frente, aba Duelo do mês, avisos, alerta ao trocar de rival, cartão do duelo, as 17 badges novas e as ligações no app)
+        working-directory: functions
+        run: node test/client-rival-ui-test.js
+
+      - name: Testes do app (manual do rival contra o código - as 17 badges, os números das regras, os nomes citados, os limites das funções, o cartão do duelo e a privacidade)
+        working-directory: functions
+        run: node test/client-rival-manual-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.

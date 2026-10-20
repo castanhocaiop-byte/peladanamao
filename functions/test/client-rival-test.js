@@ -183,7 +183,7 @@ const KEY = 'u1_liga1';
   check('trocar de rival: já mostra o novo, recomeça a data, tira o "par" e a virada, e MANTÉM os meses de duelo que já fecharam', e.api.rivalGet() === 'carla_dias' && e.env.st.rivalDoc.since !== '2026-09-10T12:00:00.000Z' && e.env.st.rivalDoc.mutual === false && e.env.st.rivalDoc.lead === '' && e.env.st.rivalDoc.duels['2026-08'].res === 'mao', e.env.st.rivalDoc);
   e.api.rivalSet('');
   check('remover: o documento fica (com o histórico), sem rival e sem data', e.api.rivalGet() === '' && e.api.rivalSince() === '' && e.env.st.rivalDoc.rivalKey === '' && e.env.st.rivalDoc.since === '' && e.env.st.rivalDoc.duels['2026-08'].res === 'mao', e.env.st.rivalDoc);
-  check('remover quando já não há rival: não faz nada (nem chama o servidor)', await (async () => { const calls2 = []; const z = makeEnv({ db: {}, fn: async (n, d) => { calls2.push([n, d]); return {}; } }); const ok = await z.api.rivalSet(''); return ok === true && calls2.length === 0 && z.env.st.rivalDoc === undefined || z.env.st.rivalDoc === null; })());
+  check('remover quando já não há rival: não faz nada (nem chama o servidor)', await (async () => { const calls2 = []; const z = makeEnv({ db: {}, fn: async (n, d) => { calls2.push([n, d]); return {}; } }); const ok = await z.api.rivalSet(''); return ok === true && calls2.length === 0 && z.env.st.rivalDoc === null; })());
 
   // com o servidor: a escolha aparece na hora e o servidor confirma (setRival)
   const fnCalls = [];
@@ -203,7 +203,7 @@ const KEY = 'u1_liga1';
   fnImpl = async (n, d) => ({ ok: true, rivalKey: '', since: '', mutual: false });
   const ok3 = await e.api.rivalSet('');
   check('com o servidor: tirar o rival também passa pelo servidor (rivalKey vazio) e a tela já fica sem rival', ok3 === true && fnCalls[fnCalls.length - 1][1].rivalKey === '' && e.api.rivalGet() === '' && e.env.st.rivalDoc.since === '', fnCalls[fnCalls.length - 1]);
-  check('sem jogador vinculado à conta: rivalSet não faz nada', await (async () => { const z = makeEnv({ db: {}, fn: async () => { throw new Error('não devia chamar'); } }); z.env.st.userDoc.playerKey = undefined; return (await z.api.rivalSet('bruno')) === false && z.env.st.rivalDoc === undefined || z.env.st.rivalDoc === null; })());
+  check('sem jogador vinculado à conta: rivalSet não faz nada', await (async () => { const z = makeEnv({ db: {}, fn: async () => { throw new Error('não devia chamar'); } }); z.env.st.userDoc.playerKey = undefined; return (await z.api.rivalSet('bruno')) === false && z.env.st.rivalDoc === null; })());
 
   // duas escolhas seguidas, com as respostas fora de ordem: vale a última, nunca a que chegou por último
   {

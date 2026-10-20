@@ -161,7 +161,7 @@ function computeFlags(rivals, active) {
   const picks = new Set(live.map(r => `${r.ownKey}>${r.rivalKey}`));
   const declarada = new Set(), mutualUids = new Set();
   for (const r of live) {
-    if (picks.has(`${r.rivalKey}>${r.ownKey}`)) { declarada.add(r.ownKey); declarada.add(r.rivalKey); mutualUids.add(r.uid); }
+    if (picks.has(`${r.rivalKey}>${r.ownKey}`)) { declarada.add(r.ownKey); mutualUids.add(r.uid); } // o par espelhado marca o outro lado na sua vez
   }
   return { alvo, declarada, mutualUids };
 }

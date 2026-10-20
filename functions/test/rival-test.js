@@ -51,6 +51,8 @@ function refOf(p) {
 }
 let failCommitsFrom = Infinity;   // nº do commit (1, 2, …) a partir do qual batch.commit() falha
 let commitCount = 0;
+let txSets = 0;                // escritas feitas dentro de transações (para provar que nada é regravado à toa)
+let rivalFullReads = 0;        // leituras da coleção INTEIRA de escolhas de rival (a sondagem "alguém usa?" usa limit(1) e não conta)
 const fakeDb = {
   doc: p => refOf(p),
   recursiveDelete: async ref => { for (const k of [...store.keys()]) if (k === ref.path || k.startsWith(ref.path + '/')) store.delete(k); },
@@ -94,7 +96,7 @@ const fakeDb = {
         if (wrote) throw new Error('leituras devem vir antes das escritas');
         return target.path !== undefined ? snapOf(target.path) : await target.get(); // doc ref OU query
       },
-      set: (ref, d) => { wrote = true; writes.push(() => ref.set(d)); },
+      set: (ref, d) => { wrote = true; txSets++; writes.push(() => ref.set(d)); },
       update: (ref, ...args) => {
         wrote = true;
         writes.push(async () => {
@@ -109,6 +111,9 @@ const fakeDb = {
     return result;
   },
 };
+
+const baseCollection = fakeDb.collection;
+fakeDb.collection = name => { const q = baseCollection(name); if (/\/rivals$/.test(name)) { const g = q.get; q.get = async () => { rivalFullReads++; return g(); }; } return q; };
 
 class HttpsError extends Error { constructor(code, message, details) { super(message); this.code = code; this.details = details; } }
 const authDeleted = [];
@@ -213,15 +218,18 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('resultFits: aluno = ele levou mais que eu (3 ou mais decididos), mas não é "todos"', fits('aluno', 1, 3) && fits('aluno', 1, 2) && fits('aluno', 0, 3) && !fits('aluno', 0, 4) && !fits('aluno', 2, 2) && !fits('aluno', 2, 1) && !fits('aluno', 0, 2));
   check('resultFits: fora da sua liga = eu não levei nenhum e ele levou 4 ou mais', fits('fora', 0, 4) && fits('fora', 0, 8) && !fits('fora', 0, 3) && !fits('fora', 1, 4) && !fits('fora', 0, 0));
   check('resultFits: empate = o mesmo tanto, com pelo menos 4 decididos (com menos de 3 o duelo nem vale)', fits('empate', 2, 2) && fits('empate', 3, 3) && !fits('empate', 1, 1) && !fits('empate', 0, 0) && !fits('empate', 3, 2));
+  check('resultFits: empate com números diferentes nunca vale (1 × 3, 0 × 4, 3 × 1, 4 × 0)', !fits('empate', 1, 3) && !fits('empate', 0, 4) && !fits('empate', 3, 1) && !fits('empate', 4, 0));
   check('resultFits: sem duelo (none) só com zero e zero; resultado desconhecido nunca', fits('none', 0, 0) && !fits('none', 1, 0) && !fits('none', 0, 2) && !fits('vitoria', 3, 1) && !fits(undefined, 0, 0) && !fits(null, 3, 1));
 
   const ctx = { sinceMonth: '2026-03', currentMonth: '2026-10', known: { '2026-05': { r: 'bia', res: 'mao', m: 3, t: 1 } } };
   const pd = (list, c = ctx) => rival.parseDuels(list, c);
   check('parseDuels: sem lista (nulo ou ausente) não é erro: nada a fazer', [undefined, null].every(v => { const r = pd(v); return r.ok && r.accepted.length === 0 && r.skipped === 0; }));
   check('parseDuels: formato errado (não é lista, item estranho, mês inválido)', ['x', 5, {}, true].every(v => pd(v).reason === 'shape') && [[null], [5], [{}], [{ month: '2026-13', res: 'none' }], [{ month: '26-05', res: 'none' }], [{ month: '2026-5', res: 'none' }], [{ month: 202605, res: 'none' }]].every(v => pd(v).reason === 'shape'));
+  check('parseDuels: o mês tem de ser AAAA-MM de verdade: mês 00, ano de 3 dígitos, lixo antes ou depois e outros formatos são recusados; 2026-09 vale', ['2026-00', '026-10', 'x2026-10', '2026-10x', '2026-1', '12026-10', ' 2026-10', '2026-10 ', '2026/10', '2026-100'].every(m => pd([{ month: m, res: 'none' }]).reason === 'shape') && pd([{ month: '2026-09', res: 'none' }]).accepted.length === 1);
   const many = n => Array.from({ length: n }, (_, i) => ({ month: `2026-${String((i % 9) + 1).padStart(2, '0')}`, res: 'none' }));
   check('parseDuels: até 12 meses por chamada; 13 é recusado', pd(many(12)).ok === true && pd(many(13)).reason === 'too-many');
   check('parseDuels: resultado que não bate com os números recusa a chamada inteira', [{ month: '2026-06', res: 'trator', m: 3, t: 0 }, { month: '2026-06', res: 'mao', m: 1, t: 3 }, { month: '2026-06', res: 'xx', m: 1, t: 1 }, { month: '2026-06', res: 'aluno', m: 'a', t: 2 }, { month: '2026-06', res: 'mao', m: 3.5, t: 1 }, { month: '2026-06', res: 'mao', m: -1, t: 1 }, { month: '2026-06', res: 'mao', m: 21, t: 1 }, { month: '2026-06', res: 'mao' }].every(d => pd([{ month: '2026-04', res: 'mao', m: 3, t: 1 }, d]).reason === 'result'));
+  check('parseDuels: o teto de números é 20 (20 vale, 21 não, de qualquer lado); negativo, decimal, texto e nulo são recusados em QUALQUER dos dois lados', pd([{ month: '2026-06', res: 'trator', m: 20, t: 0 }]).ok === true && pd([{ month: '2026-06', res: 'fora', m: 0, t: 20 }]).ok === true && pd([{ month: '2026-06', res: 'trator', m: 21, t: 0 }]).reason === 'result' && pd([{ month: '2026-06', res: 'fora', m: 0, t: 21 }]).reason === 'result' && [{ res: 'mao', m: 5, t: -1 }, { res: 'aluno', m: -1, t: 4 }, { res: 'mao', m: 3, t: 1.5 }, { res: 'mao', m: 5, t: '1' }, { res: 'aluno', m: '1', t: 4 }, { res: 'mao', m: 5, t: null }].every(d => pd([{ month: '2026-06', ...d }]).reason === 'result'));
   let r = pd([{ month: '2026-06', res: 'none', m: 9, t: 9 }]);
   check('parseDuels: mês sem duelo (none) guarda zero e zero, mesmo que mandem números', r.ok && JSON.stringify(r.accepted) === '[{"month":"2026-06","res":"none","m":0,"t":0}]', r);
   r = pd([{ month: '2026-08', res: 'trator', m: 5, t: 0 }, { month: '2026-06', res: 'aluno', m: 1, t: 3 }, { month: '2026-07', res: 'empate', m: 2, t: 2 }]);
@@ -242,6 +250,7 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('runLength: outro rival no meio quebra', rival.runLength(H(['2026-03', 'mao', 'caio'], ['2026-04', 'mao'], ['2026-05', 'mao']), '2026-05', '2026-01') === 2);
   check('runLength: só vale a partir do mês em que o rival atual foi escolhido', rival.runLength(H(['2026-03', 'mao'], ['2026-04', 'mao'], ['2026-05', 'mao']), '2026-05', '2026-04') === 2);
   check('runLength: derrotas também formam sequência; mês sem entrada ou sem lado dá zero', rival.runLength(H(['2026-03', 'aluno'], ['2026-04', 'fora']), '2026-04', '2026-01') === 2 && rival.runLength(H(['2026-03', 'mao']), '2026-09', '2026-01') === 0 && rival.runLength(H(['2026-03', 'none']), '2026-03', '2026-01') === 0);
+  check('runLength: um mês sem duelo válido (none) ou empatado logo depois de 3 derrotas ou 3 vitórias não é sequência nenhuma', rival.runLength(H(['2026-01', 'aluno'], ['2026-02', 'aluno'], ['2026-03', 'aluno'], ['2026-04', 'none']), '2026-04', '2026-01') === 0 && rival.runLength(H(['2026-01', 'mao'], ['2026-02', 'mao'], ['2026-03', 'mao'], ['2026-04', 'empate']), '2026-04', '2026-01') === 0);
   check('runLength: só olha até o mês pedido (meses depois não entram)', rival.runLength(H(['2026-03', 'mao'], ['2026-04', 'mao'], ['2026-05', 'mao']), '2026-04', '2026-01') === 2);
 
   const D = (month, res, m = 0, t = 0) => ({ month, res, m, t });
@@ -267,6 +276,13 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('applyDuels: não mexe no histórico que recebeu', JSON.stringify(stepA.history) === JSON.stringify(rival.applyDuels({}, h6.slice(0, 2), { rivalKey: 'bia', sinceMonth: '2026-01' }).history));
   ad = rival.applyDuels({}, [D('2026-03', 'empate', 2, 2), D('2026-04', 'none')], { rivalKey: 'bia', sinceMonth: '2026-01' });
   check('applyDuels: empate e mês sem duelo não dão badge nenhuma', Object.keys(ad.gains).length === 0 && ad.history['2026-03'].res === 'empate');
+  ad = rival.applyDuels(H(['2026-01', 'aluno'], ['2026-02', 'aluno'], ['2026-03', 'aluno']), [D('2026-04', 'none')], { rivalKey: 'bia', sinceMonth: '2026-01' });
+  check('applyDuels: um mês sem duelo (none) depois de 3 derrotas não repete a Sombra do Rival', Object.keys(ad.gains).length === 0, ad.gains);
+  ad = rival.applyDuels(H(['2026-01', 'mao'], ['2026-02', 'mao']), [D('2026-03', 'mao', 3, 1)], { rivalKey: 'bia', sinceMonth: '2026-03' });
+  check('applyDuels: a sequência só vale a partir do mês do rival atual: 2 vitórias de antes e 1 agora não dão Dono do Rival', ad.gains.duelo_dono === undefined && ad.gains.duelo_mao === 1, ad.gains);
+  const full24 = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [`${2024 + Math.floor((i + 8) / 12)}-${String(((i + 8) % 12) + 1).padStart(2, '0')}`, { r: 'bia', res: 'none', m: 0, t: 0 }]));
+  ad = rival.applyDuels(full24, [D('2024-01', 'none')], { rivalKey: 'bia', sinceMonth: '2024-01' });
+  check('applyDuels: o corte dos 24 meses é por data, não por ordem de chegada: um mês antigo que chega depois de 24 mais novos é o que cai', Object.keys(ad.history).length === 24 && !('2024-01' in ad.history) && '2024-09' in ad.history && '2026-08' in ad.history, Object.keys(ad.history));
 
   // virada no número de conquistas
   const lead = (a, b) => rival.applyLead(a, b);
@@ -281,11 +297,13 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('monthsBetween: meses inteiros no calendário (de 20/07 a 20/10 são 3; um dia antes, 2)', rival.monthsBetween('2026-07-20T12:00:00.000Z', '2026-10-20T12:00:00.000Z') === 3 && rival.monthsBetween('2026-07-20T12:00:00.000Z', '2026-10-19T12:00:00.000Z') === 2 && rival.monthsBetween('2026-07-20T12:00:00.000Z', '2026-07-31T12:00:00.000Z') === 0);
   check('monthsBetween: atravessa o ano; datas inválidas ou invertidas dão zero', rival.monthsBetween('2025-11-10T00:00:00.000Z', '2026-02-10T00:00:00.000Z') === 3 && rival.monthsBetween('2025-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z') === 12 && rival.monthsBetween('lixo', '2026-01-01') === 0 && rival.monthsBetween('2026-01-01', 'lixo') === 0 && rival.monthsBetween('2026-10-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z') === 0);
   check('tenureAwards: 3, 6 e 12 meses dão as 3 badges de tempo', rival.tenureAwards('2026-01-10T00:00:00.000Z', '2026-04-09T00:00:00.000Z').length === 0 && rival.tenureAwards('2026-01-10T00:00:00.000Z', '2026-04-10T00:00:00.000Z').join() === 'rival_3m' && rival.tenureAwards('2026-01-10T00:00:00.000Z', '2026-07-10T00:00:00.000Z').join() === 'rival_3m,rival_6m' && rival.tenureAwards('2026-01-10T00:00:00.000Z', '2027-01-10T00:00:00.000Z').join() === 'rival_3m,rival_6m,rival_12m');
+  check('tenureAwards: com 5 meses só a de 3 (a de 6 pede 6 inteiros); com 11 meses as de 3 e 6 (a de 12 pede 12)', rival.tenureAwards('2026-01-10T00:00:00.000Z', '2026-06-10T00:00:00.000Z').join() === 'rival_3m' && rival.tenureAwards('2026-01-10T00:00:00.000Z', '2026-12-10T00:00:00.000Z').join() === 'rival_3m,rival_6m');
   check('tenureAwards: sem data do rival, nada', rival.tenureAwards('', '2026-10-10T00:00:00.000Z').length === 0 && rival.tenureAwards(undefined, '2026-10-10T00:00:00.000Z').length === 0);
 
   check('mergeAwards: soma os ganhos às contagens que já existem', JSON.stringify(rival.mergeAwards({ duelo_mao: 1, duelo_dono: 2 }, { duelo_mao: 2, duelo_trator: 1 })) === '{"duelo_mao":3,"duelo_dono":2,"duelo_trator":1}');
   check('mergeAwards: as badges de tempo valem uma vez (nunca somam nem diminuem)', JSON.stringify(rival.mergeAwards({ rival_3m: 1 }, {}, ['rival_3m', 'rival_6m'])) === '{"rival_3m":1,"rival_6m":1}' && JSON.stringify(rival.mergeAwards({ rival_3m: 4 }, {}, ['rival_3m'])) === '{"rival_3m":4}');
   check('mergeAwards: id desconhecido é ignorado; sem nada antes funciona; não mexe no que recebeu', JSON.stringify(rival.mergeAwards(undefined, { lixo: 3, duelo_mao: 1 }, ['lixo'])) === '{"duelo_mao":1}' && (() => { const a = { duelo_mao: 1 }; rival.mergeAwards(a, { duelo_mao: 5 }); return a.duelo_mao === 1; })());
+  check('mergeAwards: contagem guardada como texto soma como número ("2" + 1 = 3) e texto que não é número vira zero', JSON.stringify(rival.mergeAwards({ duelo_mao: '2' }, { duelo_mao: 1 })) === '{"duelo_mao":3}' && JSON.stringify(rival.mergeAwards({ duelo_mao: 'x' }, { duelo_mao: 1 })) === '{"duelo_mao":1}');
 
   // Alvo da Galera e Rivalidade Declarada
   const act = (...k) => new Set(k);
@@ -314,6 +332,7 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   const rn = rival.renameKeys(mapOf({ u1: { ownKey: 'ana', rivalKey: 'bia', since: 's', mutual: true, lead: 'mine', duels: { '2026-03': { r: 'bia', res: 'mao', m: 3, t: 1 } } }, u2: { ownKey: 'caio', rivalKey: 'ana', duels: {} }, u3: { ownKey: 'dani', rivalKey: 'bia', duels: { '2026-03': { r: 'ana', res: 'mao', m: 3, t: 1 } } }, u4: { ownKey: 'eli', rivalKey: 'bia', duels: {} } }), 'ana', 'ana2');
   check('renameKeys: troca o dono, o rival e o rival dentro do histórico, e devolve só quem mudou', Object.keys(rn).sort().join() === 'u1,u2,u3' && rn.u1.ownKey === 'ana2' && rn.u1.rivalKey === 'bia' && rn.u1.since === 's' && rn.u1.mutual === true && rn.u1.lead === 'mine' && rn.u2.rivalKey === 'ana2' && rn.u2.ownKey === 'caio' && rn.u3.duels['2026-03'].r === 'ana2' && rn.u3.duels['2026-03'].m === 3, rn);
   check('renameKeys: não mexe no documento original e aceita documento sem histórico', (() => { const orig = { ownKey: 'ana', rivalKey: 'bia' }; const m = mapOf({ u: orig }); const o = rival.renameKeys(m, 'ana', 'x'); return orig.ownKey === 'ana' && o.u.ownKey === 'x' && JSON.stringify(o.u.duels) === '{}'; })());
+  check('renameKeys: só os meses contra o jogador que mudou levam a chave nova; os outros meses (e as entradas vazias) ficam como estavam', (() => { const o = rival.renameKeys(mapOf({ u: { ownKey: 'caio', rivalKey: 'ana', duels: { '2026-02': { r: 'bia', res: 'mao', m: 3, t: 1 }, '2026-03': { r: 'ana', res: 'mao', m: 3, t: 1 }, '2026-04': null } } }), 'ana', 'ana2'); return o.u.duels['2026-02'].r === 'bia' && o.u.duels['2026-03'].r === 'ana2' && o.u.duels['2026-04'] === null; })());
 
   check('publicDoc: sem documento e sem marca, nada a gravar', rival.publicDoc(undefined, { alvo: false, declarada: false }) === null && rival.publicDoc(null, {}) === null);
   check('publicDoc: marca nova cria o documento com as contagens vazias', JSON.stringify(rival.publicDoc(undefined, { alvo: true, declarada: false })) === '{"awards":{},"alvo":true,"declarada":false}');
@@ -359,13 +378,19 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   res = await setR('u_bia', 'dani');
   check('setRival: conta que foi ligada a outro jogador recomeça do zero (sem o histórico do outro)', res.rivalKey === 'dani' && RV('u_bia').ownKey === 'bia' && JSON.stringify(RV('u_bia').duels) === '{}', RV('u_bia'));
   check('setRival: vínculo antigo no topo do cadastro também vale', await (async () => { store.set('users/u_top', { email: 't@x.com', role: 'pending', playerKey: 'eli', leagues: { L: { role: 'player' } } }); const r2 = await setR('u_top', 'bia'); return r2.rivalKey === 'bia' && RV('u_top').ownKey === 'eli'; })());
+  check('setRival: com os dois vínculos, vale o da liga (e não o do topo do cadastro)', await (async () => { store.set('users/u_dois', { email: 'd@x.com', role: 'pending', playerKey: 'eli', leagues: { L: { role: 'player', playerKey: 'caio' } } }); const r2 = await setR('u_dois', 'bia'); return r2.rivalKey === 'bia' && RV('u_dois').ownKey === 'caio'; })());
   check('setRival: admin também escolhe rival', (await setR('u_adm', 'bia')).rivalKey === 'bia' && RV('u_adm').ownKey === 'adm');
 
-  // limite de chamadas
+  // limite de chamadas: cada função tem o seu contador, e o limite é exato
   resetRival();
-  let limited = 'ok';
-  for (let i = 0; i < 21 && limited === 'ok'; i++) limited = await codeOf(setR('u_eli', i % 2 ? 'bia' : 'caio'));
-  check('setRival: passa de 20 chamadas por minuto → resource-exhausted (e quem não abusou continua podendo)', limited === 'resource-exhausted' && await codeOf(setR('u_bia', 'caio')) === 'ok');
+  const exhaust = async (make, max) => { const out = []; for (let i = 0; i < max + 1; i++) out.push(await codeOf(make(i))); return out; };
+  let codes = await exhaust(i => setR('u_eli', i % 2 ? 'bia' : 'caio'), 20);
+  check('setRival: 20 chamadas por minuto passam e a 21ª é recusada (resource-exhausted); quem não abusou continua podendo', codes.slice(0, 20).every(c => c === 'ok') && codes[20] === 'resource-exhausted' && await codeOf(setR('u_bia', 'caio')) === 'ok', codes);
+  check('limite: as 21 chamadas de setRival não gastaram o contador do progresso (cada função tem o seu)', await codeOf(prog('u_eli', {})) === 'ok');
+  codes = await exhaust(() => prog('u_ana', {}), 20);
+  check('progresso: 20 chamadas por minuto passam (aqui recusadas por falta de rival, depois de contar) e a 21ª é recusada por excesso', codes.slice(0, 20).every(c => c !== 'resource-exhausted') && codes[20] === 'resource-exhausted', codes);
+  codes = await exhaust(() => syncR('u_adm', { liga: 'L' }), 30);
+  check('syncRivals: 30 chamadas por minuto passam e a 31ª é recusada', codes.slice(0, 30).every(c => c === 'ok') && codes[30] === 'resource-exhausted', codes);
 
   // Rivalidade Declarada
   resetRival();
@@ -428,6 +453,9 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   const s2 = snapshot();
   let pr = await prog('u_ana', {});
   check('progresso: chamada vazia não grava nada', pr.ok === true && pr.accepted.length === 0 && pr.skipped === 0 && JSON.stringify(pr.gains) === '{}' && snapshot() === s2, pr);
+  const w0 = txSets;
+  await prog('u_ana', {});
+  check('progresso: a chamada vazia também não faz escrita nenhuma no banco (nem regrava o que já está igual)', txSets === w0, [txSets, w0]);
   check('progresso: duelos em formato errado', await codeOf(prog('u_ana', { duels: 'x' })) === 'invalid-argument' && await codeOf(prog('u_ana', { duels: [{ month: 'x', res: 'none' }] })) === 'invalid-argument' && await codeOf(prog('u_ana', { duels: [{ month: monthAgo(3), res: 'trator', m: 1, t: 1 }] })) === 'invalid-argument' && /não bate/.test(await msgOf(prog('u_ana', { duels: [{ month: monthAgo(3), res: 'trator', m: 1, t: 1 }] }))));
   check('progresso: 13 duelos de uma vez', await codeOf(prog('u_ana', { duels: Array.from({ length: 13 }, (_, i) => ({ month: monthAgo(i + 1), res: 'none' })) })) === 'invalid-argument');
   check('progresso: nada foi gravado pelas recusas', snapshot() === s2);
@@ -460,6 +488,9 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   check('virada: o rival estava na frente e eu passei → Passou o Rival', RV('u_dani').lead === 'mine' && pr.gains.rival_passou === 1 && PUB('dani').awards.rival_passou === 1, [pr, PUB('dani')]);
   pr = await prog('u_dani', { lead: 'mine' });
   check('virada: continuar na frente não dá nada', JSON.stringify(pr.gains) === '{}' && PUB('dani').awards.rival_passou === 1);
+  const w2 = txSets;
+  await prog('u_dani', { lead: 'mine' });
+  check('virada: repetir a mesma virada não faz escrita nenhuma', txSets === w2, [txSets, w2]);
   pr = await prog('u_dani', { lead: 'theirs' });
   check('virada: o rival passou → Levou a Ultrapassada', RV('u_dani').lead === 'theirs' && pr.gains.rival_ultrapassada === 1 && PUB('dani').awards.rival_ultrapassada === 1, [pr, PUB('dani')]);
   pr = await prog('u_dani', { lead: 'lixo' });
@@ -474,6 +505,9 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   const s4 = snapshot();
   pr = await prog('u_eli', { tenure: true });
   check('tempo: repetir não soma nem grava de novo', snapshot() === s4 && PUB('eli').awards.rival_3m === 1);
+  const w3 = txSets;
+  await prog('u_eli', { tenure: true });
+  check('tempo: repetir não faz escrita nenhuma no banco', txSets === w3, [txSets, w3]);
   seedRival('u_eli', 'eli', 'ana', 13);
   await prog('u_eli', { tenure: true });
   check('tempo: 13 meses dão também a Rivalidade Histórica (12)', PUB('eli').awards.rival_12m === 1 && PUB('eli').awards.rival_6m === 1);
@@ -486,12 +520,31 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   await prog('u_adm', { tenure: true });
   check('tempo: com 1 mês de rival ainda não há badge', !PUB('adm'));
 
+  // o mês de hoje é o do horário de Brasília (UTC−3): 22h do dia 31 em Brasília já é dia 1 em UTC
+  resetRival();
+  seedRival('u_ana', 'ana', 'bia', 8, { since: '2026-08-15T12:00:00.000Z' });
+  const realNow = Date.now;
+  Date.now = () => Date.parse('2026-11-01T01:00:00.000Z'); // 31/10 às 22h em Brasília
+  try { pr = await prog('u_ana', { duels: [{ month: '2026-09', res: 'none' }, { month: '2026-10', res: 'none' }] }); } finally { Date.now = realNow; }
+  check('progresso: o mês de hoje é o de Brasília: às 22h de 31/10 (01h de 1/11 em UTC) outubro ainda não fechou; só setembro entra', pr.accepted.join() === '2026-09' && pr.skipped === 1, pr);
+  Date.now = () => Date.parse('2026-11-01T03:00:00.000Z'); // 1/11 à 0h em Brasília
+  try { pr = await prog('u_ana', { duels: [{ month: '2026-10', res: 'none' }] }); } finally { Date.now = realNow; }
+  check('…e à meia-noite de Brasília (03h em UTC) outubro já fechou e entra', pr.accepted.join() === '2026-10' && pr.skipped === 0, pr);
+
+  // a sequência atravessa as chamadas: o histórico que já está guardado conta
+  resetRival();
+  seedRival('u_ana', 'ana', 'bia', 8);
+  await prog('u_ana', { duels: [{ month: monthAgo(4), res: 'mao', m: 3, t: 1 }, { month: monthAgo(3), res: 'mao', m: 3, t: 1 }] });
+  check('progresso: dois duelos ganhos ainda não dão o Dono do Rival', PUB('ana').awards.duelo_mao === 2 && !PUB('ana').awards.duelo_dono, PUB('ana'));
+  pr = await prog('u_ana', { duels: [{ month: monthAgo(2), res: 'mao', m: 3, t: 1 }] });
+  check('progresso: o terceiro, mandado numa chamada seguinte, completa a sequência e dá o Dono do Rival (o histórico guardado conta)', pr.gains.duelo_dono === 1 && PUB('ana').awards.duelo_dono === 1 && PUB('ana').awards.duelo_mao === 3, [pr, PUB('ana')]);
+
   // as marcas do servidor não se perdem quando o app grava as contagens
   resetRival();
   await setR('u_ana', 'dani'); await setR('u_bia', 'dani'); await setR('u_caio', 'dani'); await setR('u_dani', 'ana'); await setR('u_ana', 'dani');
   store.set('leagues/L/rivals/u_dani', { ...RV('u_dani'), since: sinceOf(8) });
   await prog('u_dani', { duels: [{ month: monthAgo(2), res: 'mao', m: 3, t: 1 }] });
-  check('progresso: gravar as contagens mantém Alvo da Galera (marca do servidor)', PUB('dani').alvo === true && PUB('dani').awards.duelo_mao === 1, PUB('dani'));
+  check('progresso: gravar as contagens mantém as marcas do servidor (Alvo da Galera e Rivalidade Declarada)', PUB('dani').alvo === true && PUB('dani').declarada === true && PUB('dani').awards.duelo_mao === 1, PUB('dani'));
   await setR('u_bia', 'eli');
   check('setRival: …e as contagens que o app gravou não se perdem quando o servidor mexe nas marcas', PUB('dani').alvo === false && PUB('dani').awards.duelo_mao === 1, PUB('dani'));
 
@@ -572,6 +625,23 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   await syncR('u_adm', { liga: 'L', rename: { from: 'bia', to: 'bianca' } });
   check('renomear: repetir não muda o banco', snapshot() === s5);
 
+  // só o cadastro público (ninguém tem rival escolhido agora, mas há badges do rival guardadas): renomear e anonimizar ainda levam as badges
+  resetRival();
+  store.set('leagues/L/rival_public/bia', { awards: { duelo_mao: 2 }, alvo: false, declarada: false });
+  store.set(REG + 'bianca', { name: 'Bianca', added: '2026-01-01', active: true });
+  sy = await syncR('u_adm', { liga: 'L', rename: { from: 'bia', to: 'bianca' } });
+  check('renomear: com badges do rival guardadas e NENHUMA escolha de rival, elas passam para a chave nova', sy.changed === true && !PUB('bia') && PUB('bianca').awards.duelo_mao === 2, [sy, PUB('bianca')]);
+  resetRival();
+  store.set('leagues/L/rival_public/bia', { awards: { duelo_mao: 2 }, alvo: false, declarada: false });
+  const am4 = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_bia'));
+  check('anonimizar: com badges do rival guardadas e NENHUMA escolha de rival, elas passam para a chave nova', am4.ok === true && !PUB('bia') && PUB(am4.newKey).awards.duelo_mao === 2, [am4, PUB(am4.newKey)]);
+  resetRival();
+  store.set('leagues/L/rival_public/bia', { awards: { duelo_mao: 2 }, alvo: false, declarada: false });
+  store.set('leagues/L/rival_public/bianca', { awards: { duelo_mao: 1, rival_3m: 1 }, alvo: false, declarada: false });
+  store.set(REG + 'bianca', { name: 'Bianca', added: '2026-01-01', active: true });
+  await syncR('u_adm', { liga: 'L', rename: { from: 'bia', to: 'bianca' } });
+  check('renomear para uma chave que já tem badges do rival: as contagens se somam (2 + 1 = 3) e as outras ficam', PUB('bianca').awards.duelo_mao === 3 && PUB('bianca').awards.rival_3m === 1 && !PUB('bia'), PUB('bianca'));
+
   // anonimizar o nome
   await seedHooks();
   seedRival('u_dani', 'dani', 'bia', 8, { duels: { [monthAgo(3)]: { r: 'bia', res: 'mao', m: 3, t: 1 } } });
@@ -582,8 +652,9 @@ const seedRival = (uid, ownKey, rivalKey, monthsAgo = 8, extra = {}) => store.se
   const am2 = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_bia'));
   check('anonimizar: repetir não quebra nem muda', am2.ok === true && RV('u_bia').ownKey === nk && PUB(nk).awards.duelo_mao === 2);
   resetRival();
+  rivalFullReads = 0;
   const am3 = await call(fns.anonymizeMyName, { liga: 'L' }, authOf('u_bia'));
-  check('anonimizar numa liga SEM escolhas de rival: funciona e não cria documento nenhum do rival', am3.ok === true && ![...store.keys()].some(k => k.includes('/rivals/') || k.includes('/rival_public/')));
+  check('anonimizar numa liga SEM escolhas de rival: funciona, não cria documento nenhum do rival e nem lê as escolhas da liga toda (só a sondagem de uma)', am3.ok === true && ![...store.keys()].some(k => k.includes('/rivals/') || k.includes('/rival_public/')) && rivalFullReads === 0, rivalFullReads);
 
   // outra liga não é tocada
   resetRival();

@@ -1178,7 +1178,7 @@ exports.saveRivalProgress = onCall(CALLABLE, async request => {
     if (!parsed.ok) throw fail("invalid-argument", RIVAL_REASONS[parsed.reason] || "Duelos inválidos.");
     const applied = rivalLib.applyDuels(cur.duels || {}, parsed.accepted, { rivalKey: cur.rivalKey, sinceMonth });
     const gains = { ...applied.gains };
-    const lead = request.data?.lead === undefined ? { lead: cur.lead || "", gain: null } : rivalLib.applyLead(cur.lead, request.data.lead);
+    const lead = rivalLib.applyLead(cur.lead, request.data?.lead);
     if (lead.gain) gains[lead.gain] = (gains[lead.gain] || 0) + 1;
     const once = request.data?.tenure === true ? rivalLib.tenureAwards(cur.since, nowIso) : [];
     const before = pubSnap.data() || null;
