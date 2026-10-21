@@ -11,7 +11,7 @@ const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
-const { syncEmailCopies, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage } = require("./account-email");
+const { syncEmailCopies, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, changeNoticeMessage } = require("./account-email");
 const starVotes = require("./star-votes");
 const rivalLib = require("./rival");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
@@ -1335,6 +1335,7 @@ exports.syncMyEmail = onCall(CALLABLE, async request => {
 // link que abre o app; o app aplica o código e o Firebase troca o login e encerra as sessões (ver o porquê em functions/account-email.js). Exige login RECENTE
 // (a senha digitada agora), só vale para quem entra com e-mail e senha ou pelo link do e-mail (não para o Google nem para o dono do sistema) e nunca devolve o
 // link ao app nem conta o que descobriu: se o e-mail novo já tem conta, responde ok e não manda nada (senão a função serviria para descobrir quem tem cadastro).
+// Depois do e-mail novo manda um AVISO ao e-mail ATUAL (o antigo), para quem é dono da conta saber do pedido antes de a troca valer; o aviso é um reforço: se não sair, o pedido segue.
 exports.requestEmailChange = onCall({ ...CALLABLE, secrets: [RESEND_API_KEY] }, async request => {
   const auth = requireAuth(request);
   await checkRateLimit(auth.uid, "requestEmailChange", 5);
@@ -1383,7 +1384,10 @@ exports.requestEmailChange = onCall({ ...CALLABLE, secrets: [RESEND_API_KEY] }, 
   if (!(await sendResendEmail({ to: [parsed.email], subject, html, text }))) {
     throw fail("unavailable", "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.");
   }
-  logger.info("requestEmailChange: e-mail de confirmação enviado"); // sem o endereço nem o código no registro
+  const notice = changeNoticeMessage({ newEmail: parsed.email, contactEmail: CONTACT_EMAIL });
+  const noticeSent = await sendResendEmail({ to: [current], subject: notice.subject, html: notice.html, text: notice.text }); // só depois de o link ter ido ao e-mail novo
+  if (noticeSent) logger.info("requestEmailChange: e-mail de confirmação e aviso ao e-mail atual enviados"); // sem os endereços nem o código no registro
+  else logger.warn("requestEmailChange: e-mail de confirmação enviado, mas o aviso ao e-mail atual não saiu");
   return { ok: true };
 });
 

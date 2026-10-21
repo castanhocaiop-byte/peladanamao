@@ -17,6 +17,9 @@
 // tipo de link ("The selected page mode is invalid") e o remetente é noreply@<projeto>.firebaseapp.com. Então o servidor gera o código de troca do
 // Firebase (generateVerifyAndChangeEmailLink) e manda, pelo Resend e com o remetente "Pelada na Mão", um link que abre o PRÓPRIO app; o app aplica o
 // código (applyActionCode) e o Firebase troca o e-mail do login. O código nunca volta para o app: só chega por quem abre o e-mail novo.
+// Junto com o e-mail novo o servidor manda um AVISO ao e-mail ATUAL (o antigo), para quem é dono da conta saber do pedido antes de a troca valer (no teste de
+// 21/10/2026 o endereço antigo não recebeu nada do Firebase). O aviso não tem link nem botão (nada nele confirma ou cancela a troca) e mostra o endereço novo
+// escondido pela metade.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;   // o mesmo teste do app (emailChangeProblem)
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -58,6 +61,33 @@ function changeEmailMessage({ url, contactEmail }) {
   return { subject, html, text };
 }
 
+// O endereço escondido pela metade, para o aviso ao e-mail antigo: a 1ª letra, "***" e o domínio ("novo@exemplo.com" → "n***@exemplo.com").
+function maskEmail(email) {
+  const s = String(email == null ? "" : email).trim();
+  const at = s.lastIndexOf("@");
+  if (at < 1) return "***";
+  return `${Array.from(s.slice(0, at))[0]}***${s.slice(at)}`;
+}
+
+// O aviso ao e-mail ATUAL de que pediram a troca: assunto, HTML e texto simples. `newEmail` é o endereço novo (sai escondido pela metade) e `contactEmail` o contato do suporte.
+// Sem link e sem botão: quem recebe só fica sabendo, e a resposta ao aviso chega ao suporte.
+function changeNoticeMessage({ newEmail, contactEmail }) {
+  const subject = "Pediram para trocar o e-mail de login da sua conta no Pelada na Mão";
+  const paragraphs = [
+    `Recebemos um pedido para trocar o e-mail de login da sua conta no Pelada na Mão para ${maskEmail(newEmail)}.`,
+    "Nada mudou ainda: a troca só vale se o link enviado a esse endereço novo for aberto. Se foi você que pediu, não precisa fazer nada neste e-mail.",
+  ];
+  const ifNotYou = `Não foi você? Escreva agora para ${contactEmail} (ou responda este e-mail), contando o que aconteceu, e troque a sua senha: na tela de entrada, toque em “Esqueci minha senha”.`;
+  const footer = `Você recebe este aviso por ser o e-mail de login desta conta. Dúvidas: ${contactEmail}`;
+  const html = [
+    ...paragraphs.map(p => `<p style="margin:0 0 14px;line-height:1.55">${escapeHtml(p)}</p>`),
+    `<p style="margin:0 0 14px;line-height:1.55;font-weight:700">${escapeHtml(ifNotYou)}</p>`,
+    `<p style="margin:0;color:#6b7280;font-size:12px;line-height:1.5">${escapeHtml(footer)}</p>`,
+  ].join("");
+  const text = [...paragraphs, ifNotYou, footer].join("\n\n");
+  return { subject, html, text };
+}
+
 const LEAGUE_ID_RE = /^[A-Za-z0-9_-]{1,60}$/;   // o mesmo de index.js (aceita os ids antigos de liga)
 
 // Põe `email` (o do login, já lido do Firebase Auth) no cadastro e nos pedidos de vínculo pendentes das ligas da conta.
@@ -84,4 +114,4 @@ async function syncEmailCopies(db, uid, email) {
   return { userDoc: true, changed, linkRequests };
 }
 
-module.exports = { syncEmailCopies, LEAGUE_ID_RE, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage };
+module.exports = { syncEmailCopies, LEAGUE_ID_RE, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, maskEmail, changeNoticeMessage };
