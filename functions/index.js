@@ -12,6 +12,8 @@ const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
 const { syncEmailCopies } = require("./account-email");
+const starVotes = require("./star-votes");
+const rivalLib = require("./rival");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
 const { FieldValue, FieldPath } = require("firebase-admin/firestore");
 
@@ -620,6 +622,8 @@ exports.leaveLeague = onCall(CALLABLE, async request => {
   }
 
   await userRef.update(new FieldPath("leagues", liga), FieldValue.delete());
+  await dropStarVotes(liga, auth.uid); // quem sai leva as notas de estrelas que deu
+  await dropRival(liga, auth.uid); // e a escolha do rival (o que ela já ganhou nas badges do rival fica no jogador)
   return { ok: true };
 });
 
@@ -684,6 +688,10 @@ exports.manageMember = onCall(CALLABLE, async request => {
     default:
       throw fail("invalid-argument", "Ação inválida.");
   }
+  // As notas de estrelas que a conta deu valem como o jogador a que ela está ligada: recusada ou ligada a outro jogador, perde as notas.
+  // O mesmo vale para a escolha do rival: ela é do jogador a que a conta está ligada.
+  if (action === "reject") { await dropStarVotes(liga, targetUid); await dropRival(liga, targetUid); }
+  else if (action === "link" || (action === "linkRequest" && request.data?.approve === true && key)) { await dropStarVotes(liga, targetUid, key); await dropRival(liga, targetUid, key); }
   return { ok: true };
 });
 
@@ -862,6 +870,353 @@ exports.saveEarnedBadges = onCall(CALLABLE, async request => {
   return { ok: true };
 });
 
+// ── Estrelas pela média do grupo (item 35) ───────────────────────────────────
+//
+// Quando o admin liga "Estrelas pela média do grupo", cada jogador dá de 1 a 5 estrelas aos outros e a média passa a valer no
+// sorteio. As notas são ANÔNIMAS: ficam em leagues/{liga}/star_votes/{uid}, que nenhuma conta lê além da dona (ver
+// firestore.rules), e só aparece a média, publicada no cadastro do jogador (starsVotes e starsAvg). A conta toda está em
+// star-votes.js; aqui fica a parte que mexe no banco.
+
+// Lê o elenco e as notas da liga numa transação, deixa `mutate` trocar as notas (devolve { votes: { [uid]: documento | null },
+// result }) e grava as notas e a média publicada no cadastro dos jogadores juntas: dois votos ao mesmo tempo não se perdem.
+async function starTransaction(liga, mutate) {
+  const base = `leagues/${liga}`;
+  return db.runTransaction(async tx => {
+    const [regSnap, votesSnap] = await Promise.all([
+      tx.get(db.collection(`${base}/player_registry`)),
+      tx.get(db.collection(`${base}/star_votes`)),
+    ]);
+    const registry = new Map(regSnap.docs.map(d => [d.id, d.data()]));
+    const voters = new Map(votesSnap.docs.map(d => [d.id, d.data()]));
+    const out = mutate({ registry, voters }) || {};
+    const changes = out.votes || {};
+    for (const [uid, doc] of Object.entries(changes)) {
+      if (doc === null) voters.delete(uid); else voters.set(uid, doc);
+    }
+    const patches = starVotes.publishPatches(registry, [...voters].map(([uid, d]) => ({ uid, ...d })));
+    for (const [uid, doc] of Object.entries(changes)) {
+      const ref = db.doc(`${base}/star_votes/${uid}`);
+      if (doc === null) tx.delete(ref); else tx.set(ref, doc);
+    }
+    for (const [key, patch] of patches) {
+      const fields = {};
+      for (const [field, value] of Object.entries(patch)) fields[field] = value === null ? FieldValue.delete() : value;
+      tx.update(db.doc(`${base}/player_registry/${key}`), fields);
+    }
+    return out.result;
+  });
+}
+
+// Quem sai da liga, é recusado, é ligado a outro jogador ou apaga a conta leva as notas que deu, e a média dos outros é refeita sem
+// elas. `exceptKey`: se a conta foi ligada ao MESMO jogador de antes, as notas continuam valendo. Sem nota guardada, não faz nada.
+async function dropStarVotes(liga, uid, exceptKey = "") {
+  const snap = await db.doc(`leagues/${liga}/star_votes/${uid}`).get();
+  if (!snap.exists || (exceptKey && snap.data()?.voterKey === exceptKey)) return;
+  await starTransaction(liga, ({ voters }) => (voters.has(uid) ? { votes: { [uid]: null } } : {}));
+}
+
+// O jogador mudou de chave (renomear no elenco, anonimizar o nome): as notas dadas por ele e a ele passam para a chave nova.
+async function migrateStarVotes(liga, from, to) {
+  const any = await db.collection(`leagues/${liga}/star_votes`).limit(1).get();
+  if (!any.size) return; // nenhuma nota nesta liga (quase todas): nada a mudar
+  await starTransaction(liga, ({ voters }) => ({ votes: starVotes.renameKey(voters, from, to) }));
+}
+
+const STAR_REASONS = {
+  shape: "Notas inválidas.",
+  empty: "Nenhuma nota enviada.",
+  "too-many": "Notas demais de uma vez.",
+  key: "Jogador inválido.",
+  value: "Cada nota deve ser de 1 a 5 estrelas.",
+};
+
+// Dar, trocar ou tirar as notas de quem chama. { liga, ratings: { [chave do jogador]: 1..5 | null } } (só o que mudou).
+exports.ratePlayers = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "ratePlayers", 30);
+  const liga = leagueIdOf(request.data);
+  const user = (await db.doc(`users/${auth.uid}`).get()).data() || {};
+  const entry = user.leagues?.[liga];
+  if (entry?.role !== "admin" && entry?.role !== "player") throw fail("permission-denied", "Você não participa desta liga.");
+  const voterKey = String(entry.playerKey || user.playerKey || "");
+  if (!PLAYER_KEY_RE.test(voterKey)) throw fail("failed-precondition", "Sua conta não está vinculada a um jogador desta liga.");
+  const cfg = (await db.doc(`leagues/${liga}/app_config/main`).get()).data() || {};
+  if (cfg.peerStars !== true) throw fail("failed-precondition", "A avaliação pelo grupo está desligada nesta liga.");
+
+  const now = new Date().toISOString();
+  return starTransaction(liga, ({ registry, voters }) => {
+    if (!registry.has(voterKey)) throw fail("failed-precondition", "Seu jogador não está no elenco desta liga.");
+    const registryKeys = new Set(registry.keys());
+    const parsed = starVotes.parseRatings(request.data?.ratings, { voterKey, registryKeys });
+    if (!parsed.ok) throw fail("invalid-argument", STAR_REASONS[parsed.reason] || "Notas inválidas.");
+    const ratings = starVotes.applyRatings(voters.get(auth.uid)?.ratings, parsed, { voterKey, registryKeys });
+    const total = Object.keys(ratings).length;
+    return {
+      votes: { [auth.uid]: total ? { voterKey, ratings, updatedAt: now } : null },
+      result: { ok: true, total, saved: Object.keys(parsed.set).length, removed: parsed.remove.length, ignored: parsed.ignored },
+    };
+  });
+});
+
+// Refaz a média das estrelas da liga e, se vier { rename: { from, to } }, leva as notas do jogador que mudou de chave para a chave
+// nova (o app chama depois de renomear ou de remover um jogador do elenco). Só admin da liga.
+exports.syncStarVotes = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "syncStarVotes", 30);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+  const rename = request.data?.rename;
+  let from = "", to = "";
+  if (rename !== undefined && rename !== null) {
+    from = idText(rename?.from, 100);
+    to = idText(rename?.to, 100);
+    if (!PLAYER_KEY_RE.test(from) || !PLAYER_KEY_RE.test(to) || from === to) throw fail("invalid-argument", "Jogador inválido.");
+  }
+  const any = await db.collection(`leagues/${liga}/star_votes`).limit(1).get();
+  if (!any.size) return { ok: true, changed: false }; // sem nenhuma nota guardada não há o que refazer
+  await starTransaction(liga, ({ voters }) => (from ? { votes: starVotes.renameKey(voters, from, to) } : {}));
+  return { ok: true, changed: true };
+});
+
+// Chamada do admin para o grupo avaliar o elenco: um aviso no celular (push) para quem pode avaliar e o convite dentro do app
+// (starsCallAt e starsCallBy em app_config/main: é o que o app lê para mostrar o banner, e o toque na notificação abre o app nesse
+// banner). Recebe quem é membro (admin ou jogador) com a conta ligada a um jogador que está no elenco, menos quem chamou. No máximo
+// uma chamada por liga a cada STAR_CALL_COOLDOWN_MS, para ninguém ser incomodado em dobro: o controle fica em rate_limits, que só
+// o servidor lê. Se o envio falhar, nada é gravado (o admin pode tentar de novo na hora).
+const STAR_CALL_COOLDOWN_MS = 6 * 3600 * 1000;
+
+exports.notifyStarRatings = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "notifyStarRatings", 10);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+
+  const cfgRef = db.doc(`leagues/${liga}/app_config/main`);
+  const cfg = (await cfgRef.get()).data() || {};
+  if (cfg.peerStars !== true) throw fail("failed-precondition", "Ligue as estrelas pela média do grupo antes de chamar o grupo para avaliar.");
+
+  const coolRef = db.doc(`rate_limits/${liga}_starsCall`);
+  const last = Number((await coolRef.get()).data()?.at) || 0;
+  const now = Date.now();
+  if (now - last < STAR_CALL_COOLDOWN_MS) {
+    const minutes = Math.ceil((last + STAR_CALL_COOLDOWN_MS - now) / 60000);
+    const wait = minutes >= 60 ? `${Math.ceil(minutes / 60)} h` : `${minutes} min`;
+    throw fail("resource-exhausted", `O grupo já foi chamado há pouco. Dá para chamar de novo daqui a ${wait}.`);
+  }
+
+  const [users, registry, league] = await Promise.all([
+    db.collection("users").where(new FieldPath("leagues", liga, "role"), "in", ["admin", "player"]).get(),
+    db.collection(`leagues/${liga}/player_registry`).get(),
+    db.doc(`leagues/${liga}`).get(),
+  ]);
+  const keys = new Set(registry.docs.map(d => d.id));
+  const raters = users.docs.filter(d => {
+    if (d.id === auth.uid) return false;
+    const u = d.data() || {};
+    const key = String(u.leagues?.[liga]?.playerKey || u.playerKey || "");
+    return keys.has(key);
+  });
+  const withPush = raters.filter(d => (d.data().fcmTokens || []).length > 0);
+  const tokens = [...new Set(withPush.flatMap(d => d.data().fcmTokens || []))];
+  const leagueName = league.data()?.name || "Pelada na Mão";
+  try {
+    await sendToTokens(tokens, { title: `⭐ Avalie o elenco — ${leagueName}`, body: "Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio." },
+      { leagueId: liga, view: "eu" }, `estrelas-${liga}`);
+  } catch (e) {
+    logger.error("notifyStarRatings: o envio do aviso falhou", { liga, code: e?.code });
+    throw fail("unavailable", "Não foi possível enviar o aviso agora. Tente de novo em alguns minutos.");
+  }
+  await cfgRef.update({ starsCallAt: new Date(now).toISOString(), starsCallBy: auth.uid });
+  await coolRef.set({ at: now });
+  return { ok: true, recipients: raters.length, withPush: withPush.length };
+});
+
+// ── Rival (item 36) ──────────────────────────────────────────────────────────
+//
+// O jogador escolhe um rival na liga. A escolha fica em leagues/{liga}/rivals/{uid}: só a própria conta lê e só o servidor grava (ver
+// firestore.rules). O que a liga toda vê fica em leagues/{liga}/rival_public/{chave do jogador}: as badges do rival que o jogador já
+// ganhou e as marcas "Alvo da Galera", "Inimigo Público" e "Rivalidade Declarada", que SÓ esta parte calcula, sem mostrar quem escolheu quem. As contas
+// estão em rival.js; aqui fica a parte que mexe no banco.
+
+// Lê o elenco, as escolhas de rival e o cadastro público da liga numa transação, deixa `mutate` trocar documentos (devolve
+// { rivals: { [uid]: documento | null }, pub: { [chave]: documento | null }, result }) e, antes de gravar, refaz as marcas: "mutual" em cada
+// escolha e alvo/publico/declarada no cadastro público. Duas escolhas ao mesmo tempo não se perdem (a transação repete).
+async function rivalTransaction(liga, mutate) {
+  const base = `leagues/${liga}`;
+  return db.runTransaction(async tx => {
+    const [regSnap, rivalsSnap, pubSnap] = await Promise.all([
+      tx.get(db.collection(`${base}/player_registry`)),
+      tx.get(db.collection(`${base}/rivals`)),
+      tx.get(db.collection(`${base}/rival_public`)),
+    ]);
+    const registry = new Map(regSnap.docs.map(d => [d.id, d.data()]));
+    const rivals = new Map(rivalsSnap.docs.map(d => [d.id, d.data()]));
+    const pub = new Map(pubSnap.docs.map(d => [d.id, d.data()]));
+    const out = mutate({ registry, rivals, pub }) || {};
+    const touchedRivals = new Set(), touchedPub = new Set();
+    for (const [uid, doc] of Object.entries(out.rivals || {})) {
+      if (doc === null) rivals.delete(uid); else rivals.set(uid, doc);
+      touchedRivals.add(uid);
+    }
+    for (const [key, doc] of Object.entries(out.pub || {})) {
+      if (doc === null) pub.delete(key); else pub.set(key, doc);
+      touchedPub.add(key);
+    }
+    const active = new Set([...registry].filter(([, r]) => r && r.active !== false).map(([key]) => key));
+    const flags = rivalLib.computeFlags([...rivals].map(([uid, d]) => ({ uid, ownKey: d.ownKey, rivalKey: d.rivalKey })), active);
+    for (const [uid, d] of [...rivals]) {
+      const mutual = flags.mutualUids.has(uid);
+      if ((d.mutual === true) !== mutual) { rivals.set(uid, { ...d, mutual }); touchedRivals.add(uid); }
+    }
+    for (const key of new Set([...pub.keys(), ...flags.alvo, ...flags.declarada])) {
+      const doc = rivalLib.publicDoc(pub.get(key), { alvo: flags.alvo.has(key), publico: flags.publico.has(key), declarada: flags.declarada.has(key) });
+      if (doc) { pub.set(key, doc); touchedPub.add(key); }
+    }
+    for (const uid of touchedRivals) {
+      const ref = db.doc(`${base}/rivals/${uid}`), doc = rivals.get(uid);
+      if (doc) tx.set(ref, doc); else tx.delete(ref);
+    }
+    for (const key of touchedPub) {
+      const ref = db.doc(`${base}/rival_public/${key}`), doc = pub.get(key);
+      if (doc) tx.set(ref, doc); else tx.delete(ref);
+    }
+    return { result: out.result, rivals, pub };
+  });
+}
+
+// Quem sai da liga, é recusado, é ligado a outro jogador ou apaga a conta leva a escolha de rival (o que ela já ganhou nas badges do rival
+// fica no cadastro público do jogador). `exceptKey`: se a conta foi ligada ao MESMO jogador de antes, a escolha continua valendo.
+async function dropRival(liga, uid, exceptKey = "") {
+  const snap = await db.doc(`leagues/${liga}/rivals/${uid}`).get();
+  if (!snap.exists || (exceptKey && snap.data()?.ownKey === exceptKey)) return;
+  await rivalTransaction(liga, ({ rivals }) => (rivals.has(uid) ? { rivals: { [uid]: null } } : {}));
+}
+
+// O jogador mudou de chave (renomear no elenco, anonimizar o nome): as escolhas dele, as que apontam para ele e as badges do rival passam
+// para a chave nova.
+async function migrateRivals(liga, from, to) {
+  const [anyRival, anyPub] = await Promise.all([
+    db.collection(`leagues/${liga}/rivals`).limit(1).get(),
+    db.collection(`leagues/${liga}/rival_public`).limit(1).get(),
+  ]);
+  if (!anyRival.size && !anyPub.size) return; // ninguém usa o rival nesta liga (quase todas): nada a mudar
+  await rivalTransaction(liga, ({ rivals, pub }) => moveRivalKey(rivals, pub, from, to));
+}
+
+function moveRivalKey(rivals, pub, from, to) {
+  const out = { rivals: rivalLib.renameKeys(rivals, from, to) };
+  if (pub.has(from)) {
+    const moved = pub.get(from), target = pub.get(to);
+    out.pub = { [from]: null, [to]: { awards: rivalLib.mergeAwards(target?.awards, moved.awards), alvo: false, publico: false, declarada: false } };
+  }
+  return out;
+}
+
+// A conta de quem chama: membro da liga (admin ou jogador) com o jogador vinculado a ela. Devolve a chave do jogador.
+async function rivalOwnKey(auth, liga) {
+  const user = (await db.doc(`users/${auth.uid}`).get()).data() || {};
+  const entry = user.leagues?.[liga];
+  if (entry?.role !== "admin" && entry?.role !== "player") throw fail("permission-denied", "Você não participa desta liga.");
+  const ownKey = String(entry.playerKey || user.playerKey || "");
+  if (!PLAYER_KEY_RE.test(ownKey)) throw fail("failed-precondition", "Sua conta não está vinculada a um jogador desta liga.");
+  return ownKey;
+}
+
+// Escolher, trocar ou tirar o rival de quem chama. { liga, rivalKey } (rivalKey vazio = sem rival). Trocar de rival recomeça o tempo
+// com ele (since), a sequência e a virada; os meses de duelo já fechados ficam guardados. Escolher o mesmo rival de novo não muda nada.
+exports.setRival = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "setRival", 20);
+  const liga = leagueIdOf(request.data);
+  const raw = request.data?.rivalKey;
+  const rivalKey = raw === undefined || raw === null || raw === "" ? "" : idText(raw, 100);
+  if (raw !== undefined && raw !== null && raw !== "" && (!rivalKey || !PLAYER_KEY_RE.test(rivalKey))) throw fail("invalid-argument", "Jogador inválido.");
+  const ownKey = await rivalOwnKey(auth, liga);
+  const now = new Date().toISOString();
+  const done = await rivalTransaction(liga, ({ registry, rivals }) => {
+    if (!registry.has(ownKey)) throw fail("failed-precondition", "Seu jogador não está no elenco desta liga.");
+    if (rivalKey) {
+      if (rivalKey === ownKey) throw fail("invalid-argument", "Você não pode ser o seu próprio rival.");
+      const target = registry.get(rivalKey);
+      if (!target || target.active === false) throw fail("failed-precondition", "Esse jogador não está ativo no elenco desta liga.");
+    }
+    const cur = rivals.get(auth.uid);
+    const mine = cur && cur.ownKey === ownKey ? cur : null; // conta ligada a outro jogador depois: recomeça do zero
+    if ((mine?.rivalKey || "") === rivalKey && (mine || !rivalKey)) return {}; // nada muda
+    const doc = { ownKey, rivalKey, since: rivalKey ? now : "", mutual: false, lead: "", duels: mine?.duels || {} };
+    return { rivals: { [auth.uid]: doc } };
+  });
+  const doc = done.rivals.get(auth.uid);
+  return { ok: true, rivalKey: doc?.rivalKey || "", since: doc?.since || "", mutual: doc?.mutual === true };
+});
+
+const RIVAL_REASONS = {
+  shape: "Duelos inválidos.",
+  "too-many": "Duelos demais de uma vez.",
+  result: "O resultado do duelo não bate com os números.",
+};
+
+// O app manda o que só ele sabe (tem os campeonatos): os meses de duelo que fecharam, quem está na frente no número de conquistas e o
+// aviso de que vale conferir o tempo com o rival. { liga, duels: [{ month, res, m, t }], lead: "mine" | "theirs" | "tie", tenure: true }.
+// O servidor confere o formato e as contas (o mês tem de ter fechado e ser do rival atual), guarda o histórico (privado) e soma as badges no
+// cadastro público do jogador. Quem mexer no próprio navegador pode se dar uma badge do rival: a conta é de brincadeira entre amigos, e
+// o efeito para os outros é só a raridade.
+exports.saveRivalProgress = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "saveRivalProgress", 20);
+  const liga = leagueIdOf(request.data);
+  const ownKey = await rivalOwnKey(auth, liga);
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const currentMonth = rivalLib.monthOf(new Date(nowMs - 3 * 3600 * 1000).toISOString()); // o mês de hoje no horário de Brasília
+  const ref = db.doc(`leagues/${liga}/rivals/${auth.uid}`), pubRef = db.doc(`leagues/${liga}/rival_public/${ownKey}`);
+  return db.runTransaction(async tx => {
+    const [snap, pubSnap] = await Promise.all([tx.get(ref), tx.get(pubRef)]);
+    const cur = snap.data();
+    if (!snap.exists || cur.ownKey !== ownKey || !cur.rivalKey) throw fail("failed-precondition", "Escolha um rival primeiro.");
+    const sinceMonth = rivalLib.monthOf(cur.since);
+    const parsed = rivalLib.parseDuels(request.data?.duels, { sinceMonth, currentMonth, known: cur.duels || {} });
+    if (!parsed.ok) throw fail("invalid-argument", RIVAL_REASONS[parsed.reason] || "Duelos inválidos.");
+    const applied = rivalLib.applyDuels(cur.duels || {}, parsed.accepted, { rivalKey: cur.rivalKey, sinceMonth });
+    const gains = { ...applied.gains };
+    const lead = rivalLib.applyLead(cur.lead, request.data?.lead);
+    if (lead.gain) gains[lead.gain] = (gains[lead.gain] || 0) + 1;
+    const once = request.data?.tenure === true ? rivalLib.tenureAwards(cur.since, nowIso) : [];
+    const before = pubSnap.data() || null;
+    const awards = rivalLib.mergeAwards(before?.awards, gains, once);
+    const accepted = parsed.accepted.map(d => d.month);
+    const changedDoc = accepted.length > 0 || lead.lead !== (cur.lead || "");
+    const changedPub = JSON.stringify(awards) !== JSON.stringify(before?.awards || {});
+    if (changedDoc) tx.set(ref, { ...cur, duels: applied.history, lead: lead.lead });
+    if (changedPub) tx.set(pubRef, { alvo: before?.alvo === true, publico: before?.publico === true, declarada: before?.declarada === true, awards });
+    return { ok: true, accepted, skipped: parsed.skipped, gains, awards };
+  });
+});
+
+// Depois que o admin renomeia ou remove um jogador do elenco, o app chama esta função: se veio { rename: { from, to } }, as escolhas de
+// rival e as badges do rival do jogador passam para a chave nova; sem rename só refaz as marcas (Alvo da Galera, Inimigo Público e Rivalidade Declarada).
+// Só admin da liga.
+exports.syncRivals = onCall(CALLABLE, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "syncRivals", 30);
+  const liga = leagueIdOf(request.data);
+  await requireLeagueAdmin(auth, liga);
+  const rename = request.data?.rename;
+  let from = "", to = "";
+  if (rename !== undefined && rename !== null) {
+    from = idText(rename?.from, 100);
+    to = idText(rename?.to, 100);
+    if (!PLAYER_KEY_RE.test(from) || !PLAYER_KEY_RE.test(to) || from === to) throw fail("invalid-argument", "Jogador inválido.");
+  }
+  const [anyRival, anyPub] = await Promise.all([
+    db.collection(`leagues/${liga}/rivals`).limit(1).get(),
+    db.collection(`leagues/${liga}/rival_public`).limit(1).get(),
+  ]);
+  if (!anyRival.size && !anyPub.size) return { ok: true, changed: false }; // ninguém usa o rival nesta liga
+  await rivalTransaction(liga, ({ rivals, pub }) => (from ? moveRivalKey(rivals, pub, from, to) : {}));
+  return { ok: true, changed: true };
+});
+
 // ── Excluir a própria conta (direito de eliminação, LGPD) ────────────────────
 //
 // Apaga o login e os dados pessoais ligados à conta: cadastro (e-mail, nome, aparelhos de
@@ -904,6 +1259,8 @@ exports.deleteMyAccount = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async req
   for (const liga of ligas) {
     const base = `leagues/${liga}`;
     await db.doc(`${base}/link_requests/${uid}`).delete();
+    await dropStarVotes(liga, uid); // as notas de estrelas que a conta deu (a média dos outros é refeita sem elas)
+    await dropRival(liga, uid); // a escolha de rival da conta (dado pessoal: some junto com ela)
 
     const key = String(leagues[liga]?.playerKey || user.playerKey || "");
     if (PLAYER_KEY_RE.test(key)) {
@@ -1014,6 +1371,8 @@ async function renamePlayerToAnon(liga, oldKey) {
       name: newName, formerName: oldName,
       added: d.added || new Date().toISOString().slice(0, 10), active: d.active !== false,
       ...(d.stars != null ? { stars: d.stars } : {}),
+      ...(d.starsPinned === true ? { starsPinned: true } : {}), // estrela fixada pelo admin acompanha a troca (a média sai de novo em migrateStarVotes)
+      ...(d.goleiro ? { goleiro: true } : {}), ...(d.somenteChurrasco ? { somenteChurrasco: true } : {}), // o goleiro continua goleiro e quem só vai ao churrasco continua fora do sorteio
     });
     tx.delete(oldRegRef);
     linkedSnap.docs.forEach(doc => {
@@ -1043,6 +1402,8 @@ async function cleanPlayerHistory(liga, { oldKey, oldName, newKey, newName }) {
     await db.doc(`${base}/contacts/${newKey}`).set(contactOld.data());
     await contactOld.ref.delete();
   }
+  await migrateStarVotes(liga, oldKey, newKey); // as notas de estrelas dadas por ele e a ele passam para a chave nova
+  await migrateRivals(liga, oldKey, newKey); // as escolhas de rival (dele e as que apontam para ele) e as badges do rival passam para a chave nova
 
   const mensalidades = await db.collection(`${base}/financeiro_mensalidades`).get();
   for (const doc of mensalidades.docs) {

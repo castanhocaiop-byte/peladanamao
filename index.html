@@ -1038,6 +1038,11 @@ const st = {
   badgeShowAll: false,
   photos: {},
   contacts: {}, // WhatsApp (só o admin recebe): { idDoContato: '11999999999' }
+  rivalDoc: null,       // a escolha de rival da conta (leagues/{liga}/rivals/{uid}): só a própria conta lê, só o servidor grava
+  rivalReady: false,    // o documento acima já chegou (mesmo que a conta não tenha rival)
+  rivalPublic: {},      // o que a liga vê do rival, por chave de jogador: { awards, alvo, declarada } (leagues/{liga}/rival_public)
+  rivalPubReady: false,
+  _rivalPubVer: 0,      // sobe a cada mudança do cadastro público: faz o cache das conquistas refazer a conta
   _photoBusy: false,
   _anonBusy: false,
 };
@@ -1121,13 +1126,14 @@ const BADGE_CATALOG = [
   { id:'poker',          emoji:'♠️', label:'Poker',                desc:'4 gols em uma única partida',                   check: s => s.maxGoalsSingleGame >= 4,   fieldOnly: true, minGoalsMatch:4, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="22" height="22" rx="3" fill="#0f172a"/><circle cx="7.5" cy="7.5" r="3.8" fill="#f1f5f9"/><path d="M7.5 4.7L9 6.2L8.6 8L7.5 8.6L6.4 8L6 6.2Z" fill="#0f172a"/><circle cx="16.5" cy="7.5" r="3.8" fill="#f1f5f9"/><path d="M16.5 4.7L18 6.2L17.6 8L16.5 8.6L15.4 8L15 6.2Z" fill="#0f172a"/><circle cx="7.5" cy="16.5" r="3.8" fill="#f1f5f9"/><path d="M7.5 13.7L9 15.2L8.6 17L7.5 17.6L6.4 17L6 15.2Z" fill="#0f172a"/><circle cx="16.5" cy="16.5" r="3.8" fill="#f1f5f9"/><path d="M16.5 13.7L18 15.2L17.6 17L16.5 17.6L15.4 17L15 15.2Z" fill="#0f172a"/></svg>' },
   { id:'manita',         emoji:'🖐️', label:'Manita',               desc:'5 gols em uma única partida',                   check: s => s.maxGoalsSingleGame >= 5,   fieldOnly: true, minGoalsMatch:5, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="1.5" y="4.5" width="3.5" height="11" rx="1.75" fill="#dc2626"/><rect x="6" y="2.5" width="3.5" height="13" rx="1.75" fill="#dc2626"/><rect x="10.5" y="2" width="3.5" height="13.5" rx="1.75" fill="#dc2626"/><rect x="15" y="2.5" width="3.5" height="13" rx="1.75" fill="#dc2626"/><rect x="19.5" y="5" width="3" height="10.5" rx="1.5" fill="#dc2626"/><rect x="1.5" y="13.5" width="21" height="8.5" rx="3.5" fill="#dc2626"/></svg>' },
   { id:'duplo_hat',      emoji:'🎩', label:'Duplo Hat-trick',       desc:'6 gols em uma única partida',                   check: s => s.maxGoalsSingleGame >= 6,   fieldOnly: true, minGoalsMatch:6, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="14.5" width="10" height="2" rx="1" fill="#4b5563"/><rect x="3" y="8.5" width="6" height="7" rx="1" fill="#1f2937"/><rect x="4.5" y="7" width="3" height="2" rx="0.7" fill="#4b5563"/><rect x="13" y="14.5" width="10" height="2" rx="1" fill="#4b5563"/><rect x="15" y="8.5" width="6" height="7" rx="1" fill="#1f2937"/><rect x="16.5" y="7" width="3" height="2" rx="0.7" fill="#4b5563"/></svg>' },
-  { id:'viciado_ht',     emoji:'🔄', label:'Viciado em Hat-trick',  desc:'Hat-trick em 5 semanas consecutivas',           check: s => s.consecHatTrickChamps >= 5, fieldOnly: true, minGoalsMatch:3, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="17.5" width="16" height="2.5" rx="1.2" fill="#374151"/><rect x="7" y="11" width="10" height="7.5" rx="1" fill="#1f2937"/><rect x="9.5" y="9.5" width="5" height="2" rx="0.8" fill="#374151"/><path d="M4 9C3.5 7 4.5 5.5 4 4C5 5.5 6 6.5 5.5 9Q5 9.8 4 9Z" fill="#f97316"/><path d="M8 8.5C7.5 6.5 8.5 5 8 3.5C9 5 10 6 9.5 8.5Q9 9.3 8 8.5Z" fill="#f97316"/><path d="M12 8.3C11.5 6.3 12.5 4.8 12 3.3C13 4.8 14 5.8 13.5 8.3Q13 9.1 12 8.3Z" fill="#f97316"/><path d="M16 8.5C15.5 6.5 16.5 5 16 3.5C17 5 18 6 17.5 8.5Q17 9.3 16 8.5Z" fill="#f97316"/><path d="M20 9C19.5 7 20.5 5.5 20 4C21 5.5 22 6.5 21.5 9Q21 9.8 20 9Z" fill="#f97316"/></svg>' },
+  { id:'viciado_ht',     emoji:'🔄', label:'Viciado em Hat-trick',  desc:'Hat-trick em 5 campeonatos consecutivos',       check: s => s.consecHatTrickChamps >= 5, fieldOnly: true, minGoalsMatch:3, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="17.5" width="16" height="2.5" rx="1.2" fill="#374151"/><rect x="7" y="11" width="10" height="7.5" rx="1" fill="#1f2937"/><rect x="9.5" y="9.5" width="5" height="2" rx="0.8" fill="#374151"/><path d="M4 9C3.5 7 4.5 5.5 4 4C5 5.5 6 6.5 5.5 9Q5 9.8 4 9Z" fill="#f97316"/><path d="M8 8.5C7.5 6.5 8.5 5 8 3.5C9 5 10 6 9.5 8.5Q9 9.3 8 8.5Z" fill="#f97316"/><path d="M12 8.3C11.5 6.3 12.5 4.8 12 3.3C13 4.8 14 5.8 13.5 8.3Q13 9.1 12 8.3Z" fill="#f97316"/><path d="M16 8.5C15.5 6.5 16.5 5 16 3.5C17 5 18 6 17.5 8.5Q17 9.3 16 8.5Z" fill="#f97316"/><path d="M20 9C19.5 7 20.5 5.5 20 4C21 5.5 22 6.5 21.5 9Q21 9.8 20 9Z" fill="#f97316"/></svg>' },
   { id:'eu_mbappe',      emoji:'😭', label:'Gols, Glória e... Derrota!', desc:'Hat-trick em final perdendo a final',           visible: () => finalsEnabled(), check: s => s.hatTrickFinalLoss,         fieldOnly: true, minGoalsMatch:3, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="2.5" rx="1.2" fill="#374151"/><rect x="6" y="4.5" width="12" height="7.5" rx="1" fill="#1f2937"/><rect x="9" y="3" width="6" height="2" rx="0.8" fill="#374151"/><path d="M8 14Q4.5 16 5 20Q5 23.5 8 23.5Q11 23.5 11 20Q11.5 16 8 14Z" fill="#3b82f6"/><path d="M16 14Q12.5 16 13 20Q13 23.5 16 23.5Q19 23.5 19 20Q19.5 16 16 14Z" fill="#3b82f6"/><path d="M7 17Q6.3 19 6.8 21" stroke="#93c5fd" stroke-width="1.1" fill="none" stroke-linecap="round" opacity="0.8"/><path d="M15 17Q14.3 19 14.8 21" stroke="#93c5fd" stroke-width="1.1" fill="none" stroke-linecap="round" opacity="0.8"/></svg>' },
   { id:'melhor_mbappe',  emoji:'🌟', label:'Melhor que o Mbappé',   desc:'Hat-trick em final ganhando a final',           visible: () => finalsEnabled(), check: s => s.hatTrickFinalWin,          fieldOnly: true, minGoalsMatch:3, icon:'<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="16" width="14" height="2.5" rx="1.2" fill="#374151"/><rect x="8" y="9.5" width="8" height="7.5" rx="1" fill="#1f2937"/><rect x="10.5" y="8" width="3" height="2" rx="0.8" fill="#374151"/><rect x="8" y="14.5" width="8" height="1.2" rx="0.5" fill="#f59e0b"/><path d="M10.5 8.5L9.5 5.5Q9 3 12 3Q15 3 14.5 5.5L13.5 8.5Z" fill="#fbbf24"/><path d="M9.5 5.5Q7.5 5 8 3.5" stroke="#fbbf24" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M14.5 5.5Q16.5 5 16 3.5" stroke="#fbbf24" stroke-width="1.3" fill="none" stroke-linecap="round"/><rect x="11.2" y="8.5" width="1.6" height="1.5" fill="#fbbf24"/><rect x="10.5" y="9.8" width="3" height="0.8" rx="0.4" fill="#fbbf24"/></svg>' },
   { id:'goleador',       emoji:'💥', label:'Goleador',             desc:'10+ gols em um único campeonato',               check: s => s.maxGoalsSingleChamp >= 10, fieldOnly: true },
   { id:'maquina',        emoji:'⚡', label:'Máquina de Gols',      desc:'Média de 1+ gol por jogo em 1 campeonato',      check: s => s.hasMachineChamp,           fieldOnly: true },
   { id:'empresario',     emoji:'💪', label:'Eu sou bom, meu empresário que é ruim', desc:'Artilheiro do camp. com o time em último lugar',check: s => s.hasArtLastPlace,           fieldOnly: true },
   { id:'alergico_gol',   emoji:'🤧', label:'Alérgico a Gol',        desc:'3 campeonatos seguidos sem fazer nenhum gol',  check: s => s.consecGoalless >= 3,       fieldOnly: true },
+  { id:'golfobico',      emoji:'😱', label:'Golfóbico',             desc:'10 campeonatos seguidos sem fazer nenhum gol', check: s => s.consecGoalless >= 10,      fieldOnly: true },
   // presença emprestada
   { id:'fominha',        emoji:'🙋', label:'Fominha',              desc:'3+ jogos emprestados em um único campeonato',   check: s => s.maxBorrowedMatches >= 3 },
   { id:'jogo_todas',     emoji:'🌪️', label:'Jogo Todas',           desc:'6+ jogos emprestados em um único campeonato',  check: s => s.maxBorrowedMatches >= 6 },
@@ -1174,6 +1180,27 @@ const BADGE_CATALOG = [
   { id:'paleta_de_ouro', emoji:'🎨', label:'Paleta de Ouro', desc:'Venceu campeonato com cada cor disponível na liga', check: s => { const avail = enabledColors().map(([id]) => id); return avail.length > 0 && avail.every(id => s.colorsWon.has(id)); } },
   // virou saf
   { id:'virou_saf', emoji:'🔄', label:'Virou SAF', desc:'Último lugar no campeonato anterior e campeão no seguinte', check: s => s.hasViouSaf },
+  // rival (item 36) — frente a frente: calculadas para todos os jogadores a partir dos jogos entre times opostos (o admin da liga pode desligar)
+  { id:'carrasco',   emoji:'😈', label:'Carrasco',   desc:'Ganhou 5+ jogos do mesmo jogador, em times opostos, e pelo menos 3 a mais do que perdeu', visible: () => h2hOn(), check: s => s.h2hCarrasco },
+  { id:'fregues',    emoji:'🎣', label:'Freguês',    desc:'Perdeu 5+ jogos para o mesmo jogador, em times opostos, e pelo menos 3 a mais do que ganhou', visible: () => h2hOn(), check: s => s.h2hFregues },
+  { id:'tira_teima', emoji:'⚖️', label:'Tira-teima', desc:'Histórico empatado (as mesmas vitórias e derrotas) contra um jogador depois de 6+ jogos em times opostos', visible: () => h2hOn(), check: s => s.h2hTiraTeima },
+  { id:'classico',   emoji:'🔥', label:'Clássico',   desc:'20+ jogos contra o mesmo jogador, em times opostos', visible: () => h2hOn(), check: s => s.h2hClassico },
+  // rival — as três marcas que só o servidor calcula (ninguém vê quem escolheu quem)
+  { id:'alvo_galera',     emoji:'🎯', label:'Alvo da Galera',        desc:'Escolhido como rival por 3 ou mais jogadores (ninguém sabe quem)', visible: () => rivalBadgesShown(), check: s => s.rivalAlvo },
+  { id:'inimigo_publico', emoji:'🚨', label:'Inimigo Público',       desc:'Escolhido como rival por 7 ou mais jogadores (ninguém sabe quem)', visible: () => rivalBadgesShown(), check: s => s.rivalPublico },
+  { id:'rival_declarada', emoji:'🤝', label:'Rivalidade Declarada',  desc:'Você e o seu rival se escolheram como rivais', visible: () => rivalBadgesShown(), check: s => s.rivalDeclarada },
+  // rival — duelo do mês, sequências, virada e tempo com o mesmo rival (o app manda ao servidor; as contagens ficam no cadastro público do jogador)
+  { id:'duelo_aluno',     emoji:'📚', label:'Aluno do Rival',        desc:'O seu rival foi melhor que você na maioria dos números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_aluno') },
+  { id:'duelo_fora_liga', emoji:'🛸', label:'Fora da Sua Liga',      desc:'O seu rival foi melhor que você em todos os números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_fora_liga') },
+  { id:'duelo_mao',       emoji:'✊', label:'Rival na Mão',          desc:'Você foi melhor que o seu rival na maioria dos números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_mao') },
+  { id:'duelo_trator',    emoji:'🚜', label:'Passei o Trator',       desc:'Você foi melhor que o seu rival em todos os números de um mês', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_trator') },
+  { id:'duelo_dono',      emoji:'👑', label:'Dono do Rival',         desc:'Foi melhor que o mesmo rival em 3 duelos do mês seguidos', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_dono') },
+  { id:'duelo_sombra',    emoji:'👤', label:'Sombra do Rival',       desc:'Foi pior que o mesmo rival em 3 duelos do mês seguidos', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'duelo_sombra') },
+  { id:'rival_passou',    emoji:'🚀', label:'Passou o Rival',        desc:'Estava atrás do rival no número de conquistas e passou à frente', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_passou') },
+  { id:'rival_ultrapassada', emoji:'🏎️', label:'Levou a Ultrapassada', desc:'Estava na frente do rival no número de conquistas e ele passou à frente', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_ultrapassada') },
+  { id:'rival_3m',        emoji:'🐕', label:'Rival de Estimação',    desc:'3 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_3m') },
+  { id:'rival_6m',        emoji:'⚔️', label:'Arquirrival',           desc:'6 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_6m') },
+  { id:'rival_12m',       emoji:'🏛️', label:'Rivalidade Histórica',  desc:'12 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_12m') },
 ];
 
 /* ── championship logic (pure) ──────────────────────────────── */
@@ -1342,6 +1369,8 @@ function showHalfTitles() { return !!(st.appCfg?.hasFinais && (st.appCfg?.halfTi
 // "Sem final" na liga = PONTOS CORRIDOS: o campeão é o time que mais somou pontos no campeonato (sem final, semifinais nem disputa de 3º lugar). O que vale para o
 // campeonato é a regra do dia em que ele foi CRIADO, gravada em `champ.noFinal` por createChampionship: campeonato já começado não muda de regra no meio.
 function finalsEnabled() { return st.appCfg?.hasFinais !== false; }
+// As badges do frente a frente (Carrasco, Freguês, Tira-teima, Clássico) valem para todos, a menos que o admin da liga as desligue no Painel Admin.
+function h2hOn() { return st.appCfg?.h2hBadges !== false; }
 // Quem lidera a tabela. Desempate como em standings(): pontos, saldo de gols, gols pró. Se ainda empatar em tudo, `leader` fica nulo e `tied` lista os empatados no
 // topo (quem decide é o admin, na janela champTie). Sem nenhum jogo disputado não há líder.
 function titleRace(teams, matches) {
@@ -1378,6 +1407,7 @@ function startListeners() {
   _unsubListeners = [];
   st.photos = {};
   st.contacts = {};
+  st.rivalDoc = null; st.rivalReady = false; st.rivalPublic = {}; st.rivalPubReady = false;
   callFn('touchLeagueActivity', { liga: st.leagueId }).catch(()=>{}); // marca a liga como ativa; falha aqui não afeta o uso do app
 
   const u1 = col('championships').onSnapshot(snap => {
@@ -1400,6 +1430,7 @@ function startListeners() {
     st.players = snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>a.name.localeCompare(b.name,'pt'));
     st.playersReady = true;
+    rivalMigrateLocal();
     render();
   }, err=>{ listenerFailed('player_registry', err); st.playersReady = true; render(); });
 
@@ -1456,6 +1487,10 @@ function startListeners() {
       weatherLocationName: data.weatherLocationName || null,
       votePos:           !!data.votePos,
       voteNeg:           !!data.voteNeg,
+      peerStars:         !!data.peerStars,
+      starsCallAt:       data.starsCallAt       || null,
+      starsCallBy:       data.starsCallBy       || '',
+      h2hBadges:         data.h2hBadges         ?? true,
     };
     st.cfgReady = true;
     render();
@@ -1469,7 +1504,25 @@ function startListeners() {
     if (changed) render();
   }, err=>{ listenerFailed('player_photos', err); });
 
-  _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8,uPh];
+  // Rival (item 36): a escolha da própria conta (privada) e o cadastro público do rival da liga (badges e marcas). Enquanto uma escolha está
+  // sendo salva no servidor, o app mostra o que a pessoa acabou de pedir e não deixa uma leitura antiga desfazer isso.
+  const uRv = st.authUser?.uid ? col('rivals').doc(st.authUser.uid).onSnapshot(snap => {
+    if (st._rivalBusy) return;
+    st.rivalDoc = snap.exists ? snap.data() : null;
+    st.rivalReady = true;
+    rivalMigrateLocal();
+    render();
+  }, err => { listenerFailed('rivals', err); st.rivalReady = true; render(); }) : null;
+  const uRp = col('rival_public').onSnapshot(snap => {
+    const next = {};
+    snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data(); });
+    st.rivalPublic = next;
+    st._rivalPubVer = (st._rivalPubVer || 0) + 1;
+    st.rivalPubReady = true;
+    render();
+  }, err => { listenerFailed('rival_public', err); st.rivalPubReady = true; render(); });
+
+  _unsubListeners = [u1,u2,u3,u4,u5,u6,u7,u8,uPh,uRv,uRp].filter(Boolean);
 
   if (st.userRole === 'admin') {
     refreshAdminBadge();
@@ -2148,6 +2201,7 @@ async function recoverFreeChamps() {
 async function signOutUser() {
   _unsubListeners.forEach(u=>u()); _unsubListeners=[];
   st.champs=[]; st.ranks=[]; st.players=[]; st.finMens={}; st.finDesp=[]; st.finAvulsos=[];
+  st.rivalDoc=null; st.rivalReady=false; st.rivalPublic={}; st.rivalPubReady=false;
   st.userRole=null; st.userDoc=null; st.leagueId=null; st.availableLeagues=[]; st.ready=false;
   await AUTH.signOut();
 }
@@ -2214,6 +2268,16 @@ const MJ_KINDS = {
     file: { story: 'rival-pelada-na-mao-story.png', feed: 'rival-pelada-na-mao.png' }, draw: { feed: drawMjRivalCard, story: drawMjRivalStory },
     text: d => `Eu ${d.myCount} x ${d.rivalCount} do meu rival em conquistas no Pelada na Mão ⚔️ Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalCaption(d),
   },
+  rivalnum: {
+    title: '📤 Meus números × rival', busy: 'Montando a comparação…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Comparação de números com o meu rival no Pelada na Mão', shareTitle: 'Meus números x os do meu rival no Pelada na Mão',
+    file: { story: 'rival-numeros-pelada-na-mao-story.png', feed: 'rival-numeros-pelada-na-mao.png' }, draw: { feed: drawMjRivalNumCard, story: drawMjRivalNumStory },
+    text: d => `Meus números x os do meu rival no Pelada na Mão ⚔️${mjRivalNumVerdict(d) ? ' ' + mjRivalNumVerdict(d) : ''}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalNumCaption(d),
+  },
+  rivalduel: {
+    title: '📤 Duelo do mês', busy: 'Montando o duelo…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Duelo do mês contra o meu rival no Pelada na Mão', shareTitle: 'Meu duelo do mês no Pelada na Mão',
+    file: { story: 'duelo-pelada-na-mao-story.png', feed: 'duelo-pelada-na-mao.png' }, draw: { feed: drawMjRivalNumCard, story: drawMjRivalNumStory },
+    text: d => `Meu duelo do mês contra o meu rival no Pelada na Mão ⚔️${mjRivalNumVerdict(d) ? ' ' + mjRivalNumVerdict(d) : ''}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalDuelCaption(d),
+  },
 };
 const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
@@ -2279,7 +2343,7 @@ function mjBadgesData(s = {}) {
   };
 }
 
-// Dados do cartão "Eu x Rival": as conquistas de cada lado separadas em "só eu", "só o rival" e "as duas" (cada uma com `holders` e `eligible`, que dão o nível de
+// Dados do cartão "Eu x Rival": as conquistas de cada lado separadas em "só eu", "só o rival" e "os dois" (cada uma com `holders` e `eligible`, que dão o nível de
 // raridade). Só leva o que a liga já mostra a todos os jogadores (nomes e conquistas); a foto é a de quem compartilha (a do rival nunca entra, só as iniciais). Pura.
 function mjRivalData(s = {}) {
   const list = a => (Array.isArray(a) ? a : []).filter(b => b && b.emoji && b.label).slice(0, 200).map(b => ({ emoji: String(b.emoji), label: String(b.label), tier: mjTierOf(b.holders, b.eligible) }));
@@ -2300,6 +2364,32 @@ function mjRivalData(s = {}) {
 function mjRivalVerdict(d) {
   const n = Math.abs(d.diff), plural = n === 1 ? '' : 's';
   return d.status === 'ahead' ? `Estou ${n} conquista${plural} na frente!` : d.status === 'behind' ? `Meu rival está ${n} conquista${plural} na frente` : 'Empatados!';
+}
+
+// Dados do cartão "Eu x Rival" nos NÚMEROS: as linhas da tabela (o que mostrar de cada lado e quem está na frente em cada uma) e o saldo. Só leva o que a liga já mostra a todos os
+// jogadores (nomes e números); a foto é a de quem compartilha (a do rival nunca entra, só as iniciais). Linha que só informa (não disputa) nunca conta ponto. Pura.
+function mjRivalNumData(s = {}) {
+  const ini = n => n.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+  const name = String(s.name || '').trim() || 'Jogador', rivalName = String(s.rivalName || '').trim() || 'Rival';
+  const rows = (Array.isArray(s.rows) ? s.rows : []).filter(r => r && r.label).slice(0, 12).map(r => {
+    const scored = !!r.scored;
+    return { label: String(r.label), mine: String(r.mine ?? ''), theirs: String(r.theirs ?? ''), scored, lead: scored && (r.lead === 'mine' || r.lead === 'theirs') ? r.lead : '' };
+  });
+  const mineLead = rows.filter(r => r.lead === 'mine').length, theirsLead = rows.filter(r => r.lead === 'theirs').length, scored = rows.filter(r => r.scored).length;
+  const status = !scored ? 'none' : mineLead > theirsLead ? 'ahead' : mineLead < theirsLead ? 'behind' : 'tie';
+  const tier = status === 'ahead' ? 'legendary' : status === 'behind' ? 'rare' : 'common'; // na frente dourado, atrás azul, empate (ou nada em disputa) verde
+  return {
+    name, league: String(s.league || '').trim(),
+    photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '',
+    initials: ini(name), rivalName, rivalInitials: ini(rivalName),
+    rows, mineLead, theirsLead, scored, status, tier, tone: MJ_TIERS[tier],
+    title: String(s.title || '').trim(), // só o duelo do mês usa: o mês no alto do cartão
+  };
+}
+// Quem está na frente nos números, em primeira pessoa (o cartão e a legenda são de quem compartilha). Vazio quando nenhuma linha disputa.
+function mjRivalNumVerdict(d) {
+  const pl = d.scored === 1 ? '' : 's';
+  return d.status === 'ahead' ? `Estou na frente em ${d.mineLead} de ${d.scored} número${pl}!` : d.status === 'behind' ? `Meu rival está na frente em ${d.theirsLead} de ${d.scored} número${pl}` : d.status === 'tie' ? 'Empatados nos números!' : '';
 }
 
 function mjRoundRect(ctx, x, y, w, h, r) {
@@ -2608,7 +2698,7 @@ function drawMjBadgesCard(ctx, c, photoImg, logoImg, opts = {}) {
 }
 
 // Cartão "Eu x Rival" (Feed 4:5): eu e meu rival lado a lado (iniciais do rival, nunca a foto dele), o placar de conquistas, quem está na frente e as conquistas em
-// três grupos (só eu, só o meu rival, as duas). Dourado quando estou na frente, azul quando o rival está e verde no empate.
+// três grupos (só eu, só o meu rival, os dois). Dourado quando estou na frente, azul quando o rival está e verde no empate.
 function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
   const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.common, accent = tone.color;
   if (!opts.noBg) drawMjBackground(ctx, c, W, H, 400, 500);
@@ -2639,7 +2729,7 @@ function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
   ctx.fillStyle = accent; ctx.fillText(mjFitText(ctx, mjRivalVerdict(c), 900, 40, 26, MJ_BODY, 800), cx, 742);
 
   // as conquistas em três grupos, até 9 ícones por grupo (acima disso o último vira "+N")
-  const rows = [['SÓ EU TENHO', c.mine], ['SÓ O MEU RIVAL TEM', c.theirs], ['AS DUAS TÊM', c.both]];
+  const rows = [['SÓ EU TENHO', c.mine], ['SÓ O MEU RIVAL TEM', c.theirs], ['OS DOIS TÊM', c.both]];
   rows.forEach(([label, list], i) => {
     const ly = 818 + i * 128, ey = ly + 48, n = list.length;
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED; ctx.font = `800 24px ${MJ_BODY}`;
@@ -2657,6 +2747,51 @@ function drawMjRivalCard(ctx, c, photoImg, logoImg, opts = {}) {
   ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
 }
 function drawMjRivalStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjRivalCard, c, photoImg, logoImg, 400); }
+
+// Cartão "Eu x Rival" nos NÚMEROS (Feed 4:5): eu e meu rival lado a lado (iniciais do rival, nunca a foto dele), quem está na frente e a tabela dos números, um por linha, com o meu à
+// esquerda e o dele à direita. Em cada linha que disputa, quem está na frente leva a cor do cartão (dourado quando estou na frente no geral, azul quando o rival está e verde no empate).
+function drawMjRivalNumCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.common, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 400, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo e nome da liga
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
+  ctx.fillText(c.title ? 'EU × MEU RIVAL · ' + c.title : 'EU × MEU RIVAL · OS NÚMEROS', cx, 214);
+
+  // os dois lados (foto minha ou iniciais; só as iniciais do rival) e quem está na frente
+  const sides = [{ x: 270, ini: c.initials, photo: photoImg, name: c.name, ring: accent }, { x: 810, ini: c.rivalInitials, photo: null, name: c.rivalName, ring: MJ_MUTED }];
+  for (const sd of sides) {
+    mjAvatar(ctx, { initials: sd.ini }, sd.photo, sd.x, 322, 76, sd.ring);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(mjFitText(ctx, sd.name.toUpperCase(), 440, 64, 34, MJ_HEAD, 400), sd.x, 470);
+  }
+  ctx.fillStyle = MJ_MUTED; ctx.font = `400 110px ${MJ_HEAD}`; ctx.fillText('×', cx, 356);
+  const verdict = mjRivalNumVerdict(c);
+  if (verdict) { ctx.fillStyle = accent; ctx.fillText(mjFitText(ctx, verdict, 900, 40, 26, MJ_BODY, 800), cx, 540); }
+
+  // a tabela: o meu número, o nome do número e o dele; as linhas se repartem entre 590 e 1190 (no máximo 66 px cada) e o conjunto fica centralizado
+  const n = c.rows.length, top = 590, bottom = 1190, rowH = n ? Math.min(66, Math.floor((bottom - top) / n)) : 66, y0 = top + Math.max(0, (bottom - top - n * rowH) / 2);
+  c.rows.forEach((r, i) => {
+    const y = y0 + i * rowH, my = y + rowH / 2;
+    if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; mjRoundRect(ctx, 64, y + 3, W - 128, rowH - 6, 16); ctx.fill(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = MJ_MUTED; ctx.fillText(mjFitText(ctx, r.label.toUpperCase(), 340, 26, 18, MJ_BODY, 700), cx, my + 1);
+    for (const [x, v, who] of [[270, r.mine, 'mine'], [810, r.theirs, 'theirs']]) {
+      ctx.fillStyle = r.lead === who ? accent : '#ffffff'; ctx.fillText(mjFitText(ctx, v, 300, 56, 30, MJ_HEAD, 400), x, my + 2);
+    }
+  });
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+function drawMjRivalNumStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjRivalNumCard, c, photoImg, logoImg, 400); }
 
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
 function mjLoadImage(url) {
@@ -2808,6 +2943,14 @@ function mjBadgesCaption(d) {
 }
 function mjRivalCaption(d) {
   return `Eu x meu rival no Pelada na Mão ⚔️\n${d.myCount} x ${d.rivalCount} em conquistas: ${mjRivalVerdict(d)}\nQuem tem mais na sua pelada? Crie a liga: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjRivalNumCaption(d) {
+  const v = mjRivalNumVerdict(d);
+  return `Eu x meu rival no Pelada na Mão ⚔️\n${v ? v + '\n' : ''}Quem é o destaque de verdade na sua pelada? Compare os seus números: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjRivalDuelCaption(d) {
+  const v = mjRivalNumVerdict(d);
+  return `Duelo do mês contra o meu rival no Pelada na Mão ⚔️\n${v ? v + '\n' : ''}Quem é o destaque de verdade na sua pelada? Dispute o seu duelo: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
 async function copyMjCaption() {
   if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
@@ -3079,10 +3222,11 @@ function openPrivacyPolicy() {
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
         ${li('<strong>Conta:</strong> e-mail, nome, e os aparelhos em que você ativou notificações. O e-mail dos admins também recebe avisos do serviço, como o vencimento do plano e o aviso de liga sem uso.')}
         ${li('<strong>Jogador</strong> (quando sua conta está vinculada a um): nome no elenco, estrelas, gols, times, títulos e votos recebidos.')}
+        ${li('<strong>Notas de estrelas</strong> (só se o admin ligar "Estrelas pela média do grupo"): as notas que você dá aos outros jogadores ficam no servidor, em nome da sua conta, e só você as vê. Se você sair da liga, for removido dela ou excluir a conta, as notas que você deu são apagadas e a média dos outros é refeita.')}
         ${li('<strong>Opcionais:</strong> foto de perfil e WhatsApp, enviados por você ou pelo admin.')}
         ${li('<strong>Financeiro:</strong> mensalidades, cobranças avulsas e a chave PIX que o admin cadastrar para receber, se a liga usa essa função.')}
         ${li('<strong>Cartão do jogador:</strong> a imagem é montada no seu aparelho, com os dados que você já vê (nome, foto, estatísticas e conquistas), e só sai dele se você tocar em Compartilhar (vale também para as imagens das suas conquistas). Nunca leva e-mail nem WhatsApp.')}
-        ${li('<strong>Rival:</strong> se você escolher um rival para comparar conquistas, a escolha fica guardada só neste aparelho (nada é enviado ao servidor e o outro jogador não é avisado). A comparação usa as conquistas que a liga já mostra para todos os jogadores. Se você compartilhar a imagem da comparação, ela leva o nome do seu rival.')}
+        ${li('<strong>Rival:</strong> se você escolher um rival, a escolha (quem é o seu rival e desde quando) fica guardada na sua conta, no servidor, e só você a vê: nem o admin nem o seu rival (ele não é avisado). Se vocês dois se escolherem, o app avisa os dois; se 3 ou mais jogadores escolherem a mesma pessoa, ela ganha a conquista "Alvo da Galera" (e com 7 ou mais, a "Inimigo Público"), sem dizer quem escolheu. A conta também guarda o resultado de cada duelo do mês contra o rival (quantos números cada um levou) e quem estava na frente no número de conquistas; a liga vê só as conquistas que isso gera (por exemplo "Passei o Trator"), nunca quem era o rival. A comparação usa o que a liga já mostra para todos os jogadores: as conquistas e os números de cada um (títulos, campeonatos, gols, vezes artilheiro, presença, destaques da votação, nota do grupo e as vitórias, empates e derrotas dos times em que jogou) e, no frente a frente, os jogos em que os dois estavam em times opostos. Se você compartilhar a imagem da comparação ou do duelo, ela leva o nome do seu rival. O app também sugere, só neste aparelho, o jogador mais perto de você em número de conquistas (a conta usa o que a liga já mostra e ninguém é avisado). Ao sair da liga ou excluir a conta, a sua escolha e o seu histórico de duelos são apagados; as conquistas do rival que você já ganhou continuam no cadastro do jogador.')}
         ${li('<strong>Uso do app:</strong> contadores anônimos, somados por dia (por exemplo, quantas vezes a faixa do plano foi vista, ou por qual tipo de link as pessoas chegaram, como WhatsApp ou Instagram), sem identificar quem foi. Servem para melhorar o produto.')}
         ${li('<strong>Relatos de erro:</strong> quando o app trava ou quebra, ele envia ao dono do sistema um relato técnico para o defeito ser consertado: a mensagem do erro, o trecho do código, a versão do app, a tela em que você estava e o tipo do navegador (por exemplo, "Chrome 118 no Android"). Não leva nome, e-mail, WhatsApp, nome da liga, o que você digitou nem o endereço completo da página, e não identifica quem foi. Antes de enviar, o app ainda tira do texto os nomes que conhece (jogadores, convidados, o seu e o da liga). O endereço de IP só é visto na hora, na memória, para barrar abuso, e o app não o guarda. Os relatos são apagados depois de 45 dias.')}
       </ul>
@@ -3091,6 +3235,7 @@ function openPrivacyPolicy() {
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
         ${li('Seu e-mail e seus dados de conta: só você. O admin da sua liga vê seu nome, e-mail e papel na liga, para gerenciar quem participa.')}
         ${li('Elenco, resultados e conquistas: os membros ativos da liga.')}
+        ${li('Notas de estrelas: cada pessoa vê só as notas que deu. Pelo app, ninguém (nem o admin da liga) vê quem deu qual nota; a média de cada jogador, com quantas pessoas votaram, aparece para os membros ativos da liga, a partir de 3 votos.')}
         ${li('Financeiro: os membros ativos da liga (é aberto ao grupo, para todos acompanharem as contas).')}
         ${li('Seu WhatsApp: só o admin da liga.')}
         ${li('Sua foto: os membros ativos da liga. O link fica no Cloudinary (o serviço que guarda a imagem) e não é privado para quem tiver o link.')}
@@ -4912,6 +5057,8 @@ async function deleteRegisteredPlayer(key) {
   try {
     await ldoc(`player_registry/${key}`).delete();
     await saveContact(key, ''); // sem jogador, sem contato (LGPD)
+    starSync(); // as notas de estrelas que ele deu deixam de valer e a média dos outros é refeita
+    rivalSync(); // as escolhas de rival dele e as que apontam para ele saem, e as marcas (Alvo da Galera, Rivalidade Declarada) são refeitas
   } catch(e) { toast('Erro ao remover: ' + (e?.message||e)); }
 }
 
@@ -4940,6 +5087,9 @@ async function renamePlayer() {
     if (newKey !== oldKey) {
       const regData = {name: newName, added: old.added||today(), active: old.active!==false};
       if (old.stars != null) regData.stars = old.stars;
+      if (old.starsPinned === true) regData.starsPinned = true;
+      if (old.goleiro) regData.goleiro = true;                   // antes da troca de chave esses dois se perdiam: o goleiro virava jogador de linha
+      if (old.somenteChurrasco) regData.somenteChurrasco = true; // e quem só vai ao churrasco entrava no sorteio
       await ldoc(`player_registry/${newKey}`).set(regData);
       await ldoc(`player_registry/${oldKey}`).delete();
       await saveContact(oldKey, '');
@@ -5046,6 +5196,7 @@ async function renamePlayer() {
     }
 
     await Promise.all(updates);
+    if (newKey !== oldKey) { starSync({from: oldKey, to: newKey}); rivalSync({from: oldKey, to: newKey}); }
 
     st.modal = null;
     render();
@@ -5152,12 +5303,219 @@ async function togglePlayerGoleiro(id, current) {
   } catch(e) { toast('Erro: '+(e?.message||e)); }
 }
 
+/* ── Estrelas: o que vale para o sorteio e para as telas ─────────────────────────────────────────────────────────────────────
+   Sem a opção "Estrelas pela média do grupo" (Painel Admin), vale só a estrela que o admin deu (p.stars). Com ela ligada, cada jogador
+   dá notas aos outros (função ratePlayers; as notas são anônimas) e o servidor publica no cadastro do jogador a média (p.starsAvg) e
+   quantos votaram (p.starsVotes). A média só passa a valer quando o jogador já tem votos suficientes: metade de quem joga, no mínimo 3
+   (a mesma conta de neededVotes em functions/star-votes.js). Antes disso, ou se o admin FIXAR a estrela dele (p.starsPinned), vale a
+   estrela do admin. O sorteio usa a média exata (3,6); as telas mostram uma casa só quando a nota não é inteira. */
+function peerStarsOn() { return !!st.appCfg?.peerStars; }
+function playingPlayers() { return (st.players||[]).filter(p => p.active !== false && !p.somenteChurrasco); }
+function neededVotes() { return Math.max(3, Math.ceil(playingPlayers().length / 2)); }
+// { value, source: 'admin' | 'avg' | 'pinned', votes, needed }
+function starsInfo(p) {
+  const admin = Number(p?.stars) || 0;
+  if (!peerStarsOn()) return { value: admin, source: 'admin', votes: 0, needed: 0 };
+  const votes = Number(p?.starsVotes) || 0, needed = neededVotes();
+  if (p?.starsPinned === true) return { value: admin, source: 'pinned', votes, needed };
+  if (Number.isFinite(p?.starsAvg) && votes >= needed) return { value: p.starsAvg, source: 'avg', votes, needed };
+  return { value: admin, source: 'admin', votes, needed };
+}
+function starsOf(p) { return starsInfo(p).value; }
+// "4" ou "3,7": uma casa só quando a nota não é inteira
+function starsText(n) { const v = Math.round((Number(n) || 0) * 10) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ','); }
+// as estrelas da lista: ★★★★ (arredondado) e, quando a nota não é inteira, o número ao lado; "—" sem nota
+function starsDisplay(n) { const v = Number(n) || 0; return v ? '★'.repeat(Math.max(1, Math.min(5, Math.round(v)))) + (Number.isInteger(v) ? '' : ' ' + starsText(v)) : '—'; }
+// a frase miúda embaixo do nome no Elenco (só com a opção ligada)
+function starsCaption(p) {
+  if (!peerStarsOn()) return '';
+  const i = starsInfo(p), votos = n => `${n} voto${n === 1 ? '' : 's'}`;
+  if (i.source === 'pinned') return '📌 estrela fixada pelo admin';
+  if (i.source === 'avg') return `média do grupo ${starsText(i.value)} · ${votos(i.votes)}`;
+  return i.votes > 0 ? `${votos(i.votes)} de ${i.needed} para a média do grupo valer` : '';
+}
+// peso de um jogador no sorteio: centésimos de estrela, em INTEIRO (as somas ficam exatas, sem erro de ponto flutuante); sem nota vale 3
+function drawWeight(p) { return Math.round((starsOf(p) || 3) * 100); }
+
 async function setPlayerStars(id, stars) {
   if (!DB) return;
   if (!isAdmin()) { toast('Apenas administradores podem avaliar jogadores.'); return; }
+  const p = (st.players||[]).find(x => x.id === id);
+  const update = {stars};
+  // com a média do grupo valendo, mexer na estrela do admin só muda algo se ele FIXAR a estrela deste jogador
+  if (p && starsInfo(p).source === 'avg') {
+    if (!stars) return;
+    if (!confirm(`Fixar a estrela de ${p.name} em ${stars}? A média do grupo (${starsText(starsInfo(p).value)}) deixa de valer para ele. Para voltar à média, toque no 📌.`)) return;
+    update.starsPinned = true;
+  }
   try {
-    await ldoc(`player_registry/${id}`).update({stars});
+    await ldoc(`player_registry/${id}`).update(update);
   } catch(e) { toast('Erro ao salvar avaliação: ' + (e?.message||e)); }
+}
+
+async function toggleStarsPinned(id, current) {
+  if (!DB) return;
+  if (!isAdmin()) { toast('Apenas administradores podem fixar a estrela.'); return; }
+  try {
+    await ldoc(`player_registry/${id}`).update({starsPinned: !current});
+  } catch(e) { toast('Erro: ' + (e?.message||e)); }
+}
+
+// Avisa o servidor que o elenco mudou (jogador removido ou renomeado): as notas dele saem ou mudam de chave e a média é refeita.
+// Só vale a pena quando a liga usa as notas; falha aqui não atrapalha nada (a média se acerta na próxima nota dada).
+function starSync(rename) {
+  if (!DB || !st.leagueId) return;
+  if (!peerStarsOn() && !(st.players||[]).some(p => p.starsVotes > 0)) return;
+  callFn('syncStarVotes', { liga: st.leagueId, ...(rename ? { rename } : {}) }).catch(() => {});
+}
+
+/* ── Chamada do admin para o grupo avaliar o elenco ──────────────────────────────────────────────────────────────────────────
+   O admin toca em "📣 Chamar o grupo" (função notifyStarRatings): quem ativou as notificações recebe um aviso no celular e todo jogador com
+   a conta ligada ao elenco vê, ao abrir o app (o toque no aviso abre o app), o banner "O admin pediu para você avaliar o elenco"
+   (starsCallAt, gravado pelo servidor em app_config/main). O banner some quando a pessoa avalia, toca em "Agora não" ou depois de 14 dias;
+   uma chamada nova (starsCallAt diferente) traz o banner de volta. Quem chamou não vê o banner. O servidor limita a uma chamada por liga
+   a cada 6 horas. */
+function starsCallKey() { const me = myVotePlayer(); return me ? `pnm_stars_call_${st.leagueId}_${me.key}` : ''; }
+function starsCallPending() {
+  const at = st.appCfg?.starsCallAt;
+  if (!at || !peerStarsOn() || !myVotePlayer()) return false;
+  if (st.appCfg.starsCallBy && st.appCfg.starsCallBy === st.authUser?.uid) return false;
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms) || Date.now() - ms > 14 * 86400000) return false;
+  try { if (localStorage.getItem(starsCallKey()) === at) return false; } catch(_) {}
+  return true;
+}
+function starsCallDone() {
+  const at = st.appCfg?.starsCallAt, k = starsCallKey();
+  if (!at || !k) return;
+  try { localStorage.setItem(k, at); } catch(_) {}
+}
+function dismissStarsCall() { starsCallDone(); render(); }
+function renderStarsCallBanner() {
+  if (!starsCallPending()) return '';
+  return `<div style="background:var(--s2);border:1.5px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px">
+    <span style="font-size:22px">⭐</span>
+    <div style="flex:1 1 180px;min-width:0">
+      <div style="font-size:13px;font-weight:700">O admin pediu para você avaliar o elenco</div>
+      <div style="font-size:11px;color:var(--text3)">Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio.</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="openRateStars()" style="padding:8px 14px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Avaliar agora</button>
+      <button onclick="dismissStarsCall()" style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Agora não</button>
+    </div>
+  </div>`;
+}
+
+// Só o admin: avisa o grupo (celular + convite no app). O servidor recusa se já chamou há menos de 6 horas.
+async function callStarRaters() {
+  if (!DB || !isAdmin() || !peerStarsOn() || st._starsCalling) return;
+  if (!confirm('Chamar o grupo para avaliar o elenco agora? Quem ativou as notificações recebe um aviso no celular, e todo jogador com a conta ligada ao elenco vê o convite ao abrir o app. Só dá para chamar de novo depois de 6 horas.')) return;
+  st._starsCalling = true;
+  render();
+  try {
+    const r = await callFn('notifyStarRatings', {liga: st.leagueId});
+    const nJog = n => `${n} jogador${n === 1 ? '' : 'es'}`;
+    const rest = r.recipients - r.withPush;
+    toast(!r.recipients ? 'Convite registrado, mas ainda não há jogadores com a conta ligada ao elenco para avisar.'
+      : !r.withPush ? `Convite registrado para ${nJog(r.recipients)}: ninguém ativou as notificações, então todos o veem ao abrir o app.`
+      : `Aviso enviado no celular a ${r.withPush} de ${nJog(r.recipients)}.${rest === 1 ? ' O outro vê o convite ao abrir o app.' : rest > 1 ? ` Os outros ${rest} veem o convite ao abrir o app.` : ''}`, 'ok');
+  } catch(e) {
+    toast(e?.message || 'Não foi possível chamar o grupo agora. Tente de novo.');
+  } finally {
+    st._starsCalling = false;
+    render();
+  }
+}
+
+/* ── Avaliar o elenco: cada jogador dá de 1 a 5 estrelas aos outros ──────────────────────────────────────────────────────────── */
+function ratingTargets() {
+  const me = myVotePlayer();
+  if (!me) return [];
+  return playingPlayers().filter(p => p.id !== me.key && playerKey(p.name) !== me.key).sort((a,b) => a.name.localeCompare(b.name,'pt'));
+}
+
+async function openRateStars() {
+  if (!DB || !peerStarsOn() || !myVotePlayer()) { toast('Avaliação indisponível.'); return; }
+  const rows = ratingTargets().map(p => ({id: p.id, name: p.name, goleiro: !!p.goleiro}));
+  st.modal = {type: 'rateStars', rows, saved: {}, draft: {}, loading: true, busy: false};
+  render();
+  const saved = {};
+  try {
+    const snap = await DB.doc(`leagues/${st.leagueId}/star_votes/${st.authUser.uid}`).get();
+    const r = snap.exists ? snap.data()?.ratings : null;
+    if (r && typeof r === 'object') for (const row of rows) { const n = r[row.id]; if (Number.isInteger(n) && n >= 1 && n <= 5) saved[row.id] = n; }
+  } catch(e) { /* sem as notas de antes a pessoa ainda pode avaliar */ }
+  const m = st.modal;
+  if (!m || m.type !== 'rateStars') return; // fechou a janela enquanto carregava
+  m.saved = saved; m.draft = {...saved}; m.loading = false;
+  render();
+}
+
+function rateStarSet(idx, n) {
+  const m = st.modal;
+  if (!m || m.type !== 'rateStars' || m.loading || m.busy) return;
+  const row = m.rows[idx];
+  if (!row) return;
+  if (m.draft[row.id] === n) delete m.draft[row.id]; else m.draft[row.id] = n; // tocar de novo na mesma estrela tira a nota
+  const top = getModalScrollTop();
+  render();
+  setModalScrollTop(top);
+}
+
+async function submitRateStars() {
+  const m = st.modal;
+  if (!m || m.type !== 'rateStars' || m.loading || m.busy) return;
+  const diff = {};
+  for (const row of m.rows) {
+    const now = m.draft[row.id] || null, was = m.saved[row.id] || null;
+    if (now !== was) diff[row.id] = now; // null = tirar a nota
+  }
+  if (!Object.keys(diff).length) { toast('Nenhuma nota mudou.'); return; }
+  m.busy = true;
+  render();
+  try {
+    await callFn('ratePlayers', {liga: st.leagueId, ratings: diff});
+    starsCallDone(); // quem avaliou não precisa mais do convite do admin
+    st.modal = null;
+    render();
+    toast('Avaliações salvas! Só a média do grupo aparece para os outros.', 'ok');
+  } catch(e) {
+    if (st.modal === m) { m.busy = false; render(); }
+    toast(e?.message || 'Não foi possível salvar. Tente de novo.');
+  }
+}
+
+function mRateStars() {
+  const m = st.modal;
+  if (!m || m.type !== 'rateStars') return '';
+  const done = m.rows.filter(r => m.draft[r.id]).length;
+  const rows = m.rows.map((r, i) => {
+    const n = m.draft[r.id] || 0;
+    const btns = [1,2,3,4,5].map(k => `<button onclick="rateStarSet(${i},${k})" title="${k} estrela${k>1?'s':''}" aria-label="${k} estrela${k>1?'s':''} para ${esc(r.name)}"
+      style="background:none;border:none;padding:2px 3px;font-size:24px;line-height:1;cursor:pointer;color:${n>=k?'var(--gold)':'var(--border)'}">★</button>`).join('');
+    return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:8px 0;border-top:1px solid var(--border2)">
+      ${playerAvatar(r.name, 30)}
+      <span style="flex:1 1 110px;min-width:0;overflow-wrap:anywhere;font-size:14px;font-weight:600">${esc(r.name)}${r.goleiro?' <span style="font-size:11px;color:#4FC3F7">🧤</span>':''}</span>
+      <span style="display:flex;margin-left:auto">${btns}</span>
+    </div>`;
+  }).join('');
+  const body = m.loading
+    ? `<div class="loading" style="padding:30px 0"><div class="spinner"></div></div>`
+    : (m.rows.length ? rows : `<p style="font-size:13px;color:var(--text3);padding:14px 0">Ainda não há outros jogadores no elenco para avaliar.</p>`);
+  const changed = m.rows.some(r => (m.draft[r.id] || null) !== (m.saved[r.id] || null));
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-height:88dvh;display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px)+16px)">
+      <div class="sheet-handle"></div>
+      <div style="font-size:17px;font-weight:800;margin-bottom:2px">⭐ Avaliar o elenco</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">Dê de 1 a 5 estrelas ao nível de cada jogador. <strong style="color:var(--text2)">As notas são anônimas</strong>: ninguém vê quem deu qual nota, só a média do grupo. Você pode mudar quando quiser e pular quem não conhece.</div>
+      <div style="overflow-y:auto;flex:1">${body}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px">${m.loading ? '' : `Você avaliou ${done} de ${m.rows.length}.`}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="submitRateStars()" ${m.loading||m.busy||!changed?'disabled':''} style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;${m.loading||m.busy||!changed?'opacity:.45;cursor:not-allowed':''}">${m.busy?'Salvando…':'Salvar avaliações'}</button>
+        <button onclick="closeModal()" style="padding:12px 18px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Fechar</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function toggleDrawAbsent(id) {
@@ -5190,14 +5548,14 @@ function balancedDraw(players, n) {
   /* shuffle goalies and outfield within same-star tiers for randomness */
   const shuffleTiers = arr => {
     const byStars = {};
-    for (const p of arr) { const s = p.stars||3; (byStars[s]||(byStars[s]=[])).push(p); }
+    for (const p of arr) { const s = drawWeight(p); (byStars[s]||(byStars[s]=[])).push(p); }
     for (const tier of Object.values(byStars)) {
       for (let i = tier.length-1; i > 0; i--) {
         const j = Math.floor(Math.random()*(i+1));
         [tier[i],tier[j]] = [tier[j],tier[i]];
       }
     }
-    return [5,4,3,2,1].flatMap(s => byStars[s]||[]);
+    return Object.keys(byStars).map(Number).sort((a,b) => b-a).flatMap(s => byStars[s]);
   };
   const sortedGoalies  = shuffleTiers(goalies);
   const sorted = shuffleTiers(outfield);
@@ -5217,7 +5575,7 @@ function balancedDraw(players, n) {
     const p = sortedGoalies[gi];
     if (gi < n) {
       teams[gi].push(p);
-      sums[gi] += p.stars || 3;
+      sums[gi] += drawWeight(p);
     } else {
       extraGoalies.push(p);
     }
@@ -5229,14 +5587,14 @@ function balancedDraw(players, n) {
     let bestIdx = -1, bestAvg = Infinity;
     for (let i = 0; i < n; i++) {
       if (teams[i].length >= caps[i]) continue;
-      const avg = (sums[i] + (p.stars||3)) / (teams[i].length + 1);
+      const avg = (sums[i] + drawWeight(p)) / (teams[i].length + 1);
       if (bestIdx === -1 || avg < bestAvg || (avg === bestAvg && teams[i].length < teams[bestIdx].length)) {
         bestAvg = avg; bestIdx = i;
       }
     }
     if (bestIdx === -1) bestIdx = 0;
     teams[bestIdx].push(p);
-    sums[bestIdx] += p.stars || 3;
+    sums[bestIdx] += drawWeight(p);
   }
 
   /* swap optimization: minimize range(avg) */
@@ -5251,7 +5609,7 @@ function balancedDraw(players, n) {
         for (let pi = 0; pi < teams[i].length && !improved; pi++) {
           for (let pj = 0; pj < teams[j].length && !improved; pj++) {
             if (teams[i][pi].goleiro || teams[j][pj].goleiro) continue;
-            const si = teams[i][pi].stars||3, sj = teams[j][pj].stars||3;
+            const si = drawWeight(teams[i][pi]), sj = drawWeight(teams[j][pj]);
             if (si === sj) continue;
             const ns = [...sums]; ns[i]=ns[i]-si+sj; ns[j]=ns[j]-sj+si;
             const navgs = ns.map((s,k)=>teams[k].length?s/teams[k].length:0);
@@ -5265,7 +5623,7 @@ function balancedDraw(players, n) {
       }
     }
   }
-  return {teams, sums};
+  return {teams, sums: sums.map(x => x / 100)};
 }
 
 function setDrawTeamColor(teamIdx, colorId) {
@@ -5306,7 +5664,7 @@ function randomDraw(players, n) {
   // place goalies one per team; extras via round-robin with outfield
   const extras = [];
   sGoalies.forEach((p, i) => {
-    if (i < n) { teams[i].push(p); sums[i] += p.stars||3; }
+    if (i < n) { teams[i].push(p); sums[i] += drawWeight(p); }
     else extras.push(p);
   });
 
@@ -5315,10 +5673,10 @@ function randomDraw(players, n) {
   // fill teams in size order to keep distribution even
   rest.forEach(p => {
     const t = teams.reduce((a, b, i) => teams[i].length < teams[a].length ? i : a, 0);
-    teams[t].push(p); sums[t] += p.stars||3;
+    teams[t].push(p); sums[t] += drawWeight(p);
   });
 
-  return {teams, sums};
+  return {teams, sums: sums.map(x => x / 100)};
 }
 
 function addDrawExtra() {
@@ -5646,7 +6004,7 @@ function renderChamp(champ, editable=false) {
       </summary>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0;border-top:1px solid var(--border2)">
         ${(()=>{
-          const _sMap = {}; (st.players||[]).forEach(p=>_sMap[p.name]=p.stars||0);
+          const _sMap = {}; (st.players||[]).forEach(p=>_sMap[p.name]=starsOf(p));
           return champ.teams.filter(tid=>champ.teamRosters[tid]?.length).map(tid=>{
             const tc=T[tid]||{l:tid,c:'#8B949E'};
             const roster=champ.teamRosters[tid]||[];
@@ -5654,7 +6012,7 @@ function renderChamp(champ, editable=false) {
             return `<div style="padding:10px 14px;border-right:1px solid var(--border2)">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
                 <span style="font-size:11px;font-weight:800;color:${tc.c};letter-spacing:.5px;text-transform:uppercase">${tc.l}</span>
-                ${teamStars?`<span style="font-size:11px;color:var(--gold);font-weight:600">${teamStars}★</span>`:''}
+                ${teamStars?`<span style="font-size:11px;color:var(--gold);font-weight:600">${starsText(teamStars)}★</span>`:''}
               </div>
             ${roster.map(n=>{const rb=getPlayerRarestBadge(n);const rbHtml=rb?(rb.icon?`<span style="display:inline-flex;align-items:center;width:14px;height:14px;flex-shrink:0" title="${esc(rb.label)}">${rb.icon}</span>`:`<span style="font-size:12px;line-height:1;flex-shrink:0" title="${esc(rb.label)}">${rb.emoji}</span>`):'';return`<div style="display:flex;align-items:center;gap:4px;padding:2px 0">
               <span style="display:inline-flex;margin-right:2px">${playerAvatar(n, 20)}</span>
@@ -6050,15 +6408,18 @@ function vCreate() {
   </div>`;
 }
 
-function renderStars(pid, stars) {
-  const s = stars || 0;
+function renderStars(p) {
+  const info = starsInfo(p);
+  const s = Math.round(info.value) || 0; // as estrelas acesas (a média do grupo, quando vale, arredonda)
   if (!isAdmin()) {
     return [1,2,3,4,5].map(i =>
       `<span style="font-size:17px;padding:0 1px;color:${s>=i?'var(--gold)':'var(--border)'}">★</span>`
     ).join('');
   }
+  // com a média do grupo valendo, tocar numa estrela FIXA a estrela do jogador naquele número (não há "zerar": o 📌 desfaz)
+  const base = info.source === 'avg' ? -1 : s;
   return [1,2,3,4,5].map(i =>
-    `<button class="star-btn" onclick="setPlayerStars('${pid}',${i===s&&i===1?0:i===s?0:i})" title="${i} estrela${i>1?'s':''}"
+    `<button class="star-btn" onclick="setPlayerStars('${p.id}',${i===base?0:i})" title="${i} estrela${i>1?'s':''}"
       style="color:${s>=i?'var(--gold)':'var(--border)'}">★</button>`
   ).join('');
 }
@@ -6082,8 +6443,7 @@ function renderDrawCard() {
 
   const presRows = active.map(p => {
     const absent = absentSet.has(p.id);
-    const s = p.stars||0;
-    const starsLabel = s ? '★'.repeat(s) : '—';
+    const starsLabel = starsDisplay(starsOf(p));
     return `<label style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--border2);cursor:pointer">
       <input type="checkbox" ${absent?'':'checked'} onchange="toggleDrawAbsent('${p.id}')"
         style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
@@ -6121,9 +6481,8 @@ function renderDrawCard() {
           teamGoals  += tally[p.name] || 0;
         }
         const playerRows = tp.map(p => {
-          const s = p.stars||0;
           const stats = getPlayerDrawStats(p.name);
-          const starsStr = s ? '★'.repeat(s) : '—';
+          const starsStr = starsDisplay(starsOf(p));
           const lastTitle = stats.last_date ? stats.last_date.split('-').reverse().join('/') : '—';
           const rb = getPlayerRarestBadge(p.name);
           const rbHtml = rb ? (rb.icon ? `<span style="display:inline-flex;align-items:center;width:13px;height:13px;flex-shrink:0" title="${esc(rb.label)}">${rb.icon}</span>` : `<span style="font-size:11px;line-height:1;flex-shrink:0" title="${esc(rb.label)}">${rb.emoji}</span>`) : '';
@@ -6144,7 +6503,7 @@ function renderDrawCard() {
         return `<div class="draw-team-card" style="border-left:3px solid ${accentHex}">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <span style="flex:1;font-size:13px;font-weight:700;color:${accentHex}">${esc(teamLabel)}</span>
-            <span style="font-size:11px;color:var(--text3)">${sums[i]}★</span>
+            <span style="font-size:11px;color:var(--text3)">${starsText(sums[i])}★</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">${colorChips}</div>
           <div style="display:flex;gap:14px;font-size:11px;color:var(--text3);padding:6px 0;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);margin-bottom:2px">
@@ -6227,10 +6586,15 @@ function vPlayers() {
       <div style="flex:1 1 120px;min-width:0;overflow-wrap:anywhere">
         <div style="font-size:14px;font-weight:600">${esc(p.name)}${isChurr&&st.appCfg?.hasChurrasco?` <span style="font-size:10px;font-weight:700;color:#FF8A3C;background:#FF8A3C18;padding:2px 5px;border-radius:10px">🍖</span>`:''}${isGoal?` <span style="font-size:10px;font-weight:700;color:#4FC3F7;background:#4FC3F718;padding:2px 5px;border-radius:10px">🧤</span>`:''}</div>
         ${isAdmin()&&waOf(p)?`<div style="font-size:11px;color:#25D366;margin-top:1px">💬 +55 ${esc(waOf(p))}</div>`:''}
+        ${starsCaption(p)?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${esc(starsCaption(p))}</div>`:''}
       </div>
       <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto">
-      <span style="display:flex;gap:0">${renderStars(p.id, p.stars)}</span>
+      <span style="display:flex;gap:0">${renderStars(p)}</span>
       ${isAdmin()?`
+      ${peerStarsOn()?`<button onclick="toggleStarsPinned('${p.id}',${p.starsPinned===true})" title="${p.starsPinned===true?'Estrela fixada pelo admin: toque para voltar a usar a média do grupo':'Fixar a estrela do admin: ignora a média do grupo'}"
+        style="padding:3px 9px;border-radius:20px;border:1px solid ${p.starsPinned===true?'var(--gold)':'var(--border)'};
+               background:${p.starsPinned===true?'#F0A50018':'none'};color:${p.starsPinned===true?'var(--gold)':'var(--text3)'};
+               font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📌</button>`:''}
       <button onclick="togglePlayerActive('${p.id}',${isActive})"
         style="padding:3px 9px;border-radius:20px;border:1px solid ${isActive?'#00d67f':'#6e7681'};
                background:${isActive?'#00d67f18':'none'};color:${isActive?'#00d67f':'#6e7681'};
@@ -6263,6 +6627,11 @@ function vPlayers() {
       <span class="card-lbl">Elenco de Jogadores</span>
       <span style="font-size:11px;color:var(--text3)">${active.length} ativos${inactive.length?` · ${inactive.length} inativos`:''}</span>
     </div>
+    ${peerStarsOn()?`<div class="card-body" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px">
+      <div style="flex:1 1 200px;min-width:0;font-size:12px;color:var(--text3);line-height:1.5">⭐ A estrela de cada jogador vem da <strong style="color:var(--text2)">média das notas do grupo</strong>. As notas são anônimas: só a média aparece.</div>
+      ${myVotePlayer()?`<button class="btn btn-primary btn-sm btn-inline" onclick="openRateStars()" style="margin:0;white-space:nowrap">Avaliar o elenco</button>`:''}
+      ${isAdmin()?`<button class="btn btn-sm btn-inline" onclick="callStarRaters()" ${st._starsCalling?'disabled':''} style="margin:0;white-space:nowrap;border:1px solid var(--accent);background:none;color:var(--accent)">${st._starsCalling?'Chamando…':'📣 Chamar o grupo'}</button>`:''}
+    </div>`:''}
     ${isAdmin()?`<div class="card-body" style="display:flex;gap:8px;align-items:center">
       <input id="newp-inp" class="player-input" type="text" placeholder="Nome do jogador"
         style="flex:1;margin:0"
@@ -7391,23 +7760,8 @@ function vMeuJogador() {
   }
   const myGoalsPerGame=myTeamGamesPlayed>0?Number((totalGoals/myTeamGamesPlayed).toFixed(2)).toString():null;
 
-  // W/D/L from team matches
-  let myW=0,myD=0,myL=0,myMatchesPlayed=0;
-  for(const c of doneAll){
-    if(!c.teamRosters) continue;
-    let myTeamWDL=null;
-    for(const[team,roster] of Object.entries(c.teamRosters)){if(roster.includes(myName)){myTeamWDL=team;break;}}
-    if(!myTeamWDL) continue;
-    for(const m of(c.matches||[])){
-      if(!m.played) continue;
-      if(m.home!==myTeamWDL&&m.away!==myTeamWDL) continue;
-      myMatchesPlayed++;
-      const iHome=m.home===myTeamWDL;
-      if(m.hs===m.as) myD++;
-      else if((iHome&&m.hs>m.as)||(!iHome&&m.as>m.hs)) myW++;
-      else myL++;
-    }
-  }
+  // W/D/L from team matches (the same count the rival comparison uses for both sides)
+  const { w: myW, d: myD, l: myL, matches: myMatchesPlayed } = matchRecord(doneAll, myName);
   const champsTotalCount=doneAll.length;
 
   // badge computation
@@ -7585,12 +7939,12 @@ function vMeuJogador() {
     }
   }
   const consecGoalless = goallessStreak([...done].reverse(), myName);
-  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), myName };
+  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), ...h2hFlags(doneAll, myName), ...rivalPublicStats(myName), myName };
   const earnedBadges = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && b.check(_bStats));
   const lockedBadges  = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && !b.check(_bStats));
 
   // badge change detection — cross-session via userDoc baseline + in-session via memory
-  if (!st.mjPreviewKey && st.authUser?.uid && st.ready && st.ranksReady && st.playersReady && st.cfgReady) {
+  if (!st.mjPreviewKey && st.authUser?.uid && st.ready && st.ranksReady && st.playersReady && st.cfgReady && st.rivalPubReady) {
     const bKey = st.authUser.uid + '_' + (st.leagueId || '');
     const allIds = earnedBadges.map(b => b.id);
     if (st._knownBadgesKey !== bKey) {
@@ -7612,6 +7966,8 @@ function vMeuJogador() {
       }
     }
   }
+
+  if (!st.mjPreviewKey && st.authUser?.uid) rivalProgressSync(); // item 36: manda ao servidor os meses de duelo que fecharam e as viradas (só no próprio perfil)
 
   // payment status
   const curMonth = new Date().toISOString().slice(0,7);
@@ -7657,7 +8013,7 @@ function vMeuJogador() {
 
   // team history (only champs that have teamRosters)
   const _starsMap = {};
-  st.players.forEach(p => _starsMap[p.name] = p.stars || 0);
+  st.players.forEach(p => _starsMap[p.name] = starsOf(p));
   const teamHistory = doneAll
     .filter(c => c.teamRosters && Object.keys(c.teamRosters).length)
     .map(c => {
@@ -7719,6 +8075,7 @@ function vMeuJogador() {
     </div>`:''}
     ${isSimulating?'':checklistCard()}
     ${renderVoteBanners()}
+    ${renderStarsCallBanner()}
     ${(()=>{
       const _preset = presetChamp();
       if (!_preset) return '';
@@ -7879,7 +8236,7 @@ function vMeuJogador() {
             <div style="font-size:11px;color:var(--text3)">${fdt(e.date)}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:12px;color:var(--gold);font-weight:600">${e.teamStars}★ · 🏆${e.rosterTitles}</div>
+            <div style="font-size:12px;color:var(--gold);font-weight:600">${starsText(e.teamStars)}★ · 🏆${e.rosterTitles}</div>
             <div style="font-size:11px;font-weight:700;color:${resultCfg.color}">${resultCfg.label}</div>
           </div>
           <span style="font-size:14px;color:var(--text3)">›</span>
@@ -7897,7 +8254,7 @@ function vMeuJogador() {
             <div style="font-size:11px;color:var(--text3)">${fdt(e.date)}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:12px;color:var(--gold);font-weight:600">${e.teamStars}★ · 🏆${e.rosterTitles}</div>
+            <div style="font-size:12px;color:var(--gold);font-weight:600">${starsText(e.teamStars)}★ · 🏆${e.rosterTitles}</div>
             <div style="font-size:11px;font-weight:700;color:var(--gold)">🏆 Campeão</div>
           </div>
           <span style="font-size:14px;color:var(--text3)">›</span>
@@ -7910,9 +8267,9 @@ function vMeuJogador() {
         <span style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--gold)">${val}</span></div>`;
       return `<div class="card" style="margin-top:0">
         <div class="card-hdr"><span class="card-lbl">Média dos Meus Times</span></div>
-        ${rowT('Estrelas médias do time', avgTeamStars+'★', `${teamHistory.length} campeonato${teamHistory.length>1?'s':''} com elenco registrado`)}
+        ${rowT('Estrelas médias do time', starsText(avgTeamStars)+'★', `${teamHistory.length} campeonato${teamHistory.length>1?'s':''} com elenco registrado`)}
         ${teamWinPct!==null?rowT('Taxa de título (por time)', teamWinPct+'%', `${teamWins.length} de ${teamHistory.length} campeonatos`):''}
-        ${avgChampTeamStars!==null?rowT('Estrelas médias — times campeões', avgChampTeamStars+'★', `média nos ${teamWins.length} título${teamWins.length>1?'s':''}`):''}
+        ${avgChampTeamStars!==null?rowT('Estrelas médias — times campeões', starsText(avgChampTeamStars)+'★', `média nos ${teamWins.length} título${teamWins.length>1?'s':''}`):''}
       </div>`;
     })() : ''}
     ${st.mjPreviewKey ? '' : anonymizeNameLink() + deleteAccountLink()}
@@ -7936,14 +8293,14 @@ function mMjTeamDetail() {
     participant: {label:'Fase de Grupos',   color:'var(--text3)'},
   }[d.result] || {label:'—', color:'var(--text3)'};
   const starsMap = {};
-  st.players.forEach(p => starsMap[p.name] = p.stars || 0);
+  st.players.forEach(p => starsMap[p.name] = starsOf(p));
   const playerRows = (d.roster||[]).map(name => {
     const stars = starsMap[name] || 0;
     const titles = titlesBeforeDate(name, d.date);
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border2)">
       ${playerAvatar(name, 30)}
       <span style="flex:1;min-width:0;font-size:14px;font-weight:600">${esc(name)}</span>
-      ${stars ? `<span style="font-size:12px;color:var(--gold)">${'★'.repeat(stars)}</span>` : ''}
+      ${stars ? `<span style="font-size:12px;color:var(--gold)">${starsDisplay(stars)}</span>` : ''}
       <span style="font-size:12px;color:var(--text3)">🏆 ${titles}</span>
     </div>`;
   }).join('');
@@ -7957,7 +8314,7 @@ function mMjTeamDetail() {
       <div style="font-size:12px;color:var(--text3);margin-bottom:4px">${fdt(d.date)}</div>
       <div style="font-size:13px;font-weight:700;color:${resultCfg.color};margin-bottom:12px">${resultCfg.label}</div>
       <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);margin-bottom:4px">
-        <span style="font-size:13px;color:var(--text2)">⭐ <strong>${d.teamStars}</strong> estrelas</span>
+        <span style="font-size:13px;color:var(--text2)">⭐ <strong>${starsText(d.teamStars)}</strong> estrelas</span>
         <span style="font-size:13px;color:var(--text2)">🏆 <strong>${d.rosterTitles}</strong> títulos no elenco</span>
         <span style="font-size:13px;color:var(--text2)">👥 <strong>${(d.roster||[]).length}</strong> jogadores</span>
       </div>
@@ -8485,6 +8842,22 @@ function mAdminPanel() {
             </div>
           </div>
           <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">⭐ Estrelas pela média do grupo</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada jogador dá de 1 a 5 estrelas aos outros e o sorteio equilibrado passa a usar a média das notas. As notas são anônimas: só a média aparece. A média vale para cada jogador quando metade do elenco que joga (no mínimo 3 pessoas) já avaliou; antes disso vale a estrela que você deu. No Elenco, o 📌 fixa a estrela de um jogador e ignora os votos dele, e o 📣 Chamar o grupo avisa os jogadores para avaliarem (uma vez a cada 6 horas).</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="saveAppCfg({peerStars:true})" style="${tog(!!cfg.peerStars)}">Ligada</button>
+              <button onclick="saveAppCfg({peerStars:false})" style="${tog(!cfg.peerStars)}">Desligada</button>
+            </div>
+          </div>
+          <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">🤜 Badges de confronto direto</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Carrasco (ganhou 5 ou mais jogos do mesmo jogador, em times opostos), Freguês (o contrário), Tira-teima (histórico empatado depois de 6 jogos) e Clássico (20 jogos contra o mesmo jogador). Desligadas, as quatro somem para todo o grupo; o frente a frente com o seu rival continua.</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="saveAppCfg({h2hBadges:true})" style="${tog(cfg.h2hBadges !== false)}">Ligadas</button>
+              <button onclick="saveAppCfg({h2hBadges:false})" style="${tog(cfg.h2hBadges === false)}">Desligadas</button>
+            </div>
+          </div>
+          <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">🗳️ Votação de destaques</div>
             <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Depois de cada campeonato, quem estava no elenco vota. Cada votação é opcional e vale para os próximos campeonatos finalizados.</div>
             <div style="margin-bottom:10px">
@@ -8601,7 +8974,7 @@ function render() {
   }
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -9094,7 +9467,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),myName:name};
+  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),...h2hFlags(doneAll,name),...rivalPublicStats(name),myName:name};
 }
 
 function getBadgeCache() {
@@ -9103,7 +9476,7 @@ function getBadgeCache() {
     const pags=st.finMens[mon]?.pagamentos||{};
     return mon+':'+Object.entries(pags).map(([n,p])=>n+'='+(typeof p==='boolean'?p:JSON.stringify(p))).sort().join(',');
   }).join('|');
-  const key=champs.length+'|'+champs.map(c=>c.id||'').join(',')+'|'+finKey+'|'+votingCacheKey();
+  const key=champs.length+'|'+champs.map(c=>c.id||'').join(',')+'|'+finKey+'|'+votingCacheKey()+'|'+(st._rivalPubVer||0);
   if(_badgeCache&&_badgeCacheKey===key) return _badgeCache;
   const allNames=new Set();
   for(const r of(st.ranks||[])) if(r.name) allNames.add(r.name);
@@ -9141,20 +9514,45 @@ function badgeEligibleCount(b) {
   return (st.players || []).filter(p => b.specialFor ? b.specialFor.includes(p.name) : !(b.fieldOnly && p.goleiro) && !(b.gkOnly && !p.goleiro)).length;
 }
 
-// Maior sequência de campeonatos SEGUIDOS em que o jogador esteve no elenco e NÃO fez nenhum gol. `chron` vem do mais antigo para o mais novo e só com campeonatos
-// concluídos, fora do plano gratuito e a partir de 08/09/2026 (quando o registro de gols começou). Só conta campeonato com gols registrados: se ninguém marcou, o
-// admin provavelmente não lançou os gols e não dá para provar nada, então a sequência zera. Faltar a um campeonato, ou fazer um gol, também zera. Serve à aba EU e
-// ao cache de todos os jogadores (os dois calculam as estatísticas das conquistas).
+// Vitórias, empates e derrotas de um jogador nos jogos do time dele: para cada campeonato da lista em que ele está no elenco, os jogos disputados por esse time (empate = placar igual,
+// mesmo que a final tenha sido decidida nos pênaltis). Pura: serve ao Resumo de Jogos da aba EU e à comparação com o rival, com a mesma conta para os dois lados.
+function matchRecord(champs, name) {
+  let w = 0, d = 0, l = 0, matches = 0;
+  for (const c of champs) {
+    if (!c.teamRosters) continue;
+    let team = null;
+    for (const [t, roster] of Object.entries(c.teamRosters)) { if (roster.includes(name)) { team = t; break; } }
+    if (!team) continue;
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      if (m.home !== team && m.away !== team) continue;
+      matches++;
+      const home = m.home === team;
+      if (m.hs === m.as) d++;
+      else if ((home && m.hs > m.as) || (!home && m.as > m.hs)) w++;
+      else l++;
+    }
+  }
+  return { w, d, l, matches };
+}
+
+// Maior sequência de campeonatos SEGUIDOS, entre os que o jogador DISPUTOU, em que ele esteve no elenco e NÃO fez nenhum gol. `chron` vem do mais antigo para o mais novo e
+// só com campeonatos concluídos, fora do plano gratuito e a partir de 08/09/2026 (quando o registro de gols começou). Faltar a um campeonato (há elenco registrado, ele não está
+// em nenhum time e não fez gol) NÃO zera nem soma: o campeonato é ignorado (decisão do dono em 16/10/2026). Fazer um gol zera. Só conta campeonato com gols registrados: se ninguém
+// marcou, o admin provavelmente não lançou os gols e não dá para provar nada, então a sequência zera; sem elenco registrado também não dá para saber se ele esteve presente, então zera
+// do mesmo jeito (nesta conquista, na dúvida nunca se dá a badge). Serve à aba EU e ao cache de todos os jogadores (os dois calculam as estatísticas das conquistas).
 function goallessStreak(chron, name) {
   let best = 0, cur = 0;
   for (const c of chron) {
-    const played = !!c.teamRosters && Object.values(c.teamRosters).some(r => r.includes(name));
+    const rostersKnown = !!c.teamRosters && Object.keys(c.teamRosters).length > 0;
+    const played = rostersKnown && Object.values(c.teamRosters).some(r => r.includes(name));
     let anyGoal = false, mine = 0;
     for (const m of (c.matches || [])) {
       if (!m.played) continue;
       const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
       for (const g of gs) { anyGoal = true; if (g.player === name) mine++; }
     }
+    if (rostersKnown && !played && mine === 0) continue; // faltou a este campeonato: ele não entra na conta (não soma e não zera)
     if (played && anyGoal && mine === 0) { cur++; if (cur > best) best = cur; } else cur = 0;
   }
   return best;
@@ -10093,7 +10491,7 @@ function vStats() {
     const doneR = (st.champs||[]).filter(c=>c.status==='completed'&&!c.freeMode&&c.teamRosters&&Object.keys(c.teamRosters).length);
     if (!doneR.length) return '';
     const starsM = {};
-    (st.players||[]).forEach(p=>starsM[p.name]=p.stars||0);
+    (st.players||[]).forEach(p=>starsM[p.name]=starsOf(p));
     const titBefore = titlesBeforeDate;
 
     const acc = {};
@@ -11871,31 +12269,51 @@ function mBadgeInfo() {
 }
 
 /* ── Rival ───────────────────────────────────────────────────────────────────────────────
-   Comparar as minhas conquistas com as de outro jogador da liga. A escolha do rival fica SÓ neste aparelho (localStorage, por conta e liga): nada vai ao servidor e o
-   rival não é avisado. A comparação usa o que a liga já mostra a todos (as conquistas de cada um, do cache das conquistas, com as mesmas regras para os dois lados) e só
-   aparece no PRÓPRIO perfil (nunca na simulação do admin). */
-const RIVAL_STORE = 'aceoma_rival';
+   Comparar as minhas conquistas e os meus números com os de outro jogador da liga, o duelo do mês e o frente a frente. A escolha do rival fica no SERVIDOR (item 36):
+   leagues/{liga}/rivals/{uid}, que só a própria conta lê (nem o admin, nem o rival) e só a função setRival grava. O rival NÃO é avisado; só se os dois se escolherem
+   (Rivalidade Declarada) os dois ficam sabendo, e com 3 ou mais escolhas o jogador ganha o Alvo da Galera e com 7 ou mais o Inimigo Público (ninguém vê quem escolheu). A comparação usa o que a liga já
+   mostra a todos (as conquistas e os números de cada um, com as mesmas regras para os dois lados) e só aparece no PRÓPRIO perfil (nunca na simulação do admin). */
+const RIVAL_STORE = 'aceoma_rival'; // onde a escolha ficava antes (só no aparelho): hoje só serve para levar a escolha antiga para o servidor, uma vez
 const rivalStoreKey = () => (st.authUser?.uid && st.leagueId ? `${st.authUser.uid}_${st.leagueId}` : '');
+// O rival escolhido (a chave do jogador) ou ''. Vem do documento da conta no servidor e só vale para o jogador a que a conta está ligada agora.
 function rivalGet() {
-  const k = rivalStoreKey();
-  if (!k) return '';
-  if (st._rival?.k === k) return st._rival.v;
-  let v = '';
-  try { const all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); if (all && typeof all === 'object' && !Array.isArray(all) && typeof all[k] === 'string') v = all[k]; } catch(_) {}
-  st._rival = { k, v };
-  return v;
+  const d = st.rivalDoc, me = st.userDoc?.playerKey;
+  return d && me && d.ownKey === me ? String(d.rivalKey || '') : '';
 }
+// Quando o rival atual foi escolhido (hora do servidor), ou '' sem rival.
+function rivalSince() { return rivalGet() && st.rivalDoc?.since ? String(st.rivalDoc.since) : ''; }
+// Escolher, trocar ou tirar o rival ('' = sem rival). Mostra a escolha na hora e confirma no servidor (setRival); se o servidor recusar, volta ao que era e avisa.
+// Devolve uma promessa com true (valeu) ou false. Sem servidor (a demonstração) só vale no aparelho.
 function rivalSet(v) {
+  const me = st.userDoc?.playerKey;
+  if (!me) return Promise.resolve(false);
+  const before = st.rivalDoc;
+  if (!v && !rivalGet()) return Promise.resolve(true); // já não havia rival
+  const mine = before && before.ownKey === me ? before : null;
+  st.rivalDoc = { ...(mine || {}), ownKey: me, rivalKey: v, since: v ? new Date().toISOString() : '', mutual: false, lead: '', duels: mine?.duels || {} };
+  if (!DB || !st.leagueId) return Promise.resolve(true);
+  st._rivalBusy = (st._rivalBusy || 0) + 1;
+  const seq = st._rivalSeq = (st._rivalSeq || 0) + 1; // duas escolhas seguidas: só a resposta da última mexe na tela
+  return callFn('setRival', { liga: st.leagueId, rivalKey: v }).then(r => {
+    if (seq === st._rivalSeq) st.rivalDoc = { ...st.rivalDoc, rivalKey: String(r?.rivalKey || ''), since: String(r?.since || ''), mutual: r?.mutual === true };
+    return true;
+  }).catch(e => {
+    if (seq === st._rivalSeq) { st.rivalDoc = before; toast(e?.message || 'Não foi possível salvar o rival agora. Tente de novo.'); }
+    return false;
+  }).finally(() => { st._rivalBusy = Math.max(0, (st._rivalBusy || 1) - 1); render(); });
+}
+// Quem já tinha escolhido um rival antes (guardado só no aparelho) não perde a escolha: na 1ª vez que o app tem o documento da conta, o rival antigo vai para o servidor
+// (se a conta ainda não tem rival lá e o jogador ainda está ativo na liga); de qualquer jeito a cópia do aparelho é apagada.
+function rivalMigrateLocal() {
   const k = rivalStoreKey();
-  if (!k) return;
-  st._rival = { k, v };
-  try {
-    let all = {};
-    try { all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); } catch(_) {} // guardado estragado: recomeça do zero em vez de nunca mais gravar
-    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
-    if (v) all[k] = v; else delete all[k];
-    localStorage.setItem(RIVAL_STORE, JSON.stringify(all));
-  } catch(_) {}
+  if (!k || !st.rivalReady || !st.playersReady || !st.userDoc?.playerKey || st._rivalMigrated === k) return;
+  st._rivalMigrated = k;
+  let all = {}, legacy = '';
+  try { all = JSON.parse(localStorage.getItem(RIVAL_STORE) || '{}'); if (all && typeof all === 'object' && !Array.isArray(all) && typeof all[k] === 'string') legacy = all[k]; } catch(_) {}
+  if (!legacy) return;
+  const dropLocal = () => { try { delete all[k]; localStorage.setItem(RIVAL_STORE, JSON.stringify(all)); } catch(_) {} };
+  if (rivalGet() || !rivalCandidates().some(p => playerKey(p.name) === legacy)) { dropLocal(); return; }
+  rivalSet(legacy).then(ok => { if (ok) dropLocal(); });
 }
 // Quem pode ser rival: os outros jogadores ativos da liga.
 function rivalCandidates() { return (st.players || []).filter(p => p.active !== false && playerKey(p.name) !== st.userDoc?.playerKey); }
@@ -11904,33 +12322,452 @@ function rivalPlayer() {
   const key = rivalGet();
   return key ? rivalCandidates().find(p => playerKey(p.name) === key) || null : null;
 }
+// As badges que só falam do rival (as 6 do duelo e da sequência, as 2 da virada, as 3 do tempo, Alvo da Galera, Inimigo Público e Rivalidade Declarada): não entram na comparação de conquistas, que seria
+// circular (ganhar uma delas mudaria o próprio placar). As do frente a frente são normais.
+const RIVAL_ONLY_IDS = ['alvo_galera', 'inimigo_publico', 'rival_declarada', 'duelo_aluno', 'duelo_fora_liga', 'duelo_mao', 'duelo_trator', 'duelo_dono', 'duelo_sombra', 'rival_passou', 'rival_ultrapassada', 'rival_3m', 'rival_6m', 'rival_12m'];
+// O que a liga sabe do rival de um jogador (cadastro público, só contagens e marcas), no formato das contas das conquistas.
+function rivalPublicStats(name) {
+  const p = st.rivalPublic?.[playerKey(name)] || {};
+  return { rivalAwards: p.awards || {}, rivalAlvo: p.alvo === true, rivalPublico: p.publico === true, rivalDeclarada: p.declarada === true };
+}
+const rivalAward = (s, id) => (Number(s.rivalAwards?.[id]) || 0) >= 1;
+// As badges do rival (as que faltam, trancadas) só aparecem para quem usa o rival ou já ganhou alguma; as do frente a frente valem para todos.
+function rivalBadgesShown() {
+  if (rivalGet()) return true;
+  const key = st.mjPreviewKey || st.userDoc?.playerKey, p = key ? st.rivalPublic?.[key] : null;
+  return !!p && (p.alvo === true || p.declarada === true || Object.values(p.awards || {}).some(n => Number(n) >= 1));
+}
 // Conquistas que a liga mostra no painel (as escondidas pela configuração da liga não entram na conta, para os dois lados).
 const rivalVisible = id => { const b = BADGE_CATALOG.find(x => x.id === id); return !!b && (!b.visible || b.visible()); };
-const rivalBadgeIds = name => (getBadgeCache().playerBadges[name] || []).filter(rivalVisible);
+const rivalBadgeIds = name => (getBadgeCache().playerBadges[name] || []).filter(id => rivalVisible(id) && !RIVAL_ONLY_IDS.includes(id));
 function rivalDiff(mine, theirs) {
   const a = new Set(mine), b = new Set(theirs);
   return { onlyMine: mine.filter(x => !b.has(x)), onlyTheirs: theirs.filter(x => !a.has(x)), both: mine.filter(x => b.has(x)) };
 }
-// A comparação pronta: placar e os três grupos (da mais rara para a mais comum). Null sem rival, sem jogador vinculado ou na simulação do admin.
-function rivalCompare() {
+// Eu e o rival escolhido, com os nomes do elenco (sem o jogador no elenco, a chave). Null sem rival, sem jogador vinculado ou na simulação do admin: a comparação só existe no PRÓPRIO perfil.
+function rivalPair() {
   const r = rivalPlayer(), myKey = st.userDoc?.playerKey;
   if (!r || !myKey || (st.mjPreviewKey && st.mjPreviewKey !== myKey)) return null;
-  const me = (st.players || []).find(p => playerKey(p.name) === myKey), myName = me?.name || myKey;
+  const me = (st.players || []).find(p => playerKey(p.name) === myKey);
+  return { me: me?.name || myKey, rival: r.name };
+}
+// A comparação pronta: placar e os três grupos (da mais rara para a mais comum). Null sem rival, sem jogador vinculado ou na simulação do admin.
+function rivalCompare() {
+  const pair = rivalPair();
+  if (!pair) return null;
   const cache = getBadgeCache();
   const info = id => { const b = BADGE_CATALOG.find(x => x.id === id); return { id, emoji: b.emoji, label: b.label, desc: b.desc, holders: (cache.badgeHolders[id] || []).length, eligible: badgeEligibleCount(b) }; };
-  const mineIds = rivalBadgeIds(myName), theirIds = rivalBadgeIds(r.name), d = rivalDiff(mineIds, theirIds), pack = ids => mjByRarity(ids.map(info));
-  return { me: myName, rival: r.name, mine: pack(d.onlyMine), theirs: pack(d.onlyTheirs), both: pack(d.both), myCount: mineIds.length, rivalCount: theirIds.length, diff: mineIds.length - theirIds.length };
+  const mineIds = rivalBadgeIds(pair.me), theirIds = rivalBadgeIds(pair.rival), d = rivalDiff(mineIds, theirIds), pack = ids => mjByRarity(ids.map(info));
+  return { me: pair.me, rival: pair.rival, mine: pack(d.onlyMine), theirs: pack(d.onlyTheirs), both: pack(d.both), myCount: mineIds.length, rivalCount: theirIds.length, diff: mineIds.length - theirIds.length };
+}
+// A SUGESTÃO de rival: o jogador ativo da liga mais perto de você em número de conquistas (as que o painel mostra, a mesma conta do placar). Quando duas pessoas estão à mesma distância,
+// vem quem está na frente (um rival para alcançar) e, ainda empatando, a ordem alfabética. Quem ainda não tem nenhuma conquista não jogou e não é sugerido; sem nenhuma conquista minha não há
+// "perto" para medir. `exceptKey` pula um jogador (o rival atual, quando se troca de rival). Calculada só neste aparelho, com o que a liga já mostra a todos: nada vai ao servidor e ninguém é avisado.
+// Null sem sugestão, sem jogador vinculado ou na simulação do admin ("Ver como").
+const rivalCloser = (a, b) => Math.abs(a.gap) !== Math.abs(b.gap) ? Math.abs(a.gap) < Math.abs(b.gap) : (a.gap >= 0) !== (b.gap >= 0) ? a.gap >= 0 : a.name.localeCompare(b.name, 'pt') < 0;
+function rivalSuggestion(exceptKey) {
+  const myKey = st.userDoc?.playerKey;
+  if (!myKey || (st.mjPreviewKey && st.mjPreviewKey !== myKey)) return null;
+  const me = (st.players || []).find(p => playerKey(p.name) === myKey);
+  const mine = me ? rivalBadgeIds(me.name).length : 0;
+  if (!mine) return null;
+  let best = null;
+  for (const p of rivalCandidates()) {
+    const key = playerKey(p.name);
+    if (key === exceptKey) continue;
+    const count = rivalBadgeIds(p.name).length;
+    if (!count) continue;
+    const cand = { key, name: p.name, count, mine, gap: count - mine };
+    if (!best || rivalCloser(cand, best)) best = cand;
+  }
+  return best;
+}
+// "2 conquistas a mais que você" (ou "a menos", ou "o mesmo número de conquistas que você") e, na janela, "12 conquistas, 2 a mais que você"
+const rivalGapText = sg => sg.gap > 0 ? `${sg.gap} conquista${sg.gap === 1 ? '' : 's'} a mais que você` : sg.gap < 0 ? `${-sg.gap} conquista${sg.gap === -1 ? '' : 's'} a menos que você` : 'o mesmo número de conquistas que você';
+const rivalSuggestText = sg => `${sg.count} conquista${sg.count === 1 ? '' : 's'}, ${sg.gap > 0 ? sg.gap + ' a mais que você' : sg.gap < 0 ? -sg.gap + ' a menos que você' : 'igual a você'}`;
+// As linhas da tabela de números. `val` tira o número de um lado; `better` diz quem leva a cor ('high' = quem tem mais, 'low' = quem tem menos; sem ele a linha só informa, porque jogar
+// mais não é jogar melhor); `games` marca as que vêm dos jogos dos times (vitórias, empates, derrotas e % de vitórias, a mesma conta do Resumo de Jogos da aba EU); `both` faz a linha
+// só disputar quando os dois já jogaram (senão quem nunca jogou "ganharia" em quem tem menos); `skipNull` esconde a linha quando um dos lados não tem o número; `only` diz quando a
+// liga usa aquele número (votação de destaques, notas do grupo). A MESMA lista serve ao comparativo de sempre (os números do rival) e ao duelo do mês.
+const rivalTitlesText = t => (t % 1 === 0 ? String(t) : Math.floor(t) + '½');
+const rivalPctOf = s => (s.matches > 0 ? Math.round(s.w / s.matches * 100) : null);
+const RIVAL_NUMBER_ROWS = [
+  { id: 'titles', label: 'Títulos', val: s => s.titles, text: rivalTitlesText, better: 'high' },
+  { id: 'champs', label: 'Campeonatos', val: s => s.champs },
+  { id: 'matches', label: 'Jogos', val: s => s.matches, games: true },
+  { id: 'wins', label: 'Vitórias', val: s => s.w, better: 'high', games: true },
+  { id: 'draws', label: 'Empates', val: s => s.d, games: true },
+  { id: 'losses', label: 'Derrotas', val: s => s.l, better: 'low', games: true },
+  { id: 'winpct', label: '% de vitórias', val: rivalPctOf, text: v => (v === null ? '—' : v + '%'), better: 'high', games: true },
+  { id: 'goals', label: 'Gols', val: s => s.goals, better: 'high' },
+  { id: 'art', label: 'Vezes artilheiro', val: s => s.art, better: 'high' },
+  { id: 'pres', label: 'Presença', val: s => s.pres, text: v => v + '%', better: 'high', skipNull: true },
+  { id: 'pos', label: 'Bola Cheia', val: s => s.pos, better: 'high', only: () => votingUsed('pos') },
+  { id: 'neg', label: 'Bola Murcha', val: s => s.neg, better: 'low', both: true, only: () => votingUsed('neg') },
+  { id: 'stars', label: 'Nota do grupo', val: s => s.groupStar, text: v => starsText(v), better: 'high', skipNull: true, only: () => peerStarsOn() },
+];
+// A nota do grupo de um jogador (a média que o grupo deu, só quando já vale); null quando a liga não usa ou ainda não vale.
+function rivalStarOf(name) {
+  if (!peerStarsOn()) return null;
+  const p = (st.players || []).find(x => x.name === name), i = p ? starsInfo(p) : null;
+  return i && i.source === 'avg' ? i.value : null;
+}
+// Os números de UM jogador, tirados do que a liga já mostra a todos: títulos (o ranking), campeonatos, gols e vezes artilheiro (a mesma conta da aba EU e das conquistas), os jogos do time dele,
+// a presença, os destaques da votação e a nota do grupo.
+function rivalStatsOf(name) {
+  const rk = (st.ranks || []).find(r => r.id === playerKey(name)), ps = getBadgeCache().playerStats?.[name] || {};
+  const rec = matchRecord((st.champs || []).filter(c => c.status === 'completed' && !c.freeMode), name);
+  return { titles: Number(rk?.titles) || 0, champs: ps.champsPlayed || 0, goals: ps.totalGoals || 0, art: ps.myArt || 0, pos: ps.posAwards || 0, neg: ps.negAwards || 0,
+    pres: ps.done_count > 0 ? Math.round((ps.champsPlayedCutoff || 0) / ps.done_count * 100) : null, groupStar: rivalStarOf(name), ...rec };
+}
+// A tabela com os números de dois lados: o que mostrar de cada lado e quem está na frente em cada linha ('mine', 'theirs' ou '' no empate). Só disputa a linha que tem `better`; as de jogos só
+// disputam quando os dois já jogaram, e só aparecem se algum dos dois já jogou. Linha em que os dois têm zero não aparece. Pura: serve aos números de sempre e ao duelo do mês.
+function rivalRows(a, b) {
+  const played = a.matches > 0 && b.matches > 0, anyGame = a.matches > 0 || b.matches > 0, rows = [];
+  for (const def of RIVAL_NUMBER_ROWS) {
+    if (def.only && !def.only()) continue;
+    const x = def.val(a), y = def.val(b);
+    if (def.skipNull && (x === null || x === undefined || y === null || y === undefined)) continue;
+    if (def.games ? !anyGame : x === 0 && y === 0) continue;
+    const scored = !!def.better && (!(def.games || def.both) || played);
+    const lead = !scored || x === y ? '' : (def.better === 'low' ? x < y : x > y) ? 'mine' : 'theirs';
+    rows.push({ id: def.id, label: def.label, mine: def.text ? def.text(x) : String(x), theirs: def.text ? def.text(y) : String(y), scored, lead });
+  }
+  const mineLead = rows.filter(r => r.lead === 'mine').length, theirsLead = rows.filter(r => r.lead === 'theirs').length, scored = rows.filter(r => r.scored).length;
+  return { rows, mineLead, theirsLead, scored, status: !scored ? 'none' : mineLead > theirsLead ? 'ahead' : mineLead < theirsLead ? 'behind' : 'tie' };
+}
+// Os números lado a lado, com a mesma conta para os dois. Null nas mesmas situações da comparação das conquistas.
+function rivalNumbers() {
+  const pair = rivalPair();
+  if (!pair) return null;
+  return { me: pair.me, rival: pair.rival, ...rivalRows(rivalStatsOf(pair.me), rivalStatsOf(pair.rival)) };
+}
+
+/* ── Frente a frente (item 36) ───────────────────────────────────────────────────────────────────────────────────────────────
+   Só contam os jogos em que os dois estavam em times OPOSTOS no mesmo campeonato (elenco de cada time e placar dos jogos já disputados; jogador "emprestado" não entra, como em matchRecord).
+   Serve à aba Frente a frente da janela do rival e às badges Carrasco, Freguês, Tira-teima e Clássico (calculadas para todos os jogadores no cache das conquistas). */
+function h2hGoals(m, name) {
+  const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
+  let n = 0;
+  for (const g of gs) if (g.player === name) n++;
+  return n;
+}
+// O retrospecto de `a` contra `b`: vitórias, empates e derrotas de `a`, os jogos e os gols de cada um nesses jogos.
+function h2hRecord(champs, a, b) {
+  let w = 0, d = 0, l = 0, ga = 0, gb = 0;
+  for (const c of champs) {
+    if (!c.teamRosters) continue;
+    let ta = null, tb = null;
+    for (const [t, roster] of Object.entries(c.teamRosters)) { if (ta === null && roster.includes(a)) ta = t; if (tb === null && roster.includes(b)) tb = t; }
+    if (!ta || !tb) continue; // (no mesmo time não há jogo um contra o outro: o filtro dos jogos abaixo já deixa de fora)
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const aHome = m.home === ta && m.away === tb, bHome = m.home === tb && m.away === ta;
+      if (!aHome && !bHome) continue;
+      const sa = aHome ? m.hs : m.as, sb = aHome ? m.as : m.hs;
+      if (sa === sb) d++; else if (sa > sb) w++; else l++;
+      ga += h2hGoals(m, a); gb += h2hGoals(m, b);
+    }
+  }
+  return { w, d, l, games: w + d + l, ga, gb };
+}
+// O retrospecto de `name` contra cada outro jogador: { [nome do outro]: { w, d, l } }, olhando só os jogos entre times opostos.
+function h2hAgainstAll(champs, name) {
+  const rec = {};
+  for (const c of champs) {
+    if (!c.teamRosters) continue;
+    let mine = null;
+    for (const [t, roster] of Object.entries(c.teamRosters)) { if (roster.includes(name)) { mine = t; break; } }
+    if (!mine) continue;
+    for (const m of (c.matches || [])) {
+      if (!m.played || (m.home !== mine && m.away !== mine)) continue;
+      const home = m.home === mine, opp = home ? m.away : m.home, my = home ? m.hs : m.as, their = home ? m.as : m.hs;
+      for (const p of (c.teamRosters[opp] || [])) {
+        if (p === name) continue;
+        const r = rec[p] || (rec[p] = { w: 0, d: 0, l: 0 });
+        if (my === their) r.d++; else if (my > their) r.w++; else r.l++;
+      }
+    }
+  }
+  return rec;
+}
+// As quatro badges do frente a frente de um jogador (o mesmo cálculo na aba EU e no cache de todos).
+function h2hFlags(champs, name) {
+  const all = Object.values(h2hAgainstAll(champs, name)).map(r => ({ ...r, games: r.w + r.d + r.l }));
+  return {
+    h2hCarrasco: all.some(r => r.w >= 5 && r.w - r.l >= 3),
+    h2hFregues: all.some(r => r.l >= 5 && r.l - r.w >= 3),
+    h2hTiraTeima: all.some(r => r.games >= 6 && r.w === r.l),
+    h2hClassico: all.some(r => r.games >= 20),
+  };
+}
+// Quem mais ganhou de `name` (o carrasco dele) e de quem ele mais ganhou (o freguês dele), entre os que já o enfrentaram 3 vezes ou mais: { nome, w, d, l } do ponto de vista de `name`.
+function h2hExtremes(champs, name) {
+  const list = Object.entries(h2hAgainstAll(champs, name)).map(([n, r]) => ({ name: n, ...r, games: r.w + r.d + r.l, diff: r.w - r.l })).filter(r => r.games >= 3);
+  const pick = (cmp, ok) => list.filter(ok).sort((x, y) => cmp(x, y) || x.name.localeCompare(y.name, 'pt'))[0] || null;
+  return { carrasco: pick((x, y) => x.diff - y.diff, r => r.diff < 0), fregues: pick((x, y) => y.diff - x.diff, r => r.diff > 0) };
+}
+// O frente a frente do jogador com o rival escolhido, mais o carrasco e o freguês dele. Null nas mesmas situações da comparação das conquistas.
+function rivalH2H() {
+  const pair = rivalPair();
+  if (!pair) return null;
+  const champs = (st.champs || []).filter(c => c.status === 'completed' && !c.freeMode), rec = h2hRecord(champs, pair.me, pair.rival);
+  return { me: pair.me, rival: pair.rival, ...rec, ...h2hExtremes(champs, pair.me), status: rec.games === 0 ? 'none' : rec.w > rec.l ? 'ahead' : rec.w < rec.l ? 'behind' : 'tie' };
+}
+
+/* ── Duelo do mês (item 36) ──────────────────────────────────────────────────────────────────────────────────────────────────
+   Todo mês, eu e o meu rival somos comparados nos números do mês (os campeonatos concluídos com data naquele mês). Vale se o rival já estava escolhido ANTES do primeiro campeonato do mês
+   e se os dois jogaram pelo menos RIVAL_MIN_GAMES jogos. Só contam os números que tiveram um vencedor: "maioria" = levei mais números que ele (com 3 ou mais decididos), "todos" = ele não levou
+   nenhum (com 4 ou mais), empate não dá nada. O mês fecha no ÚLTIMO DIA do mês (só espera um campeonato do mês ainda em andamento ou com a votação de destaques aberta);
+   aí o app manda o resultado ao servidor (saveRivalProgress), que guarda o histórico e soma as badges. Quem troca de rival depois do 1º campeonato do mês perde o duelo daquele mês. */
+const RIVAL_MIN_GAMES = 3;
+const pad2 = n => String(n).padStart(2, '0');
+const localDate = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; // AAAA-MM-DD no horário do aparelho
+const monthShift = (m, n) => { const t = (+m.slice(0, 4)) * 12 + (+m.slice(5, 7) - 1) + n; return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`; };
+const RIVAL_MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const monthLabel = m => `${RIVAL_MONTHS[+m.slice(5, 7) - 1]}${m.slice(0, 4) === localDate().slice(0, 4) ? '' : ' de ' + m.slice(0, 4)}`;
+// Os números de um jogador num mês: só os campeonatos concluídos (fora do plano gratuito) com data naquele mês.
+function rivalMonthStats(name, month) {
+  const champs = (st.champs || []).filter(c => c.status === 'completed' && !c.freeMode && String(c.date || '').slice(0, 7) === month);
+  let titles = 0, goals = 0, art = 0, pos = 0, neg = 0, played = 0;
+  for (const c of champs) {
+    if (c.teamRosters && Object.values(c.teamRosters).some(r => r.includes(name))) played++;
+    const cp = (c.champion_players || []).find(p => p.name.trim() === name);
+    if (cp) titles += cp.weight || 1;
+    const per = {};
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const gs = (m.phase === 'final' && m.finalGoals?.length) ? m.finalGoals : (m.goals || []);
+      for (const g of gs) per[g.player] = (per[g.player] || 0) + 1;
+    }
+    goals += per[name] || 0;
+    const mx = Math.max(0, ...Object.values(per));
+    if (mx > 0 && (per[name] || 0) === mx) art++;
+    const aw = getChampAwards(c);
+    if (aw?.pos?.winners.includes(name)) pos++;
+    if (aw?.neg?.winners.includes(name)) neg++;
+  }
+  return { titles, champs: played, goals, art, pos, neg, pres: champs.length ? Math.round(played / champs.length * 100) : null, groupStar: rivalStarOf(name), ...matchRecord(champs, name) };
+}
+// A data (AAAA-MM-DD) do 1º campeonato do mês, começado ou concluído; '' se ainda não houve nenhum.
+function rivalFirstChampDate(month) {
+  const ds = (st.champs || []).filter(c => !c.freeMode && (c.status === 'completed' || c.status === 'active') && String(c.date || '').slice(0, 7) === month).map(c => c.date).sort();
+  return ds[0] || '';
+}
+// O rival já estava escolhido antes do 1º campeonato do mês? Escolher no dia anterior vale; no mesmo dia ou depois, o duelo daquele mês não conta.
+function rivalLockedIn(month, since = rivalSince()) {
+  const first = rivalFirstChampDate(month);
+  return !!since && localDate(new Date(since)) < first; // sem campeonato no mês `first` é '' e nenhuma data é menor que ''
+}
+// O resultado do duelo a partir de quantos números cada lado levou: 'trator' (todos, 4 ou mais), 'mao' (maioria), 'fora' (ele levou todos, 4 ou mais), 'aluno' (ele levou a maioria),
+// 'empate' (4 ou mais decididos, metade para cada) ou 'none' (menos de 3 números decididos).
+function rivalDuelClassify(m, t) {
+  const decided = m + t;
+  if (decided < 3) return 'none';
+  if (m > t) return t === 0 && m >= 4 ? 'trator' : 'mao';
+  if (t > m) return m === 0 && t >= 4 ? 'fora' : 'aluno';
+  return 'empate';
+}
+// O duelo de um mês entre mim e o rival: a tabela do mês, quantos números cada um levou e o resultado. `valid` diz se o duelo do mês vale (rival escolhido antes do 1º campeonato e jogos
+// suficientes); sem isso o resultado é 'none'. Null sem rival, sem jogador vinculado ou na simulação do admin.
+function rivalDuelFor(month, pair = rivalPair()) {
+  if (!pair) return null;
+  const a = rivalMonthStats(pair.me, month), b = rivalMonthStats(pair.rival, month);
+  const locked = rivalLockedIn(month), enough = a.matches >= RIVAL_MIN_GAMES && b.matches >= RIVAL_MIN_GAMES;
+  const rr = rivalRows(a, b), m = rr.rows.filter(r => r.scored && r.lead === 'mine').length, t = rr.rows.filter(r => r.scored && r.lead === 'theirs').length;
+  return { month, locked, enough, valid: locked && enough, rows: rr.rows, m, t, res: locked && enough ? rivalDuelClassify(m, t) : 'none', games: { mine: a.matches, theirs: b.matches } };
+}
+// O mês já fechou? Passou o ÚLTIMO DIA do mês, no aparelho e também no horário de Brasília (o do servidor, que só aceita mês já passado: assim nunca mandamos um mês que ele ainda recusaria),
+// e nenhum campeonato daquele mês continua em andamento nem com a votação de destaques aberta (ela dura VOTE_DAYS dias: sem esperar, a Bola Cheia e a Bola Murcha do último campeonato ficariam de fora).
+const brtMonth = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 7);
+function rivalMonthClosed(m) {
+  if (localDate().slice(0, 7) <= m || brtMonth() <= m) return false;
+  return !(st.champs || []).some(c => !c.freeMode && String(c.date || '').slice(0, 7) === m && (c.status === 'active' || (c.status === 'completed' && c.voting && !isVotingClosed(c))));
+}
+// Os meses fechados que ainda não têm resultado guardado, do mês em que o rival atual foi escolhido em diante (os 6 mais novos), do mais antigo ao mais novo.
+function rivalMonthsDue() {
+  const since = rivalSince();
+  if (!since) return [];
+  const last = monthShift(localDate().slice(0, 7), -1), known = st.rivalDoc?.duels || {}, out = [];
+  for (let m = localDate(new Date(since)).slice(0, 7); m <= last; m = monthShift(m, 1)) if (!known[m] && rivalMonthClosed(m)) out.push(m);
+  return out.slice(-6);
+}
+// Há quantos meses inteiros o rival atual foi escolhido (a mesma conta do servidor, que é quem dá as badges de tempo).
+function rivalTenureMonths() {
+  const since = rivalSince();
+  if (!since) return 0;
+  const a = new Date(since), b = new Date();
+  let n = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+  if (b.getUTCDate() < a.getUTCDate()) n--;
+  return Math.max(0, n);
+}
+const rivalResultSide = res => (res === 'mao' || res === 'trator' ? 'win' : res === 'aluno' || res === 'fora' ? 'lose' : '');
+// A sequência de duelos do mês seguidos (ganhos ou perdidos) contra o rival atual, a partir do mês em que ele foi escolhido; mês sem duelo válido não conta nem quebra, empate quebra.
+function rivalStreak() {
+  const duels = st.rivalDoc?.duels || {}, rival = rivalGet(), since = rivalSince(), from = since ? localDate(new Date(since)).slice(0, 7) : '';
+  let side = '', n = 0;
+  for (const k of Object.keys(duels).filter(k => k >= from).sort().reverse()) {
+    const e = duels[k];
+    if (!e || e.res === 'none') continue;
+    const sd = rivalResultSide(e.res);
+    if (e.r !== rival || !sd || (side && sd !== side)) break;
+    side = sd; n++;
+  }
+  return { side, n };
+}
+// "1 duelo do mês ganho", "2 duelos do mês ganhos", "1 duelo do mês perdido", "3 duelos do mês perdidos" (a frase da sequência, no alerta e na aba Duelo do mês).
+const rivalStreakText = sk => `${sk.n} ${sk.n === 1 ? 'duelo' : 'duelos'} do mês ${sk.side === 'win' ? 'ganho' : 'perdido'}${sk.n === 1 ? '' : 's'}`;
+// O que a pessoa perde se trocar de rival (ou tirá-lo) agora: o duelo do mês (se o 1º campeonato do mês já começou e o rival já estava escolhido antes), a sequência de duelos e o tempo de
+// rivalidade. As conquistas que ela já ganhou continuam dela. Lista vazia = nada a perder.
+function rivalChangeLoss() {
+  if (!rivalGet()) return [];
+  const loss = [], month = localDate().slice(0, 7), sk = rivalStreak(), tenure = rivalTenureMonths();
+  if (rivalLockedIn(month)) loss.push(`o duelo de ${monthLabel(month)} (o primeiro campeonato do mês já foi jogado)`);
+  if (sk.n >= 1) loss.push(`a sequência de ${rivalStreakText(sk)} (Dono do Rival e Sombra do Rival)`);
+  if (tenure >= 1) loss.push(`o tempo de rivalidade (${tenure} ${tenure === 1 ? 'mês' : 'meses'}, para Rival de Estimação, Arquirrival e Rivalidade Histórica)`);
+  return loss;
+}
+// As badges do rival que o jogador já ganhou (contagens públicas da liga).
+const rivalAwardsOf = key => st.rivalPublic?.[key]?.awards || {};
+// Manda ao servidor o que só o app sabe: os meses de duelo que fecharam, quem está na frente no número de conquistas e o aviso de que vale conferir o tempo com o rival. Só no PRÓPRIO
+// perfil, com tudo carregado, e sem repetir: depois de salvar, o documento da conta traz o histórico e o que já foi mandado não é mandado de novo.
+async function rivalProgressSync() {
+  if (!DB || !st.leagueId || st._rivalSyncing || (st._rivalSyncFail && Date.now() - st._rivalSyncFail < 10 * 60000)) return;
+  if (!(st.ready && st.playersReady && st.ranksReady && st.cfgReady && st.rivalReady && st.rivalPubReady) || !st.rivalDoc) return;
+  const pair = rivalPair();
+  if (!pair) return;
+  const sent = st._rivalSent || (st._rivalSent = new Set());
+  const duels = rivalMonthsDue().filter(m => !sent.has(m)).map(m => { const d = rivalDuelFor(m, pair), none = d.res === 'none'; return { month: m, res: d.res, m: none ? 0 : d.m, t: none ? 0 : d.t }; });
+  const c = rivalCompare(), lead = c ? (c.diff > 0 ? 'mine' : c.diff < 0 ? 'theirs' : 'tie') : '';
+  const leadSend = !!lead && lead !== 'tie' && lead !== (st.rivalDoc.lead || '');
+  const mineAwards = rivalAwardsOf(st.userDoc.playerKey), months = rivalTenureMonths();
+  const tenure = [[3, 'rival_3m'], [6, 'rival_6m'], [12, 'rival_12m']].some(([n, id]) => months >= n && !(Number(mineAwards[id]) >= 1));
+  if (!duels.length && !leadSend && !tenure) return;
+  st._rivalSyncing = true;
+  duels.forEach(d => sent.add(d.month));
+  try {
+    await callFn('saveRivalProgress', { liga: st.leagueId, duels, ...(leadSend ? { lead } : {}), ...(tenure ? { tenure: true } : {}) });
+    st._rivalSyncFail = 0;
+  } catch(e) {
+    st._rivalSyncFail = Date.now();
+    duels.forEach(d => sent.delete(d.month));
+  } finally { st._rivalSyncing = false; }
 }
 const rivalInitials = n => String(n).trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+// ── Interface do rival (item 36): avisos, abas Frente a frente e Duelo do mês, o alerta ao trocar de rival e o cartão do duelo ────────────────────────────────
+const rivalAvatarHtml = (name, color) => `<div style="width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:#161b22;border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${color}">${esc(rivalInitials(name))}</div>`;
+// Uma linha da tabela de números (o meu à esquerda, o nome no meio, o dele à direita; quem está na frente leva a cor).
+const rivalRowHtml = (r, last) => `<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:center;gap:6px;padding:9px 0;${last ? '' : 'border-bottom:1px solid var(--border2);'}">
+    <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'mine' ? '#00d67f' : 'var(--text)'}">${esc(r.mine)}</div>
+    <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${esc(r.label)}</div>
+    <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'theirs' ? '#4db8ff' : 'var(--text)'}">${esc(r.theirs)}</div></div>`;
+const rivalInfoBox = (color, html) => `<div style="padding:9px 12px;margin-bottom:10px;border-radius:10px;border:1px solid ${color}55;background:${color}14;font-size:12px;line-height:1.5;color:var(--text2)">${html}</div>`;
+// Os avisos do alto da janela: "Rivalidade declarada" (os dois se escolheram: só aí o rival fica sabendo) e "Inimigo Público" (7 ou mais jogadores escolheram você) ou, com menos escolhas, "Alvo da Galera"
+// (3 ou mais); só o maior dos dois aparece e nunca dizemos quem escolheu.
+function rivalNotices(rivalName) {
+  let out = '';
+  if (st.rivalDoc?.mutual === true && rivalGet()) out += rivalInfoBox('#00d67f', `🤝 <b style="color:var(--text)">Rivalidade declarada!</b> ${esc(rivalName)} também escolheu você como rival.`);
+  const mine = st.rivalPublic?.[st.userDoc?.playerKey];
+  if (mine?.publico === true) out += rivalInfoBox('#ff5c5c', `🚨 <b style="color:var(--text)">Inimigo Público:</b> 7 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
+  else if (mine?.alvo === true) out += rivalInfoBox('#f0b429', `🎯 <b style="color:var(--text)">Alvo da Galera:</b> 3 ou mais jogadores escolheram você como rival. Não dizemos quem.`);
+  return out;
+}
+// O texto do alerta ao trocar ou tirar o rival com progresso a perder (as conquistas que já foram ganhas continuam da pessoa).
+function rivalLossText(loss, verb, rivalName) {
+  return `Se você ${verb === 'trocar' ? 'trocar' : 'tirar'} o rival agora, vai perder o progresso com ${rivalName}:\n\n• ${loss.join('\n• ')}\n\nAs conquistas que você já ganhou continuam suas.\n\n${verb === 'trocar' ? 'Trocar' : 'Tirar'} o rival mesmo assim?`;
+}
+// Confirma antes de uma troca (ou remoção) que faz perder progresso; sem nada a perder não pergunta. True = pode seguir.
+function rivalConfirmLoss(verb) {
+  const loss = rivalChangeLoss();
+  return !loss.length || confirm(rivalLossText(loss, verb, rivalPlayer()?.name || 'o rival'));
+}
+const RIVAL_RES_BADGE = { trator: 'duelo_trator', mao: 'duelo_mao', aluno: 'duelo_aluno', fora: 'duelo_fora_liga' };
+function rivalResLabel(res) {
+  const b = BADGE_CATALOG.find(x => x.id === RIVAL_RES_BADGE[res]);
+  return b ? `${b.emoji} ${b.label}` : res === 'empate' ? '🤝 Empate' : 'sem duelo válido';
+}
+const rivalSection = (title, html) => `<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">${title}</div>${html}</div>`;
+// A aba Frente a frente: o retrospecto contra o rival nos jogos em times opostos (e o carrasco e o freguês, se o admin não desligou).
+// Na tela de escolha: se o 1º campeonato do mês já foi jogado, o duelo do mês não vale para um rival escolhido agora.
+function rivalPickNote() {
+  const month = localDate().slice(0, 7);
+  if (!rivalFirstChampDate(month)) return '';
+  return rivalInfoBox('#f0b429', `⚠️ O primeiro campeonato de ${monthLabel(month)} já foi jogado: o duelo de ${monthLabel(month)} não vale para um rival escolhido agora. O duelo dele começa em ${monthLabel(monthShift(month, 1))}.`);
+}
+function rivalH2HView() {
+  const h = rivalH2H();
+  if (!h) return '';
+  const mc = h.status === 'behind' ? '#e6edf3' : '#00d67f', rc = h.status === 'ahead' ? '#e6edf3' : '#4db8ff', diff = h.w - h.l, jogos = n => `${n} jogo${n === 1 ? '' : 's'}`;
+  const side = (name, label, n, color) => `<div style="text-align:center;min-width:0">${rivalAvatarHtml(name, color)}<div style="font-size:12px;font-weight:700;color:var(--text2);overflow-wrap:anywhere">${label}</div><div style="font-size:34px;font-weight:800;line-height:1.1;color:${color}">${n}</div><div style="font-size:11px;color:var(--text3)">vitória${n === 1 ? '' : 's'}</div></div>`;
+  const verdict = h.status === 'none' ? 'Vocês ainda não se enfrentaram.' : h.status === 'ahead' ? `Você leva vantagem: ${jogos(diff)} a mais` : h.status === 'behind' ? `${esc(h.rival)} leva vantagem: ${jogos(-diff)} a mais` : 'Empatados no frente a frente!';
+  const vcol = h.status === 'ahead' ? 'var(--accent)' : h.status === 'behind' ? '#4db8ff' : 'var(--text2)';
+  const extremes = h2hOn() ? [
+    h.carrasco ? `😈 <b style="color:var(--text)">Seu carrasco:</b> ${esc(h.carrasco.name)} (${h.carrasco.l} ${h.carrasco.l === 1 ? 'derrota' : 'derrotas'} × ${h.carrasco.w} ${h.carrasco.w === 1 ? 'vitória' : 'vitórias'} em ${jogos(h.carrasco.games)})` : '',
+    h.fregues ? `🎣 <b style="color:var(--text)">Seu freguês:</b> ${esc(h.fregues.name)} (${h.fregues.w} ${h.fregues.w === 1 ? 'vitória' : 'vitórias'} × ${h.fregues.l} ${h.fregues.l === 1 ? 'derrota' : 'derrotas'} em ${jogos(h.fregues.games)})` : '',
+  ].filter(Boolean) : [];
+  return `<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
+      ${side(h.me, 'Você', h.w, mc)}
+      <div style="font-size:22px;color:var(--text3);font-weight:800">×</div>
+      ${side(h.rival, esc(h.rival), h.l, rc)}
+    </div>
+    <div style="text-align:center;font-size:14px;font-weight:800;color:${vcol};margin-bottom:4px">${verdict}</div>
+    ${h.games ? `<div style="text-align:center;font-size:12px;color:var(--text3)">${h.d} empate${h.d === 1 ? '' : 's'} · ${jogos(h.games)} em times opostos${h.ga + h.gb > 0 ? ` · gols nesses jogos: você ${h.ga} × ${h.gb} ${esc(h.rival)}` : ''}</div>` : ''}
+    ${extremes.length ? rivalSection('Na liga toda', `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.7;color:var(--text2)">${extremes.join('<br>')}</div>`) : ''}
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Só contam os jogos em que vocês dois estavam em times opostos no mesmo campeonato. Carrasco e Freguês valem entre quem já se enfrentou 3 vezes ou mais.</div>`;
+}
+// A aba Duelo do mês: o duelo do mês em andamento (a tabela do mês, se ele vale e como está), o progresso (sequência e tempo com o rival) e os meses que já fecharam.
+function rivalDuelView() {
+  const pair = rivalPair();
+  if (!pair) return '';
+  const month = localDate().slice(0, 7), next = monthShift(month, 1), d = rivalDuelFor(month, pair), sk = rivalStreak(), tenure = rivalTenureMonths(), first = rivalFirstChampDate(month);
+  const rival = esc(pair.rival), meses = n => `${n} ${n === 1 ? 'mês' : 'meses'}`;
+  const status = !first ? `Ainda não houve campeonato em ${monthLabel(month)}. Se ${rival} continuar sendo o seu rival até o primeiro jogo do mês, o duelo vale.`
+    : !d.locked ? `O duelo de ${monthLabel(month)} não vale com este rival: ele foi escolhido depois do primeiro campeonato do mês. O próximo duelo é o de ${monthLabel(next)}.`
+    : !d.enough ? `Para o duelo valer, cada um precisa de ${RIVAL_MIN_GAMES} jogos no mês: você tem ${d.games.mine} e ${rival} tem ${d.games.theirs}.` : '';
+  const live = d.valid ? `Hoje: você leva ${d.m} número${d.m === 1 ? '' : 's'} e ${rival} leva ${d.t}.${d.res !== 'none' ? ` Se o mês fechasse agora: <b style="color:var(--text)">${esc(rivalResLabel(d.res))}</b>.` : ''}` : '';
+  const table = d.rows.length ? `<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:2px 12px;margin-top:8px">${d.rows.map((r, i) => rivalRowHtml(r, i === d.rows.length - 1)).join('')}</div>` : '';
+  const streak = sk.n >= 1 ? `${rivalStreakText(sk)}${sk.n === 1 ? '' : ' seguidos'} com ${rival}. Com 3 seguidos: ${sk.side === 'win' ? '👑 Dono do Rival' : '👤 Sombra do Rival'}.`
+    : `Nenhum duelo fechado ainda com ${rival}. 3 duelos ganhos seguidos dão 👑 Dono do Rival; 3 perdidos, 👤 Sombra do Rival.`;
+  const hist = Object.entries(st.rivalDoc?.duels || {}).filter(([, e]) => e && e.res !== 'none').sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
+  const nameOf = key => (st.players || []).find(p => playerKey(p.name) === key)?.name || 'rival';
+  const histHtml = hist.length ? hist.map(([k, e]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text2);overflow-wrap:anywhere">${esc(monthLabel(k))} · contra ${esc(nameOf(e.r))}</span><b style="color:var(--text);white-space:nowrap">${esc(rivalResLabel(e.res))} (${e.m} × ${e.t})</b></div>`).join('') : '<div style="font-size:12px;color:var(--text3)">Nenhum mês fechado ainda: o primeiro duelo fecha no último dia do mês.</div>';
+  return `<div style="font-size:14px;font-weight:800;margin-bottom:6px">🗓️ Duelo de ${monthLabel(month)}</div>
+    ${status ? rivalInfoBox('#f0b429', status) : ''}
+    ${live ? `<div style="font-size:12px;color:var(--text2);line-height:1.5">${live}</div>` : ''}
+    ${table}
+    ${rivalSection('Seu progresso com ' + rival, `<div style="padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--s1);font-size:12px;line-height:1.6;color:var(--text2)">🔁 ${streak}<br>⏳ ${tenure >= 1 ? `Rival há ${meses(tenure)}` : 'Rival há menos de 1 mês'}: 3 meses dão 🐕 Rival de Estimação, 6 dão ⚔️ Arquirrival e 12 dão 🏛️ Rivalidade Histórica.</div>`)}
+    ${rivalSection('Meses que já fecharam', `<div>${histHtml}</div>`)}
+    ${d.rows.length ? `<button onclick="openMjRivalDuel()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar duelo</button>` : ''}
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:10px">Vale se o rival já estava escolhido antes do primeiro campeonato do mês e se os dois jogaram ${RIVAL_MIN_GAMES} jogos ou mais. Só contam os números que tiveram um vencedor: levar mais que ele é Rival na Mão; levar todos (4 ou mais) é Passei o Trator. O mês fecha no último dia do mês, e o resultado entra quando você abrir o app depois disso. Trocar de rival depois do primeiro campeonato do mês perde o duelo daquele mês.</div>`;
+}
+// O cartão do duelo do mês para compartilhar (Story e Feed, a mesma janela dos outros): a tabela do mês, com o título do mês. Fecha a janela do rival antes.
+function openMjRivalDuel() {
+  const pair = rivalPair();
+  if (!pair) return;
+  const month = localDate().slice(0, 7), d = rivalDuelFor(month, pair);
+  if (!d || !d.rows.length) return;
+  const myKey = st.userDoc?.playerKey;
+  st.modal = null; render();
+  return openMjShare('rivalduel', mjRivalNumData({ name: pair.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: pair.rival, rows: d.rows, title: `DUELO DE ${monthLabel(month).toUpperCase()}` }));
+}
+// Avisa o servidor que o elenco mudou (jogador removido ou renomeado): as escolhas de rival e as badges do rival dele passam para a chave nova ou saem. Só o admin chama.
+// Falha aqui não atrapalha nada (o servidor refaz as marcas na próxima escolha de rival).
+function rivalSync(rename) {
+  if (!DB || !st.leagueId) return;
+  callFn('syncRivals', { liga: st.leagueId, ...(rename ? { rename } : {}) }).catch(() => {});
+}
 // A faixa dentro do card Conquistas da aba EU: convite para escolher o rival ou o placar e o botão Comparar.
 function rivalStrip(isSimulating) {
-  if (isSimulating || !st.players?.length || !st.userDoc?.playerKey) return '';
+  if (isSimulating || !st.players?.length || !st.userDoc?.playerKey || (DB && !st.rivalReady)) return '';
   const btn = 'flex-shrink:0;padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
   const row = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border2)';
   const c = rivalCompare();
-  if (!c) return `<div style="${row}"><span style="font-size:18px">⚔️</span><span style="flex:1;font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas com as de um rival da liga.</span><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
+  if (!c) {
+    const sg = rivalSuggestion();
+    return `<div style="${row}"><span style="font-size:18px">⚔️</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text2);line-height:1.4">Compare as suas conquistas e os seus números com os de um rival da liga.</div>${sg ? `<button onclick="rivalPick('${sg.key}')" style="margin-top:4px;padding:0;border:none;background:none;color:var(--accent);font-size:12px;font-weight:700;text-align:left;cursor:pointer;font-family:inherit;line-height:1.4;overflow-wrap:anywhere">💡 Sugestão: ${esc(sg.name)} (${rivalGapText(sg)})</button>` : ''}</div><button onclick="openRival()" style="${btn}">Escolher rival</button></div>`;
+  }
   const mc = c.diff > 0 ? 'var(--accent)' : 'var(--text)', rc = c.diff < 0 ? '#4db8ff' : 'var(--text)';
-  return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
+  return `<div onclick="openRival()" style="${row};cursor:pointer"><span style="font-size:18px">⚔️</span><span style="flex:1;min-width:0;font-size:13px;color:var(--text2);overflow-wrap:anywhere">Você <b style="color:${mc}">${c.myCount}</b> × <b style="color:${rc}">${c.rivalCount}</b> ${esc(c.rival)}${st.rivalDoc?.mutual === true ? ' 🤝' : ''}</span><button onclick="event.stopPropagation();openRival()" style="${btn}">Comparar</button></div>`;
 }
 function openRival() {
   const myKey = st.userDoc?.playerKey;
@@ -11940,12 +12777,19 @@ function openRival() {
 }
 function rivalPick(key) {
   if (!rivalCandidates().some(p => playerKey(p.name) === key)) return;
-  rivalSet(key);
-  st.modal = { type: 'rival', picking: false };
+  const cur = rivalGet();
+  if (cur && cur !== key && !rivalConfirmLoss('trocar')) return; // trocar de rival com progresso a perder: pergunta antes (as conquistas já ganhas ficam)
+  if (cur !== key) rivalSet(key);
+  st.modal = { type: 'rival', picking: false, tab: st.modal?.tab };
   render();
 }
 function rivalChange() { if (st.modal?.type === 'rival') { st.modal.picking = true; render(); } }
-function rivalRemove() { rivalSet(''); st.modal = { type: 'rival', picking: true }; render(); }
+function rivalRemove() {
+  if (!rivalConfirmLoss('tirar')) return;
+  rivalSet('');
+  st.modal = { type: 'rival', picking: true };
+  render();
+}
 // A busca da lista de jogadores só esconde e mostra as linhas (não redesenha a janela).
 function rivalFilter(q) {
   const t = String(q || '').trim().toLowerCase();
@@ -11958,6 +12802,20 @@ function openMjRival() {
   const myKey = st.userDoc?.playerKey;
   st.modal = null; render();
   return openMjShare('rival', mjRivalData({ name: c.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: c.rival, mine: c.mine, theirs: c.theirs, both: c.both }));
+}
+// As quatro abas da comparação: as conquistas (a de sempre), os números, o frente a frente e o duelo do mês.
+function rivalTab(t) {
+  if (st.modal?.type !== 'rival' || st.modal.picking || !['badges', 'numbers', 'h2h', 'duel'].includes(t)) return;
+  st.modal.tab = t;
+  render();
+}
+// O cartão dos números para compartilhar (Story e Feed, a mesma janela dos outros). Fecha a janela do rival antes.
+function openMjRivalNumbers() {
+  const nm = rivalNumbers();
+  if (!nm || !nm.rows.length) return;
+  const myKey = st.userDoc?.playerKey;
+  st.modal = null; render();
+  return openMjShare('rivalnum', mjRivalNumData({ name: nm.me, league: st.availableLeagues?.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], rivalName: nm.rival, rows: nm.rows }));
 }
 function mRival() {
   const m = st.modal;
@@ -11974,6 +12832,11 @@ function mRival() {
   const avatar = (name, color) => `<div style="width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:#161b22;border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${color}">${esc(rivalInitials(name))}</div>`;
   const c = m.picking ? null : rivalCompare();
   if (!c) {
+    const sg = rivalSuggestion(rivalGet());
+    const sugHtml = sg ? `<div data-rsuggest style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:12px;border:1px solid var(--accent);background:#00d67f12">
+        <span style="font-size:20px">💡</span>
+        <div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--accent)">Sugestão: mais perto de você</div><div style="font-size:14px;font-weight:700;overflow-wrap:anywhere">${esc(sg.name)}</div><div style="font-size:12px;color:var(--text3)">${rivalSuggestText(sg)}</div></div>
+        <button onclick="rivalPick('${sg.key}')" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Comparar</button></div>` : '';
     const rows = rivalCandidates().map(p => {
       const n = rivalBadgeIds(p.name).length;
       return `<button data-rname="${esc(p.name.toLowerCase())}" onclick="rivalPick('${playerKey(p.name)}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
@@ -11981,10 +12844,43 @@ function mRival() {
         <span style="flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</span>
         <span style="font-size:12px;color:var(--text3);flex-shrink:0">${n} conquista${n === 1 ? '' : 's'}</span></button>`;
     }).join('');
-    return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas. A escolha fica só neste aparelho e o outro jogador não é avisado.</div>
+    return shell(`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px">Escolha um jogador da liga para comparar as conquistas e os números, disputar o duelo do mês e ver o frente a frente. A escolha fica guardada na sua conta, só você vê, e o outro jogador não é avisado. Se vocês dois se escolherem, os dois ficam sabendo.</div>
+      ${rivalPickNote()}
+      ${sugHtml}
       ${rows ? `<input type="search" placeholder="Buscar jogador" oninput="rivalFilter(this.value)" aria-label="Buscar jogador" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit">
       <div id="rival-list" style="display:flex;flex-direction:column;gap:6px">${rows}</div>` : '<div style="padding:20px 0;text-align:center;font-size:13px;color:var(--text3)">Ainda não há outros jogadores na liga para virar seu rival.</div>'}
       ${rivalPlayer() ? '<button onclick="st.modal.picking=false;render()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">← Voltar para a comparação</button>' : ''}`);
+  }
+  const tab = ['numbers', 'h2h', 'duel'].includes(m.tab) ? m.tab : 'badges';
+  const tabBtn = (id, label) => { const on = tab === id; return `<button onclick="rivalTab('${id}')" aria-pressed="${on}" style="padding:10px 6px;border-radius:10px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? '#00d67f18' : 'var(--s2)'};color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">${label}</button>`; };
+  const tabs = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${tabBtn('badges', '🏅 Conquistas')}${tabBtn('numbers', '📊 Números')}${tabBtn('h2h', '🤜 Frente a frente')}${tabBtn('duel', '🗓️ Duelo do mês')}</div>${rivalNotices(c.rival)}`;
+  const foot = `<div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="rivalChange()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Trocar rival</button>
+      <button onclick="rivalRemove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Remover rival</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem mostra o nome do seu rival: compartilhe só se ele topar a brincadeira. A escolha do rival fica guardada na sua conta (só você vê) e ele não é avisado, a não ser que vocês dois se escolham.</div>`;
+  if (tab === 'h2h') return shell(`${tabs}${rivalH2HView()}${foot}`);
+  if (tab === 'duel') return shell(`${tabs}${rivalDuelView()}${foot}`);
+  const nm = tab === 'numbers' ? rivalNumbers() : null;
+  if (nm) {
+    const mc = nm.status === 'behind' ? '#e6edf3' : '#00d67f', rc = nm.status === 'ahead' ? '#e6edf3' : '#4db8ff', pl = nm.scored === 1 ? '' : 's';
+    const verdictN = nm.status === 'ahead' ? `Você está na frente em ${nm.mineLead} de ${nm.scored} número${pl}!` : nm.status === 'behind' ? `${esc(nm.rival)} está na frente em ${nm.theirsLead} de ${nm.scored} número${pl}` : nm.status === 'tie' ? 'Empate nos números!' : '';
+    const vcolN = nm.status === 'ahead' ? 'var(--accent)' : nm.status === 'behind' ? '#4db8ff' : 'var(--text2)';
+    const who = (name, label, color) => `<div style="text-align:center;min-width:0">${avatar(name, color)}<div style="font-size:13px;font-weight:700;color:var(--text2);overflow-wrap:anywhere">${label}</div></div>`;
+    const line = (r, last) => `<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:center;gap:6px;padding:9px 0;${last ? '' : 'border-bottom:1px solid var(--border2);'}">
+        <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'mine' ? '#00d67f' : 'var(--text)'}">${esc(r.mine)}</div>
+        <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${esc(r.label)}</div>
+        <div style="text-align:center;font-size:20px;font-weight:800;color:${r.lead === 'theirs' ? '#4db8ff' : 'var(--text)'}">${esc(r.theirs)}</div></div>`;
+    return shell(`${tabs}<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
+        ${who(nm.me, 'Você', mc)}
+        <div style="font-size:22px;color:var(--text3);font-weight:800">×</div>
+        ${who(nm.rival, esc(nm.rival), rc)}
+      </div>
+      ${verdictN ? `<div style="text-align:center;font-size:14px;font-weight:800;color:${vcolN};margin-bottom:10px">${verdictN}</div>` : ''}
+      ${nm.rows.length ? `<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:2px 12px">${nm.rows.map((r, i) => line(r, i === nm.rows.length - 1)).join('')}</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:8px">Quem leva a cor está na frente naquele número (em derrotas, quem tem menos). Campeonatos, jogos e empates só informam. Gols e vezes artilheiro contam desde 08/09/2026, quando o registro de gols começou.</div>
+      <button onclick="openMjRivalNumbers()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar números</button>` : '<div style="padding:20px 0;text-align:center;font-size:13px;color:var(--text3);line-height:1.5">Ainda não há números para comparar: eles aparecem aqui quando os campeonatos tiverem jogos e gols.</div>'}
+      ${foot}`);
   }
   const n = Math.abs(c.diff), plural = n === 1 ? '' : 's';
   const verdict = c.diff > 0 ? `Você está ${n} conquista${plural} na frente!` : c.diff < 0 ? `${esc(c.rival)} está ${n} conquista${plural} na frente` : 'Empate!';
@@ -11993,7 +12889,7 @@ function mRival() {
   const group = (title, list) => `<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">${title} (${list.length})</div>${list.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(chip).join('')}</div>` : '<div style="font-size:12px;color:var(--text3)">Nenhuma</div>'}</div>`;
   const side = (name, label, count, color) => `<div style="text-align:center;min-width:0">${avatar(name, color)}<div style="font-size:12px;font-weight:700;color:var(--text2);overflow-wrap:anywhere">${label}</div><div style="font-size:34px;font-weight:800;line-height:1.1;color:${color}">${count}</div></div>`;
   const myCol = c.diff >= 0 ? '#00d67f' : '#e6edf3', rvCol = c.diff <= 0 ? '#4db8ff' : '#e6edf3'; // quem está na frente (ou os dois, no empate) leva a cor
-  return shell(`<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
+  return shell(`${tabs}<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:8px">
       ${side(c.me, 'Você', c.myCount, myCol)}
       <div style="font-size:22px;color:var(--text3);font-weight:800">×</div>
       ${side(c.rival, esc(c.rival), c.rivalCount, rvCol)}
@@ -12001,11 +12897,7 @@ function mRival() {
     <div style="text-align:center;font-size:14px;font-weight:800;color:${vcol};margin-bottom:4px">${verdict}</div>
     ${group('Só você tem', c.mine)}${group('Só ' + esc(c.rival) + ' tem', c.theirs)}${group('Os dois têm', c.both)}
     <button onclick="openMjRival()" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar comparação</button>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button onclick="rivalChange()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Trocar rival</button>
-      <button onclick="rivalRemove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Remover rival</button>
-    </div>
-    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">A imagem mostra o nome do seu rival: compartilhe só se ele topar a brincadeira. A escolha do rival fica só neste aparelho e ele não é avisado.</div>`);
+    ${foot}`);
 }
 
 function closeModal() { st.modal=null; render(); }

@@ -919,6 +919,296 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     check('…consultar de novo o mesmo pagamento não soma título em dobro', r.status === 200 && (await ti('lq', 'ana')).titles === 6);
   }
 
+  // ═════════════ ESTRELAS PELA MÉDIA DO GRUPO (item 35) ═════════════
+  console.log('── estrelas pela média do grupo: regras do banco e funções de verdade (ratePlayers, syncStarVotes)');
+  await seed();
+  {
+    const S = (p, d) => db.set('owner', p, d);
+    const reg = k => db.get('owner', 'leagues/la/player_registry/' + k).then(docData);
+    const vote = uid => db.get('owner', 'leagues/la/star_votes/' + uid).then(docData);
+    const rate = (tok, ratings, liga = 'la') => callFn('ratePlayers', tok, { liga, ratings });
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
+    await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+
+    // regras: ninguém grava nem lê as notas dos outros direto no banco
+    for (const [quem, u] of [['jogador', U.pl1], ['admin da liga', U.admA], ['dono do sistema', U.owner], ['quem é de fora', U.outsider]]) {
+      check(`estrelas/regras: ${quem} NÃO grava notas direto no banco (nem no próprio uid, nem no de outra pessoa) → recusado`, no(await db.set(u.token, 'leagues/la/star_votes/' + u.uid, { voterKey: 'pl_um', ratings: { caio: 5 } })) && no(await db.set(u.token, 'leagues/la/star_votes/' + U.pl2.uid, { voterKey: 'x', ratings: { caio: 5 } })));
+    }
+    check('estrelas/regras: nada foi gravado pelas tentativas', (await vote(U.pl1.uid)) === undefined && (await vote(U.admA.uid)) === undefined);
+
+    // funções: quem pode votar
+    let r = await callFn('ratePlayers', null, { liga: 'la', ratings: { caio: 5 } });
+    check('estrelas: sem login → não autenticado', r.status === 401, r.raw);
+    r = await rate(U.outsider.token, { caio: 5 });
+    check('estrelas: quem é de fora da liga → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await rate(U.pend.token, { caio: 5 });
+    check('estrelas: quem está pendente → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await rate(U.pl2.token, { caio: 5 });
+    check('estrelas: conta sem jogador ligado → pré-condição falhou', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /vinculada/.test(r.error.message), r.raw);
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: false });
+    r = await rate(U.pl1.token, { caio: 5 });
+    check('estrelas: opção desligada na liga → pré-condição falhou, nada gravado', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /desligada/.test(r.error.message) && (await vote(U.pl1.uid)) === undefined, r.raw);
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    r = await rate(U.pl1.token, { caio: 7 });
+    check('estrelas: nota 7 → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // votar
+    r = await rate(U.pl1.token, { caio: 5, ana: 4, pl_um: 3 });
+    check('estrelas: jogador vota (a nota em si mesmo é ignorada)', r.status === 200 && r.result.ok === true && r.result.saved === 2 && r.result.total === 2 && r.result.ignored.join() === 'pl_um', r.raw);
+    const dv = await vote(U.pl1.uid);
+    check('estrelas: o documento fica no uid da conta, com a chave do jogador e as notas', dv && dv.voterKey === 'pl_um' && dv.ratings.caio === 5 && dv.ratings.ana === 4 && !('pl_um' in dv.ratings), dv);
+    check('estrelas: 1 voto → o cadastro ganha a contagem e NÃO a média', (c => c.starsVotes === 1 && !('starsAvg' in c) && c.name === 'Caio')(await reg('caio')));
+
+    // regras: só a dona lê as próprias notas
+    check('estrelas/regras: a dona lê as próprias notas → permitido', okW(await db.get(U.pl1.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: outro jogador NÃO lê as notas dela → recusado', no(await db.get(U.pl2.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: o ADMIN da liga NÃO lê as notas dela → recusado (anonimato vale também para ele)', no(await db.get(U.admA.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: o dono do sistema (e-mail verificado) também não lê direto → recusado', no(await db.get(U.owner.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: quem é de fora não lê → recusado', no(await db.get(U.outsider.token, 'leagues/la/star_votes/' + U.pl1.uid)));
+    check('estrelas/regras: ninguém lista as notas da liga → recusado', no(await db.list(U.pl1.token, 'leagues/la/star_votes')) && no(await db.list(U.admA.token, 'leagues/la/star_votes')));
+    check('estrelas/regras: o admin não consegue ler as notas de outra pessoa nem ligando a PRÓPRIA conta ao jogador dela (o documento é do uid, não da chave)', await (async () => {
+      await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'pl_um' });
+      const lido = await db.get(U.admA.token, 'leagues/la/star_votes/' + U.pl1.uid);
+      await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+      return no(lido);
+    })());
+    check('estrelas/regras: a dona das notas, depois de sair da liga, não lê mais → recusado', await (async () => {
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'rejected' });
+      const lido = await db.get(U.pl1.token, 'leagues/la/star_votes/' + U.pl1.uid);
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'player' });
+      return no(lido);
+    })());
+
+    // média: 3 votos em "caio"
+    await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
+    r = await rate(U.pl2.token, { caio: 3 });
+    check('estrelas: o 2º voto em caio ainda não publica média', r.status === 200 && (c => c.starsVotes === 2 && !('starsAvg' in c))(await reg('caio')), r.raw);
+    r = await rate(U.admA.token, { caio: 4 });
+    const caio3 = await reg('caio');
+    check('estrelas: o 3º voto publica a média (5, 3 e 4 → 4) e a contagem; o resto do cadastro não muda', r.status === 200 && caio3.starsVotes === 3 && caio3.starsAvg === 4 && caio3.name === 'Caio', caio3);
+    check('estrelas: o jogador lê a média no cadastro do elenco (é pública na liga, as notas não)', (d => d.starsAvg === 4 && d.starsVotes === 3)(docData(await db.get(U.pl2.token, 'leagues/la/player_registry/caio'))));
+
+    // regras do cadastro: a média só o servidor escreve
+    const caioPath = 'leagues/la/player_registry/caio';
+    check('estrelas/regras: admin altera a estrela e a fixa (o cadastro já tem média) → permitido', okW(await db.update(U.admA.token, caioPath, { stars: 5 })) && okW(await db.update(U.admA.token, caioPath, { starsPinned: true })));
+    check('estrelas/regras: admin ALTERA a média no cadastro → recusado', no(await db.update(U.admA.token, caioPath, { starsAvg: 1 })));
+    check('estrelas/regras: admin ALTERA a contagem de votos → recusado', no(await db.update(U.admA.token, caioPath, { starsVotes: 99 })));
+    check('estrelas/regras: admin escreve a mesma média que já estava (sem mudar) → permitido', okW(await db.update(U.admA.token, caioPath, { starsAvg: 4 })));
+    check('estrelas/regras: admin substitui o cadastro com outra média → recusado', no(await db.set(U.admA.token, caioPath, { name: 'Caio', starsAvg: 1, starsVotes: 3 })));
+    check('estrelas/regras: admin CRIA cadastro já com média ou contagem → recusado', no(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo9', { name: 'N', starsAvg: 5 })) && no(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo8', { name: 'N', starsVotes: 3 })));
+    check('estrelas/regras: admin cria cadastro normal e já fixado → permitido', okW(await db.create(U.admA.token, 'leagues/la/player_registry', 'novo7', { name: 'N7', stars: 4, starsPinned: true })));
+    check('estrelas/regras: jogador comum não escreve nada do cadastro (média, fixar) → recusado', no(await db.update(U.pl1.token, caioPath, { starsAvg: 5 })) && no(await db.update(U.pl1.token, caioPath, { starsPinned: false })));
+    check('estrelas/regras: as tentativas recusadas não mexeram na média', (c => c.starsAvg === 4 && c.starsVotes === 3 && c.stars === 5 && c.starsPinned === true)(await reg('caio')));
+
+    // syncStarVotes
+    r = await callFn('syncStarVotes', null, { liga: 'la' });
+    check('estrelas/sync: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('syncStarVotes', tok, { liga: 'la' });
+      check(`estrelas/sync: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    await db.del('owner', 'leagues/la/player_registry/ana'); // o admin tirou "ana" (jogadora da conta pl2) do elenco
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la' });
+    const caio2 = await reg('caio');
+    check('estrelas/sync: tirar uma jogadora do elenco e sincronizar → as notas DELA deixam de valer (caio cai para 2 votos e a média some)', r.status === 200 && r.result.changed === true && caio2.starsVotes === 2 && !('starsAvg' in caio2), [r.raw, caio2]);
+    await S('leagues/la/player_registry/pl_novo', { name: 'Pl Novo', active: true });
+    await db.del('owner', 'leagues/la/player_registry/pl_um');
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la', rename: { from: 'pl_um', to: 'pl_novo' } });
+    const dv2 = await vote(U.pl1.uid);
+    check('estrelas/sync: renomear o jogador leva as notas que ele deu para a chave nova', r.status === 200 && dv2.voterKey === 'pl_novo' && dv2.ratings.caio === 5 && (await reg('caio')).starsVotes === 2, [r.raw, dv2]);
+    r = await callFn('syncStarVotes', U.admA.token, { liga: 'la', rename: { from: 'pl_novo', to: 'pl_novo' } });
+    check('estrelas/sync: trocar de chave para a mesma chave → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // três votos ao MESMO tempo, com transações de verdade: nenhum se perde
+    await seed();
+    await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
+    await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
+    await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+    await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
+    const par = await Promise.all([[U.pl1, 5], [U.pl2, 3], [U.admA, 4]].map(([u, n]) => rate(u.token, { caio: n })));
+    const cp = await reg('caio');
+    check('estrelas: 3 votos ao mesmo tempo (transação de verdade) → todos contam: 3 votos e média 4', par.every(x => x.status === 200) && cp.starsVotes === 3 && cp.starsAvg === 4, [par.map(x => x.status), cp]);
+    const par2 = await Promise.all([[U.pl1, 1], [U.pl2, 1], [U.admA, 1]].map(([u, n]) => rate(u.token, { caio: n })));
+    const cp2 = await reg('caio');
+    check('estrelas: 3 trocas ao mesmo tempo → a média acompanha todas (1, 1 e 1 → 1)', par2.every(x => x.status === 200) && cp2.starsVotes === 3 && cp2.starsAvg === 1, [par2.map(x => x.status), cp2]);
+
+    // a chamada do admin para o grupo avaliar (notifyStarRatings): sem aparelhos cadastrados, porque o emulador não fala com o serviço de avisos de verdade
+    await db.update('owner', 'users/' + U.pl1.uid, { fcmTokens: [] });
+    await db.update('owner', 'users/' + U.admA.uid, { fcmTokens: [] });
+    const cfgPath = 'leagues/la/app_config/main';
+    r = await callFn('notifyStarRatings', null, { liga: 'la' });
+    check('estrelas/chamada: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('notifyStarRatings', tok, { liga: 'la' });
+      check(`estrelas/chamada: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    await S(cfgPath, { hasFinais: true, peerStars: false });
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    check('estrelas/chamada: com a opção desligada → pré-condição falhou, sem gravar nada', r.status === 400 && r.error.status === 'FAILED_PRECONDITION' && /Ligue as estrelas/.test(r.error.message) && !('starsCallAt' in (await db.get('owner', cfgPath).then(docData))), r.raw);
+    await S(cfgPath, { hasFinais: true, peerStars: true });
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    const cfgDepois = await db.get('owner', cfgPath).then(docData);
+    check('estrelas/chamada: o admin chama; o resumo conta os 2 jogadores com a conta ligada ao elenco (pl1 e pl2; o admin que chamou fica de fora) e 0 com aviso no celular', r.status === 200 && r.result.ok === true && r.result.recipients === 2 && r.result.withPush === 0, r.raw);
+    check('estrelas/chamada: o convite do app fica gravado em app_config/main (momento e quem chamou) sem apagar o resto da configuração', /^\d{4}-\d\d-\d\dT/.test(cfgDepois.starsCallAt) && cfgDepois.starsCallBy === U.admA.uid && cfgDepois.peerStars === true && cfgDepois.hasFinais === true, cfgDepois);
+    r = await callFn('notifyStarRatings', U.admA.token, { liga: 'la' });
+    check('estrelas/chamada: chamar de novo logo em seguida → "o grupo já foi chamado há pouco" (429) e o convite gravado não muda', r.status === 429 && r.error.status === 'RESOURCE_EXHAUSTED' && /chamado há pouco/.test(r.error.message) && (await db.get('owner', cfgPath).then(docData)).starsCallAt === cfgDepois.starsCallAt, r.raw);
+    check('estrelas/chamada: o controle de tempo fica numa área que nenhuma conta lê nem grava direto (rate_limits)', no(await db.get(U.admA.token, 'rate_limits/la_starsCall')) && no(await db.set(U.admA.token, 'rate_limits/la_starsCall', { at: 0 })) && no(await db.get(U.pl1.token, 'rate_limits/la_starsCall')));
+    check('estrelas/chamada: os jogadores leem o convite pelo app_config da liga (starsCallAt e quem chamou), como o app faz', (d => d.starsCallBy === U.admA.uid && typeof d.starsCallAt === 'string')(docData(await db.get(U.pl2.token, cfgPath))));
+
+  }
+
+  // ═════════════ RIVAL (item 36) ═════════════
+  console.log('── rival: regras do banco e funções de verdade (setRival, saveRivalProgress, syncRivals)');
+  await seed();
+  {
+    const S = (p, d) => db.set('owner', p, d);
+    const rv = uid => db.get('owner', 'leagues/la/rivals/' + uid).then(docData);
+    const pub = key => db.get('owner', 'leagues/la/rival_public/' + key).then(docData);
+    const setR = (tok, rivalKey, liga = 'la') => callFn('setRival', tok, { liga, rivalKey });
+    await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
+    await S('leagues/la/player_registry/ines', { name: 'Ines', active: false });
+    await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
+    await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
+
+    // regras: ninguém grava direto no banco
+    for (const [quem, u] of [['jogador', U.pl1], ['admin da liga', U.admA], ['dono do sistema', U.owner], ['quem é de fora', U.outsider]]) {
+      check(`rival/regras: ${quem} NÃO grava a escolha de rival direto no banco (nem no próprio uid, nem no de outra pessoa) → recusado`, no(await db.set(u.token, 'leagues/la/rivals/' + u.uid, { ownKey: 'pl_um', rivalKey: 'ana' })) && no(await db.set(u.token, 'leagues/la/rivals/' + U.pl2.uid, { ownKey: 'ana', rivalKey: 'caio' })));
+      check(`rival/regras: ${quem} NÃO grava no cadastro público do rival → recusado`, no(await db.set(u.token, 'leagues/la/rival_public/pl_um', { awards: { duelo_trator: 9 }, alvo: true, declarada: true })));
+    }
+    check('rival/regras: nada foi gravado pelas tentativas', (await rv(U.pl1.uid)) === undefined && (await pub('pl_um')) === undefined);
+    check('rival/regras: a dona lê o próprio documento (ainda não existe → 404 permitido)', okR(await db.get(U.pl1.token, 'leagues/la/rivals/' + U.pl1.uid)));
+
+    // funções: quem pode escolher
+    let r = await callFn('setRival', null, { liga: 'la', rivalKey: 'ana' });
+    check('rival: sem login → não autenticado', r.status === 401, r.raw);
+    r = await setR(U.outsider.token, 'ana');
+    check('rival: quem é de fora da liga → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await setR(U.pend.token, 'ana');
+    check('rival: quem está pendente → permissão negada', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    r = await setR(U.pl1.token, 'pl_um');
+    check('rival: ninguém é o próprio rival', r.status === 400 && r.error.status === 'INVALID_ARGUMENT' && /próprio rival/.test(r.error.message), r.raw);
+    r = await setR(U.pl1.token, 'ines');
+    check('rival: jogador inativo não pode ser rival', r.status === 400 && r.error.status === 'FAILED_PRECONDITION', r.raw);
+    r = await setR(U.pl1.token, 'fantasma');
+    check('rival: jogador que não está no elenco não pode ser rival', r.status === 400 && r.error.status === 'FAILED_PRECONDITION', r.raw);
+    r = await setR(U.pl1.token, 'a/b');
+    check('rival: chave inválida → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // escolher
+    r = await setR(U.pl1.token, 'ana');
+    check('rival: jogador escolhe o rival → resumo com a hora do servidor, sem par ainda', r.status === 200 && r.result.ok === true && r.result.rivalKey === 'ana' && r.result.mutual === false && /^\d{4}-\d\d-\d\dT/.test(r.result.since), r.raw);
+    const d1 = await rv(U.pl1.uid);
+    check('rival: o documento fica no uid da conta, com a chave do jogador, o rival, a hora e o histórico vazio', d1 && d1.ownKey === 'pl_um' && d1.rivalKey === 'ana' && d1.since === r.result.since && d1.mutual === false && d1.lead === '' && Object.keys(d1.duels).length === 0, d1);
+    check('rival/regras: a dona lê o próprio documento → permitido', okW(await db.get(U.pl1.token, 'leagues/la/rivals/' + U.pl1.uid)));
+    check('rival/regras: outro jogador NÃO lê → recusado (nem o rival)', no(await db.get(U.pl2.token, 'leagues/la/rivals/' + U.pl1.uid)));
+    check('rival/regras: o ADMIN da liga NÃO lê a escolha de ninguém → recusado', no(await db.get(U.admA.token, 'leagues/la/rivals/' + U.pl1.uid)));
+    check('rival/regras: o dono do sistema também não lê direto → recusado', no(await db.get(U.owner.token, 'leagues/la/rivals/' + U.pl1.uid)));
+    check('rival/regras: quem é de fora não lê → recusado', no(await db.get(U.outsider.token, 'leagues/la/rivals/' + U.pl1.uid)));
+    check('rival/regras: ninguém lista as escolhas da liga → recusado', no(await db.list(U.pl1.token, 'leagues/la/rivals')) && no(await db.list(U.admA.token, 'leagues/la/rivals')));
+    check('rival/regras: a dona, depois de ser recusada na liga, não lê mais → recusado', await (async () => {
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'rejected' });
+      const lido = await db.get(U.pl1.token, 'leagues/la/rivals/' + U.pl1.uid);
+      await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.role': 'player' });
+      return no(lido);
+    })());
+
+    // Rivalidade Declarada: os dois se escolhem
+    r = await setR(U.pl2.token, 'pl_um');
+    check('rival: o outro lado escolhe de volta → a resposta já diz que é recíproco', r.status === 200 && r.result.mutual === true, r.raw);
+    check('rival: as duas escolhas ficam "mutual" e o cadastro público dos dois ganha a marca "declarada" (sem dizer com quem)', (await rv(U.pl1.uid)).mutual === true && (await rv(U.pl2.uid)).mutual === true && (await pub('pl_um')).declarada === true && (await pub('ana')).declarada === true && !JSON.stringify(await pub('pl_um')).includes('ana'), [await rv(U.pl1.uid), await pub('pl_um')]);
+    check('rival/regras: o cadastro público é lido por quem é da liga (jogador e admin) → permitido; por quem é de fora ou pendente → recusado', okW(await db.get(U.pl2.token, 'leagues/la/rival_public/pl_um')) && okW(await db.get(U.admA.token, 'leagues/la/rival_public/ana')) && okW(await db.list(U.pl1.token, 'leagues/la/rival_public')) && no(await db.get(U.outsider.token, 'leagues/la/rival_public/pl_um')) && no(await db.list(U.outsider.token, 'leagues/la/rival_public')) && no(await db.get(U.pend.token, 'leagues/la/rival_public/pl_um')));
+
+    // Alvo da Galera: 3 jogadores diferentes escolhem o mesmo
+    r = await setR(U.admA.token, 'caio');
+    check('rival/alvo: 1 escolha não faz alvo', r.status === 200 && (await pub('caio')) === undefined, r.raw);
+    await setR(U.pl1.token, 'caio');
+    check('rival/alvo: 2 escolhas ainda não', (await pub('caio')) === undefined);
+    await setR(U.pl2.token, 'caio');
+    const alvo = await pub('caio');
+    check('rival/alvo: a 3ª escolha torna o caio Alvo da Galera, sem dizer quem escolheu', alvo && alvo.alvo === true && alvo.declarada === false && !JSON.stringify(alvo).match(/pl_um|ana|adm_jog/), alvo);
+    check('rival/alvo: trocar a escolha desfaz o par antigo (pl_um e ana já não são recíprocos)', (await rv(U.pl1.uid)).mutual === false && (await pub('pl_um')).declarada === false && (await pub('ana')).declarada === false);
+    await setR(U.pl1.token, 'ana');
+    check('rival/alvo: um dos 3 sai → a marca de alvo sai (o documento fica)', (await pub('caio')).alvo === false);
+
+    // duas escolhas ao MESMO tempo, com transações de verdade: o par recíproco não se perde
+    await setR(U.pl1.token, '');
+    await setR(U.pl2.token, '');
+    await setR(U.admA.token, '');
+    const par = await Promise.all([setR(U.pl1.token, 'ana'), setR(U.pl2.token, 'pl_um')]);
+    check('rival: duas escolhas ao mesmo tempo (uma de cada lado) → as duas valem e o par fica recíproco nos dois', par.every(x => x.status === 200) && (await rv(U.pl1.uid)).mutual === true && (await rv(U.pl2.uid)).mutual === true && (await pub('pl_um')).declarada === true && (await pub('ana')).declarada === true, [par.map(x => x.status), await rv(U.pl1.uid), await rv(U.pl2.uid)]);
+    const par3 = await Promise.all([setR(U.pl1.token, 'caio'), setR(U.pl2.token, 'caio'), setR(U.admA.token, 'caio')]);
+    check('rival: três escolhas ao mesmo tempo no mesmo jogador → Alvo da Galera (nenhuma se perde)', par3.every(x => x.status === 200) && (await pub('caio')).alvo === true, [par3.map(x => x.status), await pub('caio')]);
+
+    // Inimigo Público: 7 jogadores diferentes escolhem o mesmo (4 contas novas, jogadores do elenco, tiradas no fim para não mexer nos testes de baixo)
+    const extras = [];
+    for (const n of [4, 5, 6, 7]) {
+      const ux = await newUser(`rival${n}@teste.invalid`);
+      await db.set('owner', `leagues/la/player_registry/rv${n}`, { name: `Rv ${n}`, active: true });
+      await db.set('owner', 'users/' + ux.uid, { email: ux.email, displayName: 'rv' + n, role: 'pending', createdAt: NOW, leagues: { la: { role: 'player', playerKey: 'rv' + n, joinedAt: NOW } } });
+      extras.push(ux);
+    }
+    for (const ux of extras.slice(0, 3)) await setR(ux.token, 'caio');
+    check('rival/inimigo público: com 6 escolhas o caio é Alvo da Galera, mas ainda não Inimigo Público', (await pub('caio')).alvo === true && (await pub('caio')).publico === false, await pub('caio'));
+    r = await setR(extras[3].token, 'caio');
+    const inim = await pub('caio');
+    check('rival/inimigo público: a 7ª escolha torna o caio Inimigo Público (e continua Alvo da Galera), sem dizer quem escolheu', r.status === 200 && inim.publico === true && inim.alvo === true && !JSON.stringify(inim).match(/pl_um|ana|adm_jog|rv\d/), inim);
+    check('rival/regras: o cadastro público com a marca nova é lido por quem é da liga e continua sem gravação direta (jogador e admin) → recusada', okW(await db.get(U.pl2.token, 'leagues/la/rival_public/caio')) && no(await db.set(U.pl1.token, 'leagues/la/rival_public/caio', { awards: {}, alvo: true, publico: true, declarada: false })) && no(await db.update(U.admA.token, 'leagues/la/rival_public/caio', { publico: false })) && (await pub('caio')).publico === true);
+    for (const ux of extras) await setR(ux.token, '');
+    check('rival/inimigo público: quando as 4 contas novas desistem, a marca de Inimigo Público sai e o Alvo da Galera fica (3 escolhas)', (await pub('caio')).publico === false && (await pub('caio')).alvo === true, await pub('caio'));
+    for (const [i, ux] of extras.entries()) {
+      await db.del('owner', 'leagues/la/rivals/' + ux.uid);
+      await db.del('owner', 'users/' + ux.uid);
+      await db.del('owner', `leagues/la/player_registry/rv${i + 4}`);
+    }
+
+    // volta ao par recíproco pl_um × ana (o teste acima deixou os dois escolhendo o caio)
+    await setR(U.pl1.token, 'ana'); await setR(U.pl2.token, 'pl_um');
+
+    // progresso: o app manda os meses fechados
+    const now = new Date(Date.now() - 3 * 3600 * 1000);
+    const monthAgo = n => { const t = now.getUTCFullYear() * 12 + now.getUTCMonth() - n; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`; };
+    const prog = (tok, data) => callFn('saveRivalProgress', tok, { liga: 'la', ...data });
+    r = await callFn('saveRivalProgress', null, { liga: 'la' });
+    check('rival/progresso: sem login → não autenticado', r.status === 401, r.raw);
+    r = await prog(U.outsider.token, {});
+    check('rival/progresso: quem é de fora → permissão negada', r.status === 403, r.raw);
+    r = await prog(U.pl1.token, { duels: [{ month: monthAgo(3), res: 'trator', m: 1, t: 1 }] });
+    check('rival/progresso: resultado que não bate com os números → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+    r = await prog(U.pl1.token, { duels: [{ month: monthAgo(3), res: 'mao', m: 4, t: 2 }] });
+    check('rival/progresso: o rival foi escolhido AGORA, então o mês de 3 meses atrás é antes dele e é ignorado', r.status === 200 && r.result.accepted.length === 0 && r.result.skipped === 1 && Object.keys(((await pub('pl_um')) || { awards: {} }).awards).length === 0, r.raw);
+    await db.update('owner', 'leagues/la/rivals/' + U.pl1.uid, { since: monthAgo(8) + '-15T12:00:00.000Z' });
+    r = await prog(U.pl1.token, { lead: 'theirs', duels: [{ month: monthAgo(3), res: 'mao', m: 4, t: 2 }, { month: monthAgo(2), res: 'trator', m: 5, t: 0 }, { month: monthAgo(1), res: 'mao', m: 3, t: 1 }] });
+    const pubPl = await pub('pl_um');
+    check('rival/progresso: com o rival de 8 meses, três vitórias seguidas dão as badges e o Dono do Rival (no cadastro público do jogador)', r.status === 200 && r.result.accepted.length === 3 && pubPl.awards.duelo_mao === 2 && pubPl.awards.duelo_trator === 1 && pubPl.awards.duelo_dono === 1, [r.raw, pubPl]);
+    check('rival/progresso: as marcas do servidor não se perdem quando o app grava as contagens (declarada do pl_um continua verdadeira)', pubPl.declarada === true && pubPl.alvo === false, pubPl);
+    const hist = await rv(U.pl1.uid);
+    check('rival/progresso: o histórico (privado) guarda rival, resultado e números; a virada guarda quem estava na frente', hist.duels[monthAgo(2)].res === 'trator' && hist.duels[monthAgo(2)].r === 'ana' && hist.duels[monthAgo(2)].m === 5 && hist.lead === 'theirs', hist);
+    r = await prog(U.pl1.token, { duels: [{ month: monthAgo(3), res: 'fora', m: 0, t: 5 }] });
+    check('rival/progresso: mês que já foi guardado não conta de novo', r.status === 200 && r.result.accepted.length === 0 && (await pub('pl_um')).awards.duelo_mao === 2);
+    r = await prog(U.pl1.token, { lead: 'mine', tenure: true });
+    check('rival/progresso: a virada dá "Passou o Rival" e 8 meses com o mesmo rival dão as duas badges de tempo', r.status === 200 && (a => a.rival_passou === 1 && a.rival_3m === 1 && a.rival_6m === 1 && !('rival_12m' in a))((await pub('pl_um')).awards), await pub('pl_um'));
+
+    // syncRivals
+    r = await callFn('syncRivals', null, { liga: 'la' });
+    check('rival/sync: sem login → não autenticado', r.status === 401, r.raw);
+    for (const [quem, tok] of [['jogador comum', U.pl1.token], ['admin de outra liga', U.admB.token], ['quem é de fora', U.outsider.token]]) {
+      r = await callFn('syncRivals', tok, { liga: 'la' });
+      check(`rival/sync: ${quem} → permissão negada`, r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
+    }
+    await S('leagues/la/player_registry/pl_novo', { name: 'Pl Novo', active: true });
+    await db.del('owner', 'leagues/la/player_registry/pl_um');
+    await db.update('owner', 'users/' + U.pl1.uid, { 'leagues.la.playerKey': 'pl_novo', playerKey: 'pl_novo' });
+    r = await callFn('syncRivals', U.admA.token, { liga: 'la', rename: { from: 'pl_um', to: 'pl_novo' } });
+    check('rival/sync: renomear o jogador leva a escolha, o histórico e as badges para a chave nova (a antiga some)', r.status === 200 && (await rv(U.pl1.uid)).ownKey === 'pl_novo' && (await rv(U.pl2.uid)).rivalKey === 'pl_novo' && (await pub('pl_novo')).awards.duelo_trator === 1 && (await pub('pl_um')) === undefined, [r.raw, await rv(U.pl1.uid), await pub('pl_novo')]);
+    r = await callFn('syncRivals', U.admA.token, { liga: 'la', rename: { from: 'a', to: 'a' } });
+    check('rival/sync: trocar de chave para a mesma chave → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+
+    // ganchos: sair da liga leva a escolha
+    r = await callFn('leaveLeague', U.pl2.token, { liga: 'la' });
+    check('rival/ganchos: quem sai da liga leva a escolha de rival; o par deixa de ser recíproco e as badges ficam no jogador', r.status === 200 && (await rv(U.pl2.uid)) === undefined && (await rv(U.pl1.uid)).mutual === false && (await pub('pl_novo')).awards.duelo_trator === 1, [r.raw, await rv(U.pl1.uid)]);
+  }
+
   // ═════════════ MONITOR DE TRAVAMENTOS DO NAVEGADOR ═════════════
   console.log('── monitor de travamentos: função HTTP, regras do banco e painel do dono (Firestore e funções de verdade)');
   await seed();

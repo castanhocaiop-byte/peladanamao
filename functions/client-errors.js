@@ -121,6 +121,11 @@ const NOISE = [
 ];
 const NETWORK_MESSAGE = /failed to fetch|load failed|networkerror|network request failed|network-request-failed|err_internet_disconnected|err_network|network connection was lost|fetch failed/i;
 const NETWORK_CODES = new Set(["unavailable", "auth/network-request-failed"]);
+// Falhas do armazenamento do PRÓPRIO navegador (IndexedDB). Nada no app usa IndexedDB direto: é o SDK do Firebase que guarda o login lá, e o
+// navegador interno do Instagram/Facebook limpa os dados ou derruba a conexão quando a pessoa fecha a janela ("Database deleted by request of the
+// user", "Attempt to get records from database without an in-progress transaction" no iPhone, "Connection to Indexed Database server lost",
+// "Internal error opening backing store"). Não há o que consertar no app: ficam no painel como "rede", fora do e-mail.
+const BROWSER_STORAGE = /Database deleted by request of the user|Attempt to get records from database without an in-progress transaction|Connection to Indexed Database server lost|Internal error opening backing store for indexedDB\.open/i;
 // O SDK do Firebase Functions responde "internal" (minúscula, sem mais nada) quando o pedido NÃO CHEGOU a ter resposta do
 // servidor: sem sinal, rede móvel instável, bloqueador, VPN, ou uma instância que caiu sem nem mandar os cabeçalhos do CORS.
 // Defeito de verdade da nossa função chega como "INTERNAL" (maiúscula) ou com a mensagem que ela mesma escreveu.
@@ -175,7 +180,7 @@ function parseReport(raw) {
   const top = topFrame(stack);
   const x = cleanExtra(raw.x);
   let kind = raw.k;
-  if ((kind === "error" || kind === "rejection") && (NETWORK_MESSAGE.test(message) || NETWORK_CODES.has(x.code))) kind = "network";
+  if ((kind === "error" || kind === "rejection") && (NETWORK_MESSAGE.test(message) || BROWSER_STORAGE.test(message) || NETWORK_CODES.has(x.code))) kind = "network";
   if (kind === "callable" && x.code === "internal" && SDK_NO_ANSWER.test(message)) kind = "network"; // o pedido nem teve resposta: conexão, não defeito
   const report = {
     kind, message, stack, fn: top.fn, loc: top.loc,
