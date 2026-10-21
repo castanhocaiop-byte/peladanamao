@@ -1624,6 +1624,7 @@ function initFirebase() {
     try { FN = firebase.app().functions('us-east1'); } catch(_) {}
 
     handleEmailLinkOnLoad();
+    handleEmailChangeOnLoad(); // link do e-mail de troca de e-mail aberto: aplica o código e mostra o resultado
 
     AUTH.onAuthStateChanged(async user => {
       window.__pnmStage = 'auth';
@@ -3380,9 +3381,10 @@ async function finishAccountDeletion() {
 /* ── Minha conta: trocar o e-mail do login e a senha ─────────────────────────────────────────────────────
    Camada solta no <body>, como a de excluir a conta: funciona em qualquer tela, inclusive nas sem liga, e o render() não a apaga. A conta é
    identificada pelo uid do Firebase, não pelo e-mail: trocar o e-mail da MESMA conta mantém ligas, papéis, vínculo com o jogador e convites.
-   A troca em si é do Firebase (verifyBeforeUpdateEmail): ele manda um link ao e-mail NOVO e o login só muda depois de a pessoa tocar nele;
-   nesse momento o Firebase encerra as sessões de todos os aparelhos. Se o e-mail novo já tem conta, o Firebase não manda nada e não avisa
-   (proteção contra descobrir quem tem cadastro), por isso o texto diz o que fazer se o link não chegar. As cópias do e-mail no banco são
+   O pedido vai ao servidor (requestEmailChange): ele gera o código de troca do Firebase e manda o link ao e-mail NOVO, pelo Resend e com o remetente
+   "Pelada na Mão"; o link abre este app (handleEmailChangeOnLoad), que aplica o código, e só então o login muda e o Firebase encerra as sessões de todos os
+   aparelhos. (O e-mail do próprio Firebase não serve: a página dele dá "The selected page mode is invalid" para esse tipo de link.) Se o e-mail novo já tem
+   conta, o servidor não manda nada e não avisa (proteção contra descobrir quem tem cadastro), por isso o texto diz o que fazer se o link não chegar. As cópias do e-mail no banco são
    corrigidas pelo servidor (syncMyEmail), na primeira entrada com o e-mail novo. Quem entra só com o Google não troca o e-mail por aqui (ele
    é do Google) e o e-mail do dono do sistema é fixo no código. */
 const SUPPORT_EMAIL = 'suporte@peladanamao.com.br';
@@ -3529,21 +3531,11 @@ async function _acctReauthenticate() {
   const pass = document.getElementById('acct-password')?.value || '';
   if (!pass) throw Object.assign(new Error('Digite a sua senha.'), { code: 'app/empty-password' });
   await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, pass));
-}
-
-// Manda o link de confirmação ao e-mail novo. O endereço de volta para o app pode não estar autorizado num ambiente (ex.: site de teste):
-// nesse caso manda sem ele, e o Firebase mostra a página dele mesmo.
-async function sendEmailChangeLink(u, newEmail) {
-  try {
-    await u.verifyBeforeUpdateEmail(newEmail, { url: location.origin + '/' });
-  } catch (e) {
-    if (e?.code === 'auth/unauthorized-continue-uri' || e?.code === 'auth/invalid-continue-uri') await u.verifyBeforeUpdateEmail(newEmail);
-    else throw e;
-  }
+  await u.getIdToken(true); // o servidor confere que o login é recente (auth_time do token): renova o token com o login que acabou de ser feito
 }
 
 function _acctMailSent(email) {
-  _acctMsg('mail', `Enviamos um link para <strong>${esc(email)}</strong>. Abra o e-mail (olhe também o spam) e toque no link: a troca só vale depois disso, e então todos os seus aparelhos pedem login de novo, com o e-mail novo.<br><br>Se o link não chegar em alguns minutos, esse e-mail provavelmente já tem uma conta. Entre nela, use “Excluir minha conta” (ela está vazia) e volte aqui.`, true, true);
+  _acctMsg('mail', `Enviamos um link para <strong>${esc(email)}</strong>. Abra o e-mail (olhe também o spam) e toque em “Confirmar o novo e-mail”: a troca só vale depois disso, e então todos os seus aparelhos pedem login de novo, com o e-mail novo.<br><br>Se o link não chegar em alguns minutos, esse e-mail provavelmente já tem uma conta. Entre nela, use “Excluir minha conta” (ela está vazia) e volte aqui.`, true, true);
 }
 
 async function submitEmailChange() {
@@ -3555,7 +3547,7 @@ async function submitEmailChange() {
   _acct.busy = 'mail'; _acctMsg('mail', '', false); _acctRefresh();
   try {
     if (_acct.reauth) await _acctReauthenticate();
-    await sendEmailChangeLink(u, typed);
+    await callFn('requestEmailChange', { newEmail: typed }); // o servidor gera o código de troca e manda o e-mail (Pelada na Mão) com um link que abre este app
     _acct.reauth = false;
     const box = document.getElementById('acct-pass');
     if (box) box.hidden = true;
@@ -3563,8 +3555,8 @@ async function submitEmailChange() {
     if (pw) pw.value = '';
     _acctMailSent(typed);
   } catch (e) {
-    if (e?.code === 'auth/requires-recent-login') _acctNeedsReauth();
-    else _acctMsg('mail', accountErrMsg(e?.code), false);
+    if (e?.reason === 'recent-login') _acctNeedsReauth(); // o servidor quer um login recente: pede a senha
+    else _acctMsg('mail', /^(auth|app)\//.test(e?.code || '') ? accountErrMsg(e.code) : (e?.message || accountErrMsg()), false); // erro do Firebase (senha) ou do servidor (já vem em português)
   }
   _acct.busy = ''; _acctRefresh();
 }
@@ -3599,6 +3591,88 @@ function syncAccountEmail(user) {
   callFn('syncMyEmail').then(r => {
     if (r?.changed && st.userDoc && st.authUser?.uid === user.uid) st.userDoc = { ...st.userDoc, email: user.email };
   }).catch(() => { _emailSyncTried = ''; });
+}
+
+/* ── Confirmar o e-mail novo (o link do e-mail da troca) ──────────────────────────────────────────────────────────────────────
+   O e-mail que a função requestEmailChange manda tem um link para ESTE app (?mode=verifyAndChangeEmail&oobCode=…), e não para a página do Firebase (ela não conhece
+   esse tipo de link e mostra "The selected page mode is invalid"). Aqui o app lê o código, aplica (applyActionCode: o Firebase troca o e-mail do login e encerra as
+   sessões) e mostra o resultado numa tela própria, esteja ou não com a conta aberta neste navegador. */
+function handleEmailChangeOnLoad() {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch(_) { return; }
+  const code = q.get('oobCode') || '';
+  if (q.get('mode') !== 'verifyAndChangeEmail' || !code) return;
+  st._emailChange = { mode: 'working', code, email: '', msg: '' };
+  applyEmailChange();
+}
+
+async function applyEmailChange() {
+  const code = st._emailChange?.code;
+  if (!code) return;
+  st._emailChange = { mode: 'working', code, email: '', msg: '' };
+  render();
+  try {
+    const info = await AUTH.checkActionCode(code);
+    const next = String(info?.data?.email || ''), before = String(info?.data?.previousEmail || '');
+    await AUTH.applyActionCode(code);
+    try { history.replaceState(null, '', location.pathname); } catch(_) {} // o código já foi usado: sai do endereço
+    // Só sai da conta quem é o dono da troca (um link de outra pessoa não derruba a sessão de quem o abriu).
+    const me = AUTH.currentUser;
+    if (me && before && String(me.email || '').toLowerCase() === before.toLowerCase()) { try { await AUTH.signOut(); } catch(_) {} }
+    st._emailChange = { mode: 'done', code: '', email: next, msg: '' };
+  } catch (e) {
+    const dead = ['auth/invalid-action-code', 'auth/expired-action-code', 'auth/user-not-found'].includes(e?.code);
+    if (dead) { try { history.replaceState(null, '', location.pathname); } catch(_) {} }
+    st._emailChange = { mode: dead ? 'dead' : 'retry', code: dead ? '' : code, email: '', msg: emailChangeErrMsg(e?.code) };
+  }
+  render();
+}
+
+function emailChangeErrMsg(code) {
+  switch (code) {
+    case 'auth/invalid-action-code':
+    case 'auth/expired-action-code':
+    case 'auth/user-not-found': return 'Este link já foi usado ou venceu. Entre na sua conta, toque em ✉️ Minha conta e peça um novo.';
+    case 'auth/network-request-failed': return 'Sem conexão com a internet. Confira a rede e tente de novo.';
+    case 'auth/too-many-requests': return 'Muitas tentativas. Tente mais tarde.';
+    case 'auth/user-disabled': return `Esta conta está desativada. Escreva para ${SUPPORT_EMAIL}.`;
+    default: return 'Não foi possível confirmar agora. Tente de novo.';
+  }
+}
+
+function closeEmailChange() {
+  st._emailChange = null;
+  try { history.replaceState(null, '', location.pathname); } catch(_) {}
+  render();
+}
+
+function vEmailChange(s) {
+  const btn = 'width:100%;padding:13px;background:var(--accent);color:#000;font-size:14px;font-weight:700;border:none;border-radius:10px;cursor:pointer;margin-top:16px;font-family:inherit';
+  const ghost = 'background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;font-family:inherit;margin-top:14px;text-decoration:underline';
+  const title = t => `<p style="font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">${t}</p>`;
+  const msg = s.msg ? `<p style="font-size:13px;color:var(--danger);line-height:1.6;margin:0">${esc(s.msg)}</p>` : '';
+  let body;
+  if (s.mode === 'done') {
+    body = `${title('✅ E-mail trocado')}
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin:0">${s.email ? `O seu e-mail de login agora é <strong style="color:var(--text);word-break:break-all">${esc(s.email)}</strong>.` : 'O seu e-mail de login foi trocado.'} Entre de novo com ele e com a mesma senha. As suas ligas, o seu jogador e as suas conquistas continuam como estão.</p>
+      <button onclick="closeEmailChange()" style="${btn}">Entrar</button>`;
+  } else if (s.mode === 'dead') {
+    body = `${title('Link vencido')}${msg}
+      <button onclick="closeEmailChange()" style="${btn}">Continuar</button>`;
+  } else if (s.mode === 'retry') {
+    body = `${title('Não deu para confirmar')}${msg}
+      <button onclick="applyEmailChange()" style="${btn}">Tentar de novo</button>
+      <div style="text-align:center"><button onclick="closeEmailChange()" style="${ghost}">Cancelar</button></div>`;
+  } else {
+    body = `${title('Confirmando o seu novo e-mail…')}
+      <p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Um instante.</p>`;
+  }
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg)">
+    <div style="text-align:center;margin-bottom:36px">
+      <img src="/logo.webp" alt="Pelada na Mão" style="width:200px;max-width:70vw;height:auto">
+    </div>
+    <div style="width:100%;max-width:360px;background:var(--s1);border-radius:16px;padding:28px 24px;border:1px solid var(--border)">${body}</div>
+  </div>`;
 }
 
 /* ── Encerrar a liga ──────────────────────────────────────────────────────────────────────
@@ -8931,6 +9005,11 @@ function render() {
   if (st.ready) window.__pnmBooted = true; // monitor de travamentos: a abertura terminou
   const app=document.getElementById('app'); if(!app) return;
   if (lpSync()) return; // visitante novo: fica a apresentação (HTML no começo do <body>), o app espera
+  if (st._emailChange) { // link do e-mail da troca de e-mail: tela própria, com ou sem conta aberta neste navegador
+    if (document.getElementById('main')) app.innerHTML = '';
+    app.innerHTML = vEmailChange(st._emailChange);
+    return;
+  }
 
   if (!st.authUser) {
     if (document.getElementById('main')) app.innerHTML='';

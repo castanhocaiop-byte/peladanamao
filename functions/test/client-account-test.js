@@ -2,7 +2,8 @@
 // e as executa num ambiente simulado, sem navegador.
 //  - accountSignIn / emailChangeProblem / passwordChangeProblem / accountErrMsg: como a pessoa entra, as conferências dos campos e as mensagens;
 //  - openMyAccount / myAccountHtml: o que cada pessoa vê (senha, Google, dono do sistema) e que o HTML é escapado;
-//  - submitEmailChange: o link de confirmação (verifyBeforeUpdateEmail), o login recente exigido pelo Firebase, o endereço de volta;
+//  - submitEmailChange: o pedido ao servidor (requestEmailChange), o login recente que o servidor exige, os erros do servidor e os do Firebase (senha);
+//  - a tela que confirma a troca (o link do e-mail abre o app): handleEmailChangeOnLoad, applyEmailChange, vEmailChange e o render;
 //  - submitPasswordChange: confirmar a senha atual e trocar;
 //  - syncAccountEmail: depois da troca, o app pede ao servidor (syncMyEmail) para corrigir a cópia do e-mail no cadastro;
 //  - as ligações no app: botão nos rodapés da conta, privacidade, manual e o nome da função do servidor.
@@ -29,26 +30,44 @@ const check = (label, cond, extra) => {
 };
 
 // ── ambiente do aplicativo falso ─────────────────────────────────────────────────────────────────
-function makeEnv({ providers = ['password'], email = 'ana@x.com', owner = false, loggedIn = true, userDocEmail } = {}) {
+function makeEnv({ providers = ['password'], email = 'ana@x.com', owner = false, loggedIn = true, userDocEmail, search = '' } = {}) {
   const dom = {};   // id -> elemento falso
-  const calls = { verify: [], reauth: [], updatePw: [], callFn: [] };
+  const calls = { request: [], reauth: [], token: [], updatePw: [], callFn: [], order: [], check: [], apply: [], signOut: 0, history: [], renders: [] };
   const mkEl = (id, attrs = '') => (dom[id] = { id, value: '', hidden: /\bhidden\b/.test(attrs), disabled: false, style: {}, textContent: '', innerHTML: '', focus() { env.focused.push(id); }, remove() { delete dom[id]; } });
   const fail = code => { throw Object.assign(new Error(code), { code }); };
   const user = {
     uid: 'u1', email, providerData: providers.map(providerId => ({ providerId })),
-    failVerify: [], failReauth: [], failPw: [],
-    verifyBeforeUpdateEmail: async (e, s) => { calls.verify.push({ e, s }); const f = user.failVerify.shift(); if (f) fail(f); },
-    reauthenticateWithCredential: async c => { calls.reauth.push(c); const f = user.failReauth.shift(); if (f) fail(f); },
+    failRequest: [], failReauth: [], failPw: [],
+    getIdToken: async force => { calls.token.push(force); calls.order.push('token'); return 'tok'; },
+    reauthenticateWithCredential: async c => { calls.reauth.push(c); calls.order.push('reauth'); const f = user.failReauth.shift(); if (f) fail(f); },
     updatePassword: async p => { calls.updatePw.push(p); const f = user.failPw.shift(); if (f) fail(f); },
+  };
+  const auth = {   // o Firebase Auth falso: a conta aberta e o que o link da troca de e-mail faz (conferir o código, aplicar e sair)
+    currentUser: loggedIn ? user : null,
+    info: { data: { email: 'novo@x.com', previousEmail: 'ana@x.com' } },
+    failCheck: [], failApply: [], failSignOut: false,
+    checkActionCode: async code => { calls.check.push(code); calls.order.push('check'); const f = auth.failCheck.shift(); if (f) fail(f); return auth.info; },
+    applyActionCode: async code => { calls.apply.push(code); calls.order.push('apply'); const f = auth.failApply.shift(); if (f) fail(f); },
+    signOut: async () => { calls.signOut++; if (auth.failSignOut) fail('auth/internal-error'); auth.currentUser = null; },
   };
   const env = {
     focused: [],
-    AUTH: { currentUser: loggedIn ? user : null },
+    AUTH: auth,
     firebase: { auth: { EmailAuthProvider: { credential: (e, p) => ({ e, p }) } } },
-    location: { origin: 'https://peladanamao.com.br' },
+    location: { origin: 'https://peladanamao.com.br', search, pathname: '/' },
+    history: { replaceState: (a, b, url) => calls.history.push(url) },
+    render: () => calls.renders.push(JSON.parse(JSON.stringify(env.st._emailChange || null))),
     isSystemOwner: () => owner,
     st: { userDoc: { email: userDocEmail === undefined ? email : userDocEmail }, authUser: { uid: 'u1', email } },
-    callFn: async (name, data) => { calls.callFn.push({ name, data }); return env.respond(name, data); },
+    callFn: async (name, data) => {
+      calls.callFn.push({ name, data });
+      if (name === 'requestEmailChange') {   // como o callFn do app: o servidor responde ou devolve erro com código, motivo estável e mensagem em português
+        calls.request.push(data); calls.order.push('request');
+        const f = user.failRequest.shift();
+        if (f) throw Object.assign(new Error(f.message || f.code || ''), { code: f.code, reason: f.reason || '' });
+      }
+      return env.respond(name, data);
+    },
     respond: () => ({ ok: true, changed: true }),
     document: {
       getElementById: id => dom[id] || null,
@@ -67,10 +86,11 @@ function makeEnv({ providers = ['password'], email = 'ana@x.com', owner = false,
       },
     },
   };
-  const names = ['AUTH', 'firebase', 'document', 'location', 'isSystemOwner', 'callFn', 'st'];
+  const names = ['AUTH', 'firebase', 'document', 'location', 'history', 'render', 'isSystemOwner', 'callFn', 'st'];
   const api = new Function(...names, code + `
     return { accountSignIn, emailChangeProblem, passwordChangeProblem, accountErrMsg, myAccountHtml, openMyAccount, closeMyAccount,
-             submitEmailChange, submitPasswordChange, syncAccountEmail, sendEmailChangeLink, SUPPORT_EMAIL,
+             submitEmailChange, submitPasswordChange, syncAccountEmail, SUPPORT_EMAIL,
+             handleEmailChangeOnLoad, applyEmailChange, emailChangeErrMsg, closeEmailChange, vEmailChange,
              get acct() { return _acct; }, set acct(v) { _acct = v; }, get tried() { return _emailSyncTried; }, set tried(v) { _emailSyncTried = v; } };`)(...names.map(n => env[n]));
   return { api, env, calls, dom, user, mkEl };
 }
@@ -157,69 +177,74 @@ const tick = () => new Promise(r => setImmediate(r));
   t.api.openMyAccount();
   t.dom['acct-newmail'].value = '';
   await t.api.submitEmailChange();
-  check('e-mail novo vazio: mostra o motivo e não chama o Firebase', /Digite o e-mail novo/.test(textOf(msgOf(t, 'mail'))) && t.calls.verify.length === 0, t.calls.verify);
+  check('e-mail novo vazio: mostra o motivo e não chama o servidor', /Digite o e-mail novo/.test(textOf(msgOf(t, 'mail'))) && t.calls.request.length === 0, t.calls.request);
   t.dom['acct-newmail'].value = 'ana@x.com';
   await t.api.submitEmailChange();
-  check('e-mail novo igual ao atual: recusa sem chamar o Firebase', /já é o seu e-mail/.test(textOf(msgOf(t, 'mail'))) && t.calls.verify.length === 0);
+  check('e-mail novo igual ao atual: recusa sem chamar o servidor', /já é o seu e-mail/.test(textOf(msgOf(t, 'mail'))) && t.calls.request.length === 0);
 
   t.dom['acct-newmail'].value = '  Ana.Nova@x.com  ';
   const p = t.api.submitEmailChange();
   check('enquanto envia: o botão fica desligado e diz "Enviando…"', t.dom['acct-mail-go'].disabled === true && t.dom['acct-mail-go'].textContent === 'Enviando…' && t.api.acct.busy === 'mail');
   const p2 = t.api.submitEmailChange();   // segundo toque no meio do pedido
   await p; await p2;
-  check('toque repetido no meio do envio é ignorado (só um pedido ao Firebase)', t.calls.verify.length === 1, t.calls.verify.length);
-  check('pede o link ao e-mail novo (sem espaços), com o endereço do site para voltar', t.calls.verify[0].e === 'Ana.Nova@x.com' && t.calls.verify[0].s.url === 'https://peladanamao.com.br/', t.calls.verify[0]);
-  check('depois de enviar: o botão volta ao normal e a mensagem (verde) diz para onde o link foi', t.dom['acct-mail-go'].disabled === false && t.dom['acct-mail-go'].textContent === 'Enviar link de confirmação' && /Enviamos um link para <strong>Ana\.Nova@x\.com<\/strong>/.test(msgOf(t, 'mail').innerHTML) && msgOf(t, 'mail').style.color === 'var(--accent)', msgOf(t, 'mail').innerHTML);
+  check('toque repetido no meio do envio é ignorado (só um pedido ao servidor)', t.calls.request.length === 1, t.calls.request.length);
+  check('o pedido vai à função requestEmailChange do servidor só com o e-mail novo (sem espaços nas pontas): o link e o e-mail são do servidor, não do navegador', t.calls.callFn.length === 1 && t.calls.callFn[0].name === 'requestEmailChange' && JSON.stringify(t.calls.callFn[0].data) === '{"newEmail":"Ana.Nova@x.com"}', t.calls.callFn);
+  check('sem o servidor pedir login recente, o app não confirma a senha nem renova o token à toa', t.calls.reauth.length === 0 && t.calls.token.length === 0);
+  check('depois de enviar: o botão volta ao normal e a mensagem (verde) diz para onde o link foi e o que tocar no e-mail', t.dom['acct-mail-go'].disabled === false && t.dom['acct-mail-go'].textContent === 'Enviar link de confirmação' && /Enviamos um link para <strong>Ana\.Nova@x\.com<\/strong>/.test(msgOf(t, 'mail').innerHTML) && /toque em “Confirmar o novo e-mail”/.test(msgOf(t, 'mail').innerHTML) && msgOf(t, 'mail').style.color === 'var(--accent)', msgOf(t, 'mail').innerHTML);
   check('a mensagem explica o que fazer se o link não chegar (o e-mail já tem conta → entrar nela, Excluir minha conta, voltar)', /não chegar em alguns minutos/.test(msgOf(t, 'mail').innerHTML) && /já tem uma conta/.test(msgOf(t, 'mail').innerHTML) && /Excluir minha conta/.test(msgOf(t, 'mail').innerHTML) && /volte aqui/.test(msgOf(t, 'mail').innerHTML));
   check('a mensagem avisa que os aparelhos pedem login de novo e manda olhar o spam', /todos os seus aparelhos pedem login de novo/.test(msgOf(t, 'mail').innerHTML) && /spam/.test(msgOf(t, 'mail').innerHTML));
 
-  // o e-mail digitado vai escapado na mensagem (o Firebase o recusaria, mas a tela nunca pode montar HTML com ele)
+  // o e-mail digitado vai escapado na mensagem (o servidor o recusaria, mas a tela nunca pode montar HTML com ele)
   t = makeEnv();
   t.api.openMyAccount();
   t.dom['acct-newmail'].value = '"><svg/onload=alert(1)>@x.com';
   await t.api.submitEmailChange();
   check('e-mail digitado com HTML é escapado na mensagem de sucesso', !/<svg/i.test(msgOf(t, 'mail').innerHTML) && /&lt;svg/.test(msgOf(t, 'mail').innerHTML), msgOf(t, 'mail').innerHTML);
 
-  // login recente exigido pelo Firebase
+  // login recente: quem exige é o servidor (motivo estável "recent-login")
   t = makeEnv({ email: 'ana@x.com' });
   t.api.openMyAccount();
   t.dom['acct-newmail'].value = 'ana.nova@x.com';
-  t.user.failVerify.push('auth/requires-recent-login');
+  t.user.failRequest.push({ code: 'failed-precondition', reason: 'recent-login', message: 'Por segurança, confirme que é você: digite a sua senha e toque no botão de novo.' });
   await t.api.submitEmailChange();
-  check('Firebase pede login recente: mostra o campo da senha, o foco vai para ele e o botão muda', t.dom['acct-pass'].hidden === false && t.env.focused.includes('acct-password') && /confirme que é você/.test(textOf(msgOf(t, 'mail'))) && t.dom['acct-mail-go'].textContent === 'Confirmar senha e enviar o link' && t.api.acct.reauth === true && msgOf(t, 'mail').style.color === 'var(--danger)', textOf(msgOf(t, 'mail')));
+  check('o servidor pede login recente: mostra o campo da senha, o foco vai para ele e o botão muda', t.dom['acct-pass'].hidden === false && t.env.focused.includes('acct-password') && /confirme que é você/.test(textOf(msgOf(t, 'mail'))) && t.dom['acct-mail-go'].textContent === 'Confirmar senha e enviar o link' && t.api.acct.reauth === true && msgOf(t, 'mail').style.color === 'var(--danger)', textOf(msgOf(t, 'mail')));
   await t.api.submitEmailChange();
-  check('segundo toque com a senha vazia: pede a senha, sem chamar o Firebase de novo', /Digite a sua senha/.test(textOf(msgOf(t, 'mail'))) && t.calls.reauth.length === 0 && t.calls.verify.length === 1, [t.calls.reauth.length, t.calls.verify.length]);
+  check('segundo toque com a senha vazia: pede a senha, sem chamar o servidor de novo', /Digite a sua senha/.test(textOf(msgOf(t, 'mail'))) && t.calls.reauth.length === 0 && t.calls.request.length === 1, [t.calls.reauth.length, t.calls.request.length]);
   t.dom['acct-password'].value = 'errada1';
   t.user.failReauth.push('auth/wrong-password');
   await t.api.submitEmailChange();
-  check('senha errada: diz que está incorreta, continua pedindo a senha e NÃO manda o link', /Senha incorreta/.test(textOf(msgOf(t, 'mail'))) && t.api.acct.reauth === true && t.calls.verify.length === 1 && t.calls.reauth[0].e === 'ana@x.com' && t.calls.reauth[0].p === 'errada1', t.calls.reauth);
+  check('senha errada: diz que está incorreta, continua pedindo a senha e NÃO pede o e-mail ao servidor', /Senha incorreta/.test(textOf(msgOf(t, 'mail'))) && t.api.acct.reauth === true && t.calls.request.length === 1 && t.calls.reauth[0].e === 'ana@x.com' && t.calls.reauth[0].p === 'errada1' && t.calls.token.length === 0, t.calls.reauth);
   t.dom['acct-password'].value = 'certa123';
   await t.api.submitEmailChange();
-  check('senha certa: confirma a senha e então manda o link ao e-mail novo', t.calls.reauth.length === 2 && t.calls.reauth[1].p === 'certa123' && t.calls.verify.length === 2 && t.calls.verify[1].e === 'ana.nova@x.com' && /Enviamos um link/.test(msgOf(t, 'mail').innerHTML), t.calls);
+  check('senha certa: confirma a senha, renova o token (para o servidor ver o login novo) e só então pede o e-mail ao servidor, nessa ordem', t.calls.reauth.length === 2 && t.calls.reauth[1].p === 'certa123' && t.calls.token.length === 1 && t.calls.token[0] === true && t.calls.request.length === 2 && t.calls.request[1].newEmail === 'ana.nova@x.com' && JSON.stringify(t.calls.order.slice(-3)) === '["reauth","token","request"]' && /Enviamos um link/.test(msgOf(t, 'mail').innerHTML), [t.calls.order, t.calls.token]);
   check('depois de enviar: o campo da senha some, é limpo e a pessoa não fica em "reautenticar"', t.dom['acct-pass'].hidden === true && t.dom['acct-password'].value === '' && t.api.acct.reauth === false);
 
-  // endereço de volta não autorizado neste ambiente
-  t = makeEnv();
-  t.api.openMyAccount();
-  t.dom['acct-newmail'].value = 'ana.nova@x.com';
-  t.user.failVerify.push('auth/unauthorized-continue-uri');
-  await t.api.submitEmailChange();
-  check('endereço de volta não autorizado (site de teste): manda de novo sem ele e dá certo', t.calls.verify.length === 2 && t.calls.verify[0].s && t.calls.verify[1].s === undefined && /Enviamos um link/.test(msgOf(t, 'mail').innerHTML), t.calls.verify);
-  t = makeEnv();
-  t.api.openMyAccount();
-  t.dom['acct-newmail'].value = 'ana.nova@x.com';
-  t.user.failVerify.push('auth/invalid-continue-uri');
-  await t.api.submitEmailChange();
-  check('endereço de volta inválido: também tenta sem ele', t.calls.verify.length === 2 && t.calls.verify[1].s === undefined);
-
-  // outros erros do Firebase
-  for (const [code, re] of [['auth/invalid-email', /não parece um e-mail/], ['auth/too-many-requests', /Muitas tentativas/], ['auth/network-request-failed', /Sem conexão/], ['auth/internal-error', /Não foi possível concluir/]]) {
+  // erros que o servidor devolve: a mensagem dele já vem em português e é a que aparece
+  for (const [code, message] of [['failed-precondition', 'O e-mail desta conta é controlado pelo Google, então não dá para trocá-lo por aqui.'], ['invalid-argument', 'Este não parece um e-mail. Confira e tente de novo.'], ['resource-exhausted', 'Muitos pedidos de troca de e-mail seguidos. Tente de novo mais tarde.'], ['not-found', 'Conta não encontrada.'], ['unavailable', 'Não foi possível concluir agora. Confira a conexão e tente de novo.']]) {
     t = makeEnv();
     t.api.openMyAccount();
     t.dom['acct-newmail'].value = 'ana.nova@x.com';
-    t.user.failVerify.push(code);
+    t.user.failRequest.push({ code, message });
     await t.api.submitEmailChange();
-    check(`erro ${code}: mensagem em português, vermelha, sem o código técnico e o botão volta ao normal`, re.test(textOf(msgOf(t, 'mail'))) && !/auth\//.test(textOf(msgOf(t, 'mail'))) && msgOf(t, 'mail').style.color === 'var(--danger)' && t.dom['acct-mail-go'].disabled === false && t.api.acct.busy === '', textOf(msgOf(t, 'mail')));
+    check(`erro do servidor ${code}: aparece a mensagem dele, em vermelho, sem o código técnico, o botão volta ao normal e a senha não é pedida à toa`, textOf(msgOf(t, 'mail')) === message && !new RegExp(code).test(textOf(msgOf(t, 'mail'))) && msgOf(t, 'mail').style.color === 'var(--danger)' && t.dom['acct-mail-go'].disabled === false && t.api.acct.busy === '' && t.api.acct.reauth === false && t.dom['acct-pass'].hidden === true, textOf(msgOf(t, 'mail')));
+  }
+  t = makeEnv();
+  t.api.openMyAccount();
+  t.dom['acct-newmail'].value = 'ana.nova@x.com';
+  t.user.failRequest.push({ code: undefined, message: '' });
+  await t.api.submitEmailChange();
+  check('erro sem código nem mensagem: cai na mensagem genérica em português', textOf(msgOf(t, 'mail')) === 'Não foi possível concluir agora. Tente de novo.' && t.api.acct.busy === '');
+  // erros do Firebase ao confirmar a senha (a senha ainda é conferida no navegador)
+  for (const [code, re] of [['auth/too-many-requests', /Muitas tentativas/], ['auth/network-request-failed', /Sem conexão/], ['auth/internal-error', /Não foi possível concluir/]]) {
+    t = makeEnv();
+    t.api.openMyAccount();
+    t.dom['acct-newmail'].value = 'ana.nova@x.com';
+    t.user.failRequest.push({ code: 'failed-precondition', reason: 'recent-login', message: 'x' });
+    await t.api.submitEmailChange();
+    t.dom['acct-password'].value = 'qualquer1';
+    t.user.failReauth.push(code);
+    await t.api.submitEmailChange();
+    check(`erro ${code} ao confirmar a senha: mensagem em português, vermelha, sem o código técnico, o botão volta ao normal e nada é pedido ao servidor`, re.test(textOf(msgOf(t, 'mail'))) && !/auth\//.test(textOf(msgOf(t, 'mail'))) && msgOf(t, 'mail').style.color === 'var(--danger)' && t.dom['acct-mail-go'].disabled === false && t.api.acct.busy === '' && t.calls.request.length === 1, textOf(msgOf(t, 'mail')));
   }
 
   // ══ 4. TROCAR A SENHA ══════════════════════════════════════════════════════════════════════════
@@ -308,10 +333,10 @@ const tick = () => new Promise(r => setImmediate(r));
   check('o rodapé aparece nas telas da conta (onboarding, escolha de liga, pendente) e na aba EU', (html.match(/\$\{deleteAccountLink\(\)\}/g) || []).length >= 4 && /anonymizeNameLink\(\) \+ deleteAccountLink\(\)/.test(html));
   const authBlock = slice('AUTH.onAuthStateChanged(async user => {', "window.__pnmStage = 'user';");
   check('a entrada pede a correção do e-mail logo depois de ler o cadastro (só quando o cadastro existe)', /if \(snap\.exists\) \{\n\s+st\.userDoc = snap\.data\(\);\n\s+syncAccountEmail\(user\);/.test(authBlock), authBlock.slice(authBlock.indexOf('if (snap.exists)'), authBlock.indexOf('if (snap.exists)') + 200));
-  check('a função do servidor chamada existe com esse nome (syncMyEmail) e é chamável', /exports\.syncMyEmail = onCall\(/.test(serverSrc) && /callFn\('syncMyEmail'\)/.test(accountCode));
-  check('o app usa verifyBeforeUpdateEmail e nunca updateEmail (o Firebase desliga o updateEmail com a proteção contra descobrir cadastros)', /verifyBeforeUpdateEmail\(/.test(accountCode) && !/\.updateEmail\(/.test(accountCode) && !/\.updateEmail\(/.test(html));
+  check('as funções do servidor chamadas existem com esses nomes (syncMyEmail e requestEmailChange) e são chamáveis', /exports\.syncMyEmail = onCall\(/.test(serverSrc) && /callFn\('syncMyEmail'\)/.test(accountCode) && /exports\.requestEmailChange = onCall\(/.test(serverSrc) && /callFn\('requestEmailChange', \{ newEmail: typed \}\)/.test(accountCode));
+  check('o app NÃO usa o e-mail do próprio Firebase para a troca (verifyBeforeUpdateEmail: o link dele dá "The selected page mode is invalid") nem o updateEmail (o Firebase o desliga com a proteção contra descobrir cadastros): o pedido vai ao servidor', !/\.verifyBeforeUpdateEmail\(/.test(html) && !/\.updateEmail\(/.test(html) && /callFn\('requestEmailChange'/.test(accountCode));
   check('o app nunca grava o e-mail direto no cadastro (só o servidor pode; as regras barram)', !/\.update\(\{\s*email/.test(accountCode) && !/\.set\(\{[^}]*email/.test(accountCode));
-  check('nenhuma chamada do Firebase fica sem tratamento de erro: cada pedido da tela está dentro de um try, e a correção do e-mail termina em catch', ['sendEmailChangeLink', 'submitEmailChange', 'submitPasswordChange'].every(fn => new RegExp('async function ' + fn + '\\([^)]*\\) \\{[\\s\\S]*?\\btry \\{').test(accountCode)) && /callFn\('syncMyEmail'\)[\s\S]*?\.catch\(/.test(accountCode));
+  check('nenhuma chamada do Firebase fica sem tratamento de erro: cada pedido da tela está dentro de um try, e a correção do e-mail termina em catch', ['submitEmailChange', 'submitPasswordChange', 'applyEmailChange'].every(fn => new RegExp('async function ' + fn + '\\([^)]*\\) \\{[\\s\\S]*?\\btry \\{').test(accountCode)) && /callFn\('syncMyEmail'\)[\s\S]*?\.catch\(/.test(accountCode));
   const priv = slice('function openPrivacyPolicy()', 'function openDeleteAccount()');
   check('a privacidade cita o direito de trocar o e-mail e a senha, o e-mail antigo e as cópias de segurança', /Trocar o e-mail do login e a senha/.test(priv) && /O e-mail antigo deixa de ser usado/.test(priv) && /cópias de segurança diárias/.test(priv));
   check('a privacidade não diz mais "Ambas as opções"', !/Ambas as opções/.test(priv) && /Essas opções ficam no fim da aba/.test(priv));
@@ -322,9 +347,100 @@ const tick = () => new Promise(r => setImmediate(r));
   const sec = plainM(manual.slice(secStart, manual.indexOf('</section>', secStart)));
   check('manual: tem a seção "Minha conta" (#minha-conta)', manual.indexOf('id="minha-conta"') > 0, null);
   check('manual: explica o e-mail novo com link, que a troca só vale depois de tocar no link, que as ligas e o vínculo continuam e que os aparelhos pedem login de novo', /link/.test(sec) && /só vale depois/.test(sec) && /ligas/.test(sec) && /vínculo/.test(sec) && /pedem login de novo/.test(sec), sec.slice(0, 400));
-  check('manual: explica o que fazer se o link não chegar (o e-mail novo já tem conta) e quem entra só com o Google', /não chegar/.test(sec) && /Quase sempre é porque o e-mail novo já tem uma conta/.test(sec) && /Firebase não avisa quando isso acontece/.test(sec) && /Google/.test(sec) && /suporte@peladanamao\.com\.br/.test(sec), sec.slice(0, 400));
+  check('manual: explica o que fazer se o link não chegar (o e-mail novo já tem conta) e quem entra só com o Google', /não chegar/.test(sec) && /Quase sempre é porque o e-mail novo já tem uma conta/.test(sec) && /o app não avisa quando isso acontece/.test(sec) && /Google/.test(sec) && /suporte@peladanamao\.com\.br/.test(sec), sec.slice(0, 400));
   check('manual: a tabela diz que o dono do sistema e quem entra só com o Google NÃO trocam o e-mail pelo app, e a senha também se troca em Minha conta', /Dono do sistema Não: o e-mail dele está fixo no código/.test(sec) && /Só com o Google Não: o e-mail dessa conta é controlado pelo Google/.test(sec) && /Trocar a senha Em ✉️ Minha conta/.test(sec) && /a senha atual/.test(sec), sec.slice(0, 400));
   check('manual: tem o passo a passo do dono (script trocar-email.js, simulação antes, repetir com --aplicar, chave de administrador, apagar a chave depois)', /trocar-email\.js/.test(sec) && /Simule primeiro/.test(sec) && /repita o comando com --aplicar/.test(sec) && /chave de administrador/.test(sec) && /Apague o arquivo da chave/.test(sec), sec.slice(0, 600));
+
+  check('manual: o e-mail chega de "Pelada na Mão" com o botão "Confirmar o novo e-mail", o link abre o app na tela "E-mail trocado", e a função requestEmailChange tem login recente, Resend e os limites (5 por minuto e 10 por hora)', /chega de Pelada na Mão \(avisos@notificacoes\.peladanamao\.com\.br\)/.test(sec) && /Confirmar o novo e-mail/.test(sec) && /E-mail trocado/.test(sec) && /requestEmailChange/.test(sec) && /5 chamadas por minuto e 10 por hora/.test(sec) && /Resend/.test(sec) && /login recente/.test(sec), sec.slice(0, 400));
+  check('manual: explica por que o e-mail do próprio Firebase não é usado ("The selected page mode is invalid"), a tela que aplica o código e que o link só vale uma vez e por tempo limitado', /The selected page mode is invalid/.test(sec) && /handleEmailChangeOnLoad/.test(sec) && /só vale uma vez e por tempo limitado/.test(sec), sec.slice(0, 400));
+
+  // ══ 7. A TELA QUE CONFIRMA A TROCA (O LINK DO E-MAIL ABRE O APP) ═══════════════════════════════
+  const { changeEmailUrl } = require('../account-email');
+  const settle = async () => { for (let i = 0; i < 12; i++) await tick(); };
+  const linkSearch = new URL(changeEmailUrl('https://peladanamao.com.br/', 'ABC_123-x')).search;   // o link que o servidor põe no e-mail
+  let a = makeEnv({ email: 'ana@x.com', search: linkSearch });
+  a.api.handleEmailChangeOnLoad();
+  await settle();
+  check('link do e-mail aberto: o app lê o código, confere (checkActionCode) e aplica (applyActionCode), nessa ordem, uma vez só', JSON.stringify(a.calls.check) === '["ABC_123-x"]' && JSON.stringify(a.calls.apply) === '["ABC_123-x"]' && JSON.stringify(a.calls.order.filter(x => x === 'check' || x === 'apply')) === '["check","apply"]', [a.calls.check, a.calls.apply]);
+  check('o endereço do link que o servidor monta é o que o app lê (mode=verifyAndChangeEmail e oobCode)', /^\?mode=verifyAndChangeEmail&oobCode=ABC_123-x$/.test(linkSearch), linkSearch);
+  check('terminou: tela "E-mail trocado" com o e-mail NOVO (o que o Firebase devolve), e o código sai do endereço da página', a.env.st._emailChange.mode === 'done' && a.env.st._emailChange.email === 'novo@x.com' && a.env.st._emailChange.code === '' && a.calls.history.length === 1 && a.calls.history[0] === '/', [a.env.st._emailChange, a.calls.history]);
+  check('mostra "Confirmando…" primeiro e depois o resultado (a tela é redesenhada nas duas etapas)', a.calls.renders.length >= 2 && a.calls.renders[0].mode === 'working' && a.calls.renders[a.calls.renders.length - 1].mode === 'done', a.calls.renders);
+  check('quem abriu o link é o dono da troca (o e-mail dele era o antigo): sai da conta, porque o Firebase já encerrou as sessões', a.calls.signOut === 1 && a.env.AUTH.currentUser === null);
+  a = makeEnv({ email: 'ana@x.com', search: linkSearch, loggedIn: false });
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('sem conta aberta neste navegador: aplica, mostra o resultado e não tenta sair de nada', a.env.st._emailChange.mode === 'done' && a.calls.signOut === 0 && a.calls.apply.length === 1);
+  a = makeEnv({ email: 'bia@x.com', search: linkSearch });
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('conta aberta é de OUTRA pessoa (link repassado ou armado): aplica o código, mas NÃO derruba a sessão de quem abriu', a.env.st._emailChange.mode === 'done' && a.calls.signOut === 0 && a.env.AUTH.currentUser !== null);
+  a = makeEnv({ email: 'ANA@X.com', search: linkSearch });
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('a comparação do e-mail ignora maiúsculas: conta ANA@X.com com troca de ana@x.com sai da conta', a.calls.signOut === 1);
+  a = makeEnv({ email: 'ana@x.com', search: linkSearch });
+  a.env.AUTH.info = { data: { email: 'novo@x.com' } };
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('se o Firebase não disser o e-mail antigo, não sai da conta (sem prova de quem é a troca) e ainda assim conclui', a.calls.signOut === 0 && a.env.st._emailChange.mode === 'done');
+  a = makeEnv({ email: 'ana@x.com', search: linkSearch });
+  a.env.AUTH.failSignOut = true;
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('se o signOut falhar, a tela de resultado aparece do mesmo jeito', a.env.st._emailChange.mode === 'done');
+
+  // o que NÃO é um link de troca de e-mail não é tocado (senha esquecida, link de acesso, endereço sem código…)
+  for (const [search, why] of [['', 'sem parâmetros'], ['?mode=resetPassword&oobCode=XYZ', 'redefinição de senha'], ['?mode=signIn&oobCode=XYZ&apiKey=k', 'link de acesso por e-mail'], ['?mode=verifyEmail&oobCode=XYZ', 'verificação de e-mail'], ['?mode=verifyAndChangeEmail', 'troca de e-mail sem código'], ['?mode=verifyAndChangeEmail&oobCode=', 'troca de e-mail com código vazio'], ['?oobCode=XYZ', 'código sem modo'], ['?invite=abc&ref=instagram', 'convite']]) {
+    a = makeEnv({ search });
+    a.api.handleEmailChangeOnLoad(); await settle();
+    check(`${why}: o app não mexe em nada (nenhum código conferido ou aplicado, nenhuma tela)`, a.calls.check.length === 0 && a.calls.apply.length === 0 && !a.env.st._emailChange && a.calls.history.length === 0 && a.calls.renders.length === 0, search);
+  }
+
+  // link vencido ou já usado
+  for (const code of ['auth/invalid-action-code', 'auth/expired-action-code', 'auth/user-not-found']) {
+    a = makeEnv({ search: linkSearch });
+    a.env.AUTH.failCheck.push(code);
+    a.api.handleEmailChangeOnLoad(); await settle();
+    check(`${code}: tela "Link vencido" que manda pedir outro em Minha conta, sem aplicar nada, e o código sai do endereço`, a.env.st._emailChange.mode === 'dead' && /já foi usado ou venceu/.test(a.env.st._emailChange.msg) && /Minha conta/.test(a.env.st._emailChange.msg) && a.calls.apply.length === 0 && a.calls.history.length === 1 && a.env.st._emailChange.code === '' && a.calls.signOut === 0, a.env.st._emailChange);
+  }
+  a = makeEnv({ search: linkSearch });
+  a.env.AUTH.failApply.push('auth/invalid-action-code');
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('o código vence entre a conferência e a aplicação: também é "Link vencido" e não sai da conta', a.env.st._emailChange.mode === 'dead' && a.calls.signOut === 0);
+
+  // sem rede: pode tentar de novo, e o código continua guardado na memória (não no endereço apagado)
+  a = makeEnv({ email: 'ana@x.com', search: linkSearch });
+  a.env.AUTH.failApply.push('auth/network-request-failed');
+  a.api.handleEmailChangeOnLoad(); await settle();
+  check('sem rede ao aplicar: tela "Não deu para confirmar" com o motivo, o código guardado para tentar de novo e o endereço da página mantido', a.env.st._emailChange.mode === 'retry' && /Sem conexão/.test(a.env.st._emailChange.msg) && a.env.st._emailChange.code === 'ABC_123-x' && a.calls.history.length === 0 && a.calls.signOut === 0, a.env.st._emailChange);
+  await a.api.applyEmailChange(); await settle();
+  check('"Tentar de novo" aplica o mesmo código (agora com rede), mostra o resultado e limpa o endereço', a.calls.apply.length === 2 && a.calls.apply[1] === 'ABC_123-x' && a.env.st._emailChange.mode === 'done' && a.calls.history.length === 1 && a.calls.signOut === 1);
+  check('"Tentar de novo" sem código guardado não faz nada (não aplica nada à toa)', await (async () => { const z = makeEnv({}); z.env.st._emailChange = { mode: 'retry', code: '', msg: '' }; await z.api.applyEmailChange(); return z.calls.apply.length === 0 && z.calls.check.length === 0; })());
+  for (const [code, re] of [['auth/too-many-requests', /Muitas tentativas/], ['auth/user-disabled', /desativada.*suporte@peladanamao\.com\.br/], ['auth/internal-error', /Não foi possível confirmar agora/], ['app/qualquer', /Não foi possível confirmar agora/]]) {
+    a = makeEnv({ search: linkSearch });
+    a.env.AUTH.failApply.push(code);
+    a.api.handleEmailChangeOnLoad(); await settle();
+    check(`erro ${code}: mensagem em português, sem código técnico, e dá para tentar de novo`, re.test(a.env.st._emailChange.msg) && !/auth\//.test(a.env.st._emailChange.msg) && a.env.st._emailChange.mode === 'retry' && a.env.st._emailChange.code === 'ABC_123-x', a.env.st._emailChange);
+  }
+  a = makeEnv({ search: linkSearch });
+  a.env.AUTH.failApply.push('auth/network-request-failed');
+  a.api.handleEmailChangeOnLoad(); await settle();
+  a.api.closeEmailChange();
+  check('Cancelar fecha a tela, limpa o estado, redesenha e tira o código do endereço', !a.env.st._emailChange && a.calls.history.length === 1 && a.calls.renders[a.calls.renders.length - 1] === null, a.calls.renders);
+
+  // a tela
+  const v = s => makeEnv().api.vEmailChange(s);
+  const done = v({ mode: 'done', email: 'novo@x.com', msg: '' });
+  check('tela "E-mail trocado": o e-mail novo em destaque, entrar de novo com a mesma senha, ligas e conquistas como estão, e o botão Entrar', /E-mail trocado/.test(done) && /novo@x\.com/.test(done) && /mesma senha/.test(done) && /ligas, o seu jogador e as suas conquistas continuam como estão/.test(done) && /onclick="closeEmailChange\(\)"[^>]*>Entrar</.test(done) && /\/logo\.webp/.test(done), done.slice(0, 300));
+  check('tela "E-mail trocado" sem o e-mail novo: texto genérico, sem "undefined"', /O seu e-mail de login foi trocado\./.test(v({ mode: 'done', email: '', msg: '' })) && !/undefined|null/.test(v({ mode: 'done', msg: '' })));
+  check('o e-mail novo vai escapado na tela (nenhuma tag solta: a única <img> é o logo)', (v({ mode: 'done', email: '"><img src=x onerror=alert(1)>@x.com', msg: '' }).match(/<img/gi) || []).length === 1 && /&lt;img/.test(v({ mode: 'done', email: '"><img src=x onerror=alert(1)>@x.com', msg: '' })));
+  check('tela "Link vencido": mostra a mensagem e o botão Continuar', /Link vencido/.test(v({ mode: 'dead', msg: 'Este link já foi usado ou venceu.' })) && /Este link já foi usado ou venceu\./.test(v({ mode: 'dead', msg: 'Este link já foi usado ou venceu.' })) && />Continuar</.test(v({ mode: 'dead', msg: 'x' })));
+  check('tela "Não deu para confirmar": mostra o motivo, Tentar de novo (applyEmailChange) e Cancelar', /Não deu para confirmar/.test(v({ mode: 'retry', msg: 'Sem conexão' })) && /Sem conexão/.test(v({ mode: 'retry', msg: 'Sem conexão' })) && /onclick="applyEmailChange\(\)"[^>]*>Tentar de novo</.test(v({ mode: 'retry', msg: 'x' })) && /onclick="closeEmailChange\(\)"[^>]*>Cancelar</.test(v({ mode: 'retry', msg: 'x' })));
+  check('tela de espera: "Confirmando o seu novo e-mail…" e nenhum botão', /Confirmando o seu novo e-mail/.test(v({ mode: 'working' })) && !/<button/.test(v({ mode: 'working' })));
+  check('a mensagem de erro também vai escapada', !/<b>/.test(v({ mode: 'dead', msg: '<b>x</b>' })) && /&lt;b>x/.test(v({ mode: 'dead', msg: '<b>x</b>' })));
+
+  // ligações no app
+  const renderFn = html.slice(html.indexOf('function render() {'), html.indexOf('function render() {') + 900);
+  check('o render() mostra a tela da troca ANTES do login e do app (com ou sem conta aberta) e limpa o app antes', /if \(lpSync\(\)\) return;[^\n]*\n\s*if \(st\._emailChange\) \{[^\n]*\n\s*if \(document\.getElementById\('main'\)\) app\.innerHTML = '';\n\s*app\.innerHTML = vEmailChange\(st\._emailChange\);\n\s*return;\n\s*\}\n\s*\n?\s*if \(!st\.authUser\)/.test(renderFn), renderFn.slice(0, 700));
+  const initBlock = slice('handleEmailLinkOnLoad();', 'AUTH.onAuthStateChanged(async user => {');
+  check('na abertura, a troca é tratada logo depois do link de acesso e ANTES de saber quem está logado', /handleEmailLinkOnLoad\(\);\n\s+handleEmailChangeOnLoad\(\);/.test(initBlock), initBlock);
+  check('a apresentação para visitantes novos não cobre o link (qualquer parâmetro fora de ref, utm_, fbclid e gclid desliga a apresentação)', /if \(k !== 'ref' && !\/\^utm_\/\.test\(k\) && k !== 'fbclid' && k !== 'gclid'\) ok = false;/.test(html));
+  check('a tela da troca só usa o que o Firebase devolve para o e-mail e nunca guarda o código no aparelho (nada de localStorage nem sessionStorage)', !/localStorage|sessionStorage/.test(slice('function handleEmailChangeOnLoad()', 'function vEmailChange(')));
 
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

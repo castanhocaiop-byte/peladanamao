@@ -11,7 +11,7 @@ const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
-const { syncEmailCopies } = require("./account-email");
+const { syncEmailCopies, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage } = require("./account-email");
 const starVotes = require("./star-votes");
 const rivalLib = require("./rival");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
@@ -1329,6 +1329,62 @@ exports.syncMyEmail = onCall(CALLABLE, async request => {
   const result = await syncEmailCopies(db, auth.uid, email);
   if (result.changed || result.linkRequests) logger.info("syncMyEmail: cópias do e-mail atualizadas", { cadastro: result.changed, pedidosDeVinculo: result.linkRequests }); // sem o e-mail no log
   return { ok: true, changed: result.changed };
+});
+
+// Trocar o e-mail do login pelo app (Minha conta). O servidor gera o código de troca do Firebase e MANDA o e-mail (Resend, remetente "Pelada na Mão") com um
+// link que abre o app; o app aplica o código e o Firebase troca o login e encerra as sessões (ver o porquê em functions/account-email.js). Exige login RECENTE
+// (a senha digitada agora), só vale para quem entra com e-mail e senha ou pelo link do e-mail (não para o Google nem para o dono do sistema) e nunca devolve o
+// link ao app nem conta o que descobriu: se o e-mail novo já tem conta, responde ok e não manda nada (senão a função serviria para descobrir quem tem cadastro).
+exports.requestEmailChange = onCall({ ...CALLABLE, secrets: [RESEND_API_KEY] }, async request => {
+  const auth = requireAuth(request);
+  await checkRateLimit(auth.uid, "requestEmailChange", 5);
+  try {
+    await checkRateLimit(auth.uid, "requestEmailChangeHora", 10, 60 * 60 * 1000); // o e-mail sai para um endereço digitado por quem pede: teto por hora
+  } catch (e) {
+    if (e?.code === "resource-exhausted") throw fail("resource-exhausted", "Muitos pedidos de troca de e-mail seguidos. Tente de novo mais tarde.");
+    throw e;
+  }
+  const authTime = Number(auth.token?.auth_time) || 0;
+  if (Date.now() / 1000 - authTime > RECENT_LOGIN_SECONDS) {
+    throw new HttpsError("failed-precondition", "Por segurança, confirme que é você: digite a sua senha e toque no botão de novo.", { reason: "recent-login" });
+  }
+  let user;
+  try {
+    user = await admin.auth().getUser(auth.uid);
+  } catch (e) {
+    if (e?.code === "auth/user-not-found") throw fail("not-found", "Conta não encontrada.");
+    throw e;
+  }
+  const current = String(user.email || "").trim();
+  if (!current) throw fail("failed-precondition", "Esta conta não tem e-mail de login.");
+  if (current.toLowerCase() === OWNER_EMAIL) throw fail("failed-precondition", "O e-mail do dono do sistema não pode ser trocado por aqui.");
+  if (!(user.providerData || []).some(p => p?.providerId === "password")) {
+    throw fail("failed-precondition", "O e-mail desta conta é controlado pelo Google, então não dá para trocá-lo por aqui.");
+  }
+  const parsed = parseNewEmail(request.data?.newEmail, current);
+  if (parsed.problem === "empty") throw fail("invalid-argument", "Digite o e-mail novo.");
+  if (parsed.problem === "invalid") throw fail("invalid-argument", "Este não parece um e-mail. Confira e tente de novo.");
+  if (parsed.problem === "same") throw fail("invalid-argument", "Este já é o seu e-mail de login.");
+  if (!resendConfigured()) throw fail("failed-precondition", "O envio de e-mails não está ligado neste ambiente.");
+  let link;
+  try {
+    link = await admin.auth().generateVerifyAndChangeEmailLink(current, parsed.email);
+  } catch (e) {
+    if (e?.code === "auth/email-already-exists") return { ok: true }; // não revela que o e-mail novo já tem conta
+    logger.warn("requestEmailChange: o Firebase não gerou o código de troca", { codigo: e?.code });
+    throw fail("unavailable", "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.");
+  }
+  const code = oobCodeOf(link);
+  if (!code) {
+    logger.warn("requestEmailChange: o link do Firebase veio sem código");
+    throw fail("unavailable", "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.");
+  }
+  const { subject, html, text } = changeEmailMessage({ url: changeEmailUrl(ENV.appUrl, code), contactEmail: CONTACT_EMAIL });
+  if (!(await sendResendEmail({ to: [parsed.email], subject, html, text }))) {
+    throw fail("unavailable", "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.");
+  }
+  logger.info("requestEmailChange: e-mail de confirmação enviado"); // sem o endereço nem o código no registro
+  return { ok: true };
 });
 
 // ── Anonimizar meu nome no histórico (direito de anonimização, LGPD) ─────────

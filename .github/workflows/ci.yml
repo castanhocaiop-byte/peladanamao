@@ -239,6 +239,10 @@ jobs:
         working-directory: functions
         run: node test/client-account-test.js
 
+      - name: Testes das Cloud Functions (troca do e-mail do login - o servidor manda o e-mail pelo Resend, login recente, Google, dono do sistema, e-mail que já tem conta e limites)
+        working-directory: functions
+        run: node test/email-change-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.

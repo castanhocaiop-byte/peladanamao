@@ -1375,6 +1375,52 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     check('atalho: com --desvincular-google troca o e-mail e tira o login Google da conta (mesmo uid)', g.code === 0 && ga.email === 'google1-nova@teste.invalid' && !ga.providerData.some(p => p.providerId === 'google.com'), [g, ga.providerData]);
     check('atalho: depois disso "Esqueci minha senha" funciona para o e-mail novo (o Firebase aceita o pedido)', (await http('POST', `${AUTH_URL}/accounts:sendOobCode?key=fake`, null, { requestType: 'PASSWORD_RESET', email: 'google1-nova@teste.invalid' })).status === 200);
 
+    // ── a função requestEmailChange (o app pede o e-mail de confirmação; quem manda é o servidor, pelo Resend) ──
+    // O Resend não existe no emulador: o que dá para provar aqui é a porta de entrada (login, dono, Google, e-mail novo, limite) e que, sem o envio ligado, nada é gerado nem trocado.
+    const accountEmail = require('../account-email');
+    const R1 = await mk('envia1@teste.invalid');
+    let rr = await callFn('requestEmailChange', null, { newEmail: 'envia1-nova@teste.invalid' });
+    check('requestEmailChange sem login → não autenticado', rr.status === 401, rr.raw);
+    rr = await callFn('requestEmailChange', R1.token, { newEmail: '' });
+    check('requestEmailChange com o e-mail novo vazio → argumento inválido', rr.status === 400 && rr.error.status === 'INVALID_ARGUMENT' && /Digite o e-mail novo/.test(rr.error.message), rr.raw);
+    rr = await callFn('requestEmailChange', R1.token, { newEmail: 'ENVIA1@teste.invalid' });
+    check('requestEmailChange com o e-mail novo igual ao atual (até com maiúsculas) → argumento inválido', rr.status === 400 && rr.error.status === 'INVALID_ARGUMENT' && /já é o seu e-mail de login/.test(rr.error.message), rr.raw);
+    rr = await callFn('requestEmailChange', R1.token, { newEmail: 'envia1-nova@teste.invalid' });
+    check('requestEmailChange com tudo certo mas SEM o envio de e-mails ligado (o emulador não tem a chave do Resend) → falha clara e nenhuma troca', rr.status === 400 && rr.error.status === 'FAILED_PRECONDITION' && /envio de e-mails não está ligado/.test(rr.error.message) && (await adminAuth.getUser(R1.uid)).email === 'envia1@teste.invalid', rr.raw);
+    rr = await callFn('requestEmailChange', U.owner.token, { newEmail: 'dono-novo@teste.invalid' });
+    check('requestEmailChange pelo dono do sistema → recusado (o e-mail dele é fixo no código)', rr.status === 400 && rr.error.status === 'FAILED_PRECONDITION' && /dono do sistema/.test(rr.error.message), rr.raw);
+    const G2 = await googleUser('google2@teste.invalid');
+    rr = await callFn('requestEmailChange', G2.token, { newEmail: 'google2-nova@teste.invalid' });
+    check('requestEmailChange por quem entra SÓ com o Google → recusado (o e-mail é do Google)', rr.status === 400 && rr.error.status === 'FAILED_PRECONDITION' && /controlado pelo Google/.test(rr.error.message) && (await adminAuth.getUser(G2.uid)).email === 'google2@teste.invalid', rr.raw);
+    const R2 = await mk('envia2@teste.invalid');
+    const lim = [];
+    for (let i = 0; i < 6; i++) lim.push((await callFn('requestEmailChange', R2.token, { newEmail: '' })).status);
+    check('requestEmailChange: 5 pedidos por minuto passam pela porta e o 6º é recusado (limite de chamadas, com o banco de verdade)', lim.slice(0, 5).every(s => s === 400) && lim[5] === 429, lim);
+    check('requestEmailChange: o limite é por conta (outra conta continua podendo)', (await callFn('requestEmailChange', R1.token, { newEmail: '' })).status === 400);
+
+    // ── o que o servidor faz com o Auth: o Admin SDK gera o código e o navegador o aplica (checkActionCode e applyActionCode) ──
+    const M1 = await mk('mecanismo1@teste.invalid', { leagues: { la: { role: 'player', playerKey: 'pl_m1', joinedAt: NOW } } });
+    const link = await adminAuth.generateVerifyAndChangeEmailLink('mecanismo1@teste.invalid', 'mecanismo1-novo@teste.invalid');
+    const oob = accountEmail.oobCodeOf(link);
+    check('o Admin SDK gera o link de troca (mode=verifyAndChangeEmail) com um código, e oobCodeOf o acha', !!oob && new URL(link).searchParams.get('mode') === 'verifyAndChangeEmail', link);
+    const chk = await http('POST', `${AUTH_URL}/accounts:resetPassword?key=fake`, null, { oobCode: oob });   // o checkActionCode do navegador
+    check('checkActionCode: devolve o tipo da ação, o e-mail ANTIGO (email) e o NOVO (newEmail)', chk.status === 200 && chk.json.requestType === 'VERIFY_AND_CHANGE_EMAIL' && chk.json.email === 'mecanismo1@teste.invalid' && chk.json.newEmail === 'mecanismo1-novo@teste.invalid', chk.json);
+    const beforeApply = Date.now();
+    const apply = await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: oob });   // o applyActionCode do navegador
+    const swapped = await adminAuth.getUser(M1.uid);
+    check('applyActionCode: troca o e-mail do login da MESMA conta (mesmo uid), já verificado, e manda o Firebase encerrar as sessões antigas', apply.status === 200 && swapped.email === 'mecanismo1-novo@teste.invalid' && swapped.emailVerified === true && new Date(swapped.tokensValidAfterTime).getTime() >= beforeApply - 1000, [apply.status, swapped.email, swapped.emailVerified, swapped.tokensValidAfterTime]);
+    const inNew = await signIn('mecanismo1-novo@teste.invalid');
+    check('entra com o e-mail novo e a MESMA senha (mesma conta); com o antigo não entra mais', inNew.status === 200 && inNew.json.localId === M1.uid && (await signIn('mecanismo1@teste.invalid')).status !== 200, inNew.json);
+    check('o código só vale uma vez (a segunda tentativa é recusada) e já não serve para o checkActionCode', (await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: oob })).status === 400 && (await http('POST', `${AUTH_URL}/accounts:resetPassword?key=fake`, null, { oobCode: oob })).status === 400);
+    rs = await callFn('syncMyEmail', inNew.json.idToken, {});
+    check('na primeira entrada com o e-mail novo, syncMyEmail corrige a cópia do cadastro, e as ligas e o vínculo continuam', rs.status === 200 && rs.result.changed === true && (await dataOf('users/' + M1.uid)).email === 'mecanismo1-novo@teste.invalid' && (await dataOf('users/' + M1.uid)).leagues.la.playerKey === 'pl_m1', rs.raw);
+    let taken = '';
+    try { await adminAuth.generateVerifyAndChangeEmailLink('mecanismo1-novo@teste.invalid', 'envia1@teste.invalid'); } catch (e) { taken = e.code; }
+    check('e-mail novo que já tem conta: o Admin SDK recusa com auth/email-already-exists (a função traduz isso em "ok", sem revelar)', taken === 'auth/email-already-exists', taken);
+    const stale = await adminAuth.generateVerifyAndChangeEmailLink('mecanismo1-novo@teste.invalid', 'mecanismo1-outro@teste.invalid');
+    const fresh = await adminAuth.generateVerifyAndChangeEmailLink('mecanismo1-novo@teste.invalid', 'mecanismo1-terceiro@teste.invalid');
+    check('dois pedidos seguidos: aplicar o 2º muda o e-mail e o 1º deixa de valer (o e-mail do login já mudou)', (await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: accountEmail.oobCodeOf(fresh) })).status === 200 && (await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: accountEmail.oobCodeOf(stale) })).status === 400 && (await adminAuth.getUser(M1.uid)).email === 'mecanismo1-terceiro@teste.invalid');
+
     await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
   }
 
