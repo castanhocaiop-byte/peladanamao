@@ -1421,6 +1421,35 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     const fresh = await adminAuth.generateVerifyAndChangeEmailLink('mecanismo1-novo@teste.invalid', 'mecanismo1-terceiro@teste.invalid');
     check('dois pedidos seguidos: aplicar o 2º muda o e-mail e o 1º deixa de valer (o e-mail do login já mudou)', (await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: accountEmail.oobCodeOf(fresh) })).status === 200 && (await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { oobCode: accountEmail.oobCodeOf(stale) })).status === 400 && (await adminAuth.getUser(M1.uid)).email === 'mecanismo1-terceiro@teste.invalid');
 
+    // ── a função notifyPasswordChanged (o app a chama logo depois de trocar a senha; quem manda o e-mail é o servidor, pelo Resend) ──
+    // O Resend não existe no emulador: aqui se prova a porta de entrada (login, Google, limite) e a BASE do aviso, que é o Auth guardar o instante da troca de senha em tokensValidAfterTime
+    // (e NÃO mexer nele quando a pessoa só entra de novo ou troca o nome). A decisão de avisar ou não (janela de 10 minutos, conta com senha…) está em password-notice-test.js.
+    const P1 = await mk('senha1@teste.invalid');
+    let rn = await callFn('notifyPasswordChanged', null, {});
+    check('notifyPasswordChanged sem login → não autenticado', rn.status === 401, rn.raw);
+    const validAt = async uid => new Date((await adminAuth.getUser(uid)).tokensValidAfterTime).getTime();
+    const created = await validAt(P1.uid);
+    await new Promise(r => setTimeout(r, 2100));   // o horário do Auth vai em segundos: espera para uma diferença aparecer
+    const si1 = await signIn('senha1@teste.invalid');
+    const nameChange = await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { idToken: si1.json.idToken, displayName: 'Fulana', returnSecureToken: true });
+    check('o Auth NÃO muda o horário dos tokens quando a pessoa só entra de novo ou troca o nome (isso não dispara o aviso de senha)', si1.status === 200 && nameChange.status === 200 && (await validAt(P1.uid)) === created, [created, await validAt(P1.uid)]);
+    const beforePw = Date.now();
+    const pwChange = await http('POST', `${AUTH_URL}/accounts:update?key=fake`, null, { idToken: nameChange.json.idToken || si1.json.idToken, password: 'nova-senha-123', returnSecureToken: true });
+    const afterPw = await validAt(P1.uid);
+    check('trocar a senha (accounts:update com a senha nova, como o updatePassword do navegador) ATUALIZA o horário dos tokens para o momento da troca: é nisso que o servidor se baseia para avisar', pwChange.status === 200 && afterPw >= beforePw - 1000 && afterPw > created, [pwChange.status, created, afterPw, beforePw]);
+    const siNew = await signIn('senha1@teste.invalid', 'nova-senha-123');
+    check('…a pessoa entra com a senha nova e não entra mais com a antiga', siNew.status === 200 && (await signIn('senha1@teste.invalid')).status !== 200);
+    rn = await callFn('notifyPasswordChanged', siNew.json.idToken, {});
+    check('notifyPasswordChanged logo depois da troca → ok (no emulador não há Resend: a função só registra que o aviso não saiu; a resposta é a mesma de sempre, sem dado nenhum)', rn.status === 200 && rn.result.ok === true && Object.keys(rn.result).length === 1, rn.raw);
+    const G3 = await googleUser('google3@teste.invalid');
+    rn = await callFn('notifyPasswordChanged', G3.token, { email: 'invasor@teste.invalid' });
+    check('notifyPasswordChanged por quem entra SÓ com o Google → ok, sem nada a avisar (não tem senha), e o que o app manda é ignorado', rn.status === 200 && rn.result.ok === true && Object.keys(rn.result).length === 1, rn.raw);
+    const P2 = await mk('senha2@teste.invalid');
+    const lim2 = [];
+    for (let i = 0; i < 4; i++) lim2.push((await callFn('notifyPasswordChanged', P2.token, {})).status);
+    check('notifyPasswordChanged: 3 chamadas por hora passam e a 4ª é recusada (limite de chamadas, com o banco de verdade)', lim2.slice(0, 3).every(s => s === 200) && lim2[3] === 429, lim2);
+    check('notifyPasswordChanged: o limite é por conta (outra conta continua podendo)', (await callFn('notifyPasswordChanged', P1.token, {})).status === 200);
+
     await http('DELETE', `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`);
   }
 

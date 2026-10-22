@@ -88,6 +88,37 @@ function changeNoticeMessage({ newEmail, contactEmail }) {
   return { subject, html, text };
 }
 
+// ── O aviso de senha trocada (função notifyPasswordChanged, em index.js) ────────────────────────────────────────────────
+// A troca de senha em Minha conta é do próprio Firebase (o app confirma a senha atual e chama updatePassword) e ele não manda aviso nenhum. Logo depois da troca o app chama o servidor,
+// que manda este aviso ao e-mail da conta, com o dia e a hora da troca, para quem é dono da conta saber que a senha mudou. Sem link e sem botão.
+
+// Dia e hora de Brasília ("22/10/2026 às 10:31"). Brasília não tem horário de verão desde 2019, mas quem decide é o fuso, não uma conta nossa.
+function brasiliaStamp(ms) {
+  const parts = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms));
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} às ${p.hour}:${p.minute}`;
+}
+
+// O aviso de que a senha foi trocada: assunto, HTML e texto simples. `whenMs` é o instante da troca (em milissegundos; sem ele o texto diz "agora há pouco") e
+// `contactEmail` o contato do suporte.
+function passwordNoticeMessage({ whenMs, contactEmail }) {
+  const subject = "A senha da sua conta no Pelada na Mão foi trocada";
+  const when = Number.isFinite(whenMs) ? `em ${brasiliaStamp(whenMs)} (horário de Brasília)` : "agora há pouco";
+  const paragraphs = [
+    `A senha da sua conta no Pelada na Mão foi trocada ${when}.`,
+    "Se foi você, está tudo certo: não precisa fazer nada neste e-mail.",
+  ];
+  const ifNotYou = `Não foi você? Alguém pode ter entrado na sua conta. Na tela de entrada, toque em “Esqueci minha senha” para criar uma senha nova e escreva agora para ${contactEmail} (ou responda este e-mail), contando o que aconteceu.`;
+  const footer = `Você recebe este aviso por ser o e-mail de login desta conta. Dúvidas: ${contactEmail}`;
+  const html = [
+    ...paragraphs.map(p => `<p style="margin:0 0 14px;line-height:1.55">${escapeHtml(p)}</p>`),
+    `<p style="margin:0 0 14px;line-height:1.55;font-weight:700">${escapeHtml(ifNotYou)}</p>`,
+    `<p style="margin:0;color:#6b7280;font-size:12px;line-height:1.5">${escapeHtml(footer)}</p>`,
+  ].join("");
+  const text = [...paragraphs, ifNotYou, footer].join("\n\n");
+  return { subject, html, text };
+}
+
 const LEAGUE_ID_RE = /^[A-Za-z0-9_-]{1,60}$/;   // o mesmo de index.js (aceita os ids antigos de liga)
 
 // Põe `email` (o do login, já lido do Firebase Auth) no cadastro e nos pedidos de vínculo pendentes das ligas da conta.
@@ -114,4 +145,4 @@ async function syncEmailCopies(db, uid, email) {
   return { userDoc: true, changed, linkRequests };
 }
 
-module.exports = { syncEmailCopies, LEAGUE_ID_RE, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, maskEmail, changeNoticeMessage };
+module.exports = { syncEmailCopies, LEAGUE_ID_RE, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, maskEmail, changeNoticeMessage, brasiliaStamp, passwordNoticeMessage };

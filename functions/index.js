@@ -11,7 +11,7 @@ const { describeMpError } = require("./mp-errors");
 const funnel = require("./funnel-metrics");
 const clientErrors = require("./client-errors");
 const { recoverFreeChampionships: recoverFree, isLeagueFreeNow } = require("./recover-free");
-const { syncEmailCopies, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, changeNoticeMessage } = require("./account-email");
+const { syncEmailCopies, parseNewEmail, oobCodeOf, changeEmailUrl, changeEmailMessage, changeNoticeMessage, passwordNoticeMessage } = require("./account-email");
 const starVotes = require("./star-votes");
 const rivalLib = require("./rival");
 // FieldValue e FieldPath vêm do módulo moderno: no emulador, "admin.firestore" perde as propriedades estáticas.
@@ -1388,6 +1388,40 @@ exports.requestEmailChange = onCall({ ...CALLABLE, secrets: [RESEND_API_KEY] }, 
   const noticeSent = await sendResendEmail({ to: [current], subject: notice.subject, html: notice.html, text: notice.text }); // só depois de o link ter ido ao e-mail novo
   if (noticeSent) logger.info("requestEmailChange: e-mail de confirmação e aviso ao e-mail atual enviados"); // sem os endereços nem o código no registro
   else logger.warn("requestEmailChange: e-mail de confirmação enviado, mas o aviso ao e-mail atual não saiu");
+  return { ok: true };
+});
+
+// Avisar o e-mail da conta de que a senha foi trocada pelo app (Minha conta). A troca é do Firebase (o app confirma a senha atual e chama updatePassword) e ele não manda aviso nenhum;
+// logo depois o app chama esta função. Ela não recebe nada do app: lê o e-mail e o instante da troca direto do cadastro do Firebase (tokensValidAfterTime, que o Firebase atualiza quando a
+// senha muda, e não quando a pessoa só entra de novo) e SÓ avisa se a senha mudou há poucos minutos e a conta tem senha. O aviso vai sempre para o e-mail da própria conta, então a função não
+// serve para mandar e-mail para ninguém, e o limite é de 3 por hora. É um reforço: se o aviso não sair, a senha foi trocada do mesmo jeito.
+const PASSWORD_NOTICE_WINDOW_MS = 10 * 60 * 1000;
+exports.notifyPasswordChanged = onCall({ ...CALLABLE, secrets: [RESEND_API_KEY] }, async request => {
+  const auth = requireAuth(request);
+  try {
+    await checkRateLimit(auth.uid, "notifyPasswordChanged", 3, 60 * 60 * 1000);
+  } catch (e) {
+    if (e?.code === "resource-exhausted") throw fail("resource-exhausted", "Muitos avisos de troca de senha seguidos. Tente de novo mais tarde.");
+    throw e;
+  }
+  let user;
+  try {
+    user = await admin.auth().getUser(auth.uid);
+  } catch (e) {
+    if (e?.code === "auth/user-not-found") throw fail("not-found", "Conta não encontrada.");
+    throw e;
+  }
+  const email = String(user.email || "").trim();
+  const changedAt = Date.parse(user.tokensValidAfterTime || "");
+  const justChanged = Number.isFinite(changedAt) && changedAt <= Date.now() + 60 * 1000 && Date.now() - changedAt <= PASSWORD_NOTICE_WINDOW_MS;
+  const hasPassword = (user.providerData || []).some(p => p?.providerId === "password");
+  if (!email || !hasPassword || !justChanged) {
+    logger.info("notifyPasswordChanged: nada a avisar");
+    return { ok: true };
+  }
+  const { subject, html, text } = passwordNoticeMessage({ whenMs: changedAt, contactEmail: CONTACT_EMAIL });
+  if (await sendResendEmail({ to: [email], subject, html, text })) logger.info("notifyPasswordChanged: aviso enviado"); // sem o endereço no registro
+  else logger.warn("notifyPasswordChanged: o aviso não saiu");
   return { ok: true };
 });
 

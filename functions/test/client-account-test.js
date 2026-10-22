@@ -4,7 +4,7 @@
 //  - openMyAccount / myAccountHtml: o que cada pessoa vê (senha, Google, dono do sistema) e que o HTML é escapado;
 //  - submitEmailChange: o pedido ao servidor (requestEmailChange), o login recente que o servidor exige, os erros do servidor e os do Firebase (senha);
 //  - a tela que confirma a troca (o link do e-mail abre o app): handleEmailChangeOnLoad, applyEmailChange, vEmailChange e o render;
-//  - submitPasswordChange: confirmar a senha atual e trocar;
+//  - submitPasswordChange: confirmar a senha atual e trocar, e pedir ao servidor (notifyPasswordChanged) o aviso por e-mail, sem esperar a resposta;
 //  - syncAccountEmail: depois da troca, o app pede ao servidor (syncMyEmail) para corrigir a cópia do e-mail no cadastro;
 //  - as ligações no app: botão nos rodapés da conta, privacidade, manual e o nome da função do servidor.
 const fs = require('fs');
@@ -40,7 +40,7 @@ function makeEnv({ providers = ['password'], email = 'ana@x.com', owner = false,
     failRequest: [], failReauth: [], failPw: [],
     getIdToken: async force => { calls.token.push(force); calls.order.push('token'); return 'tok'; },
     reauthenticateWithCredential: async c => { calls.reauth.push(c); calls.order.push('reauth'); const f = user.failReauth.shift(); if (f) fail(f); },
-    updatePassword: async p => { calls.updatePw.push(p); const f = user.failPw.shift(); if (f) fail(f); },
+    updatePassword: async p => { calls.updatePw.push(p); calls.order.push('updatePw'); const f = user.failPw.shift(); if (f) fail(f); },
   };
   const auth = {   // o Firebase Auth falso: a conta aberta e o que o link da troca de e-mail faz (conferir o código, aplicar e sair)
     currentUser: loggedIn ? user : null,
@@ -66,6 +66,7 @@ function makeEnv({ providers = ['password'], email = 'ana@x.com', owner = false,
         const f = user.failRequest.shift();
         if (f) throw Object.assign(new Error(f.message || f.code || ''), { code: f.code, reason: f.reason || '' });
       }
+      if (name === 'notifyPasswordChanged') calls.order.push('notifyPw');
       return env.respond(name, data);
     },
     respond: () => ({ ok: true, changed: true }),
@@ -248,6 +249,9 @@ const tick = () => new Promise(r => setImmediate(r));
   }
 
   // ══ 4. TROCAR A SENHA ══════════════════════════════════════════════════════════════════════════
+  const notices = tt => tt.calls.callFn.filter(c => c.name === 'notifyPasswordChanged');   // pedidos do aviso de senha trocada ao servidor
+  let unhandled = 0;
+  process.on('unhandledRejection', () => { unhandled++; });
   t = makeEnv({ email: 'ana@x.com' });
   t.api.openMyAccount();
   t.dom['acct-pw-cur'].value = ''; t.dom['acct-pw-new'].value = 'nova123'; t.dom['acct-pw-rep'].value = 'nova123';
@@ -262,12 +266,28 @@ const tick = () => new Promise(r => setImmediate(r));
   await pw;
   check('senha certa: confirma a senha atual e depois troca pela nova, nessa ordem', t.calls.reauth.length === 1 && t.calls.reauth[0].e === 'ana@x.com' && t.calls.reauth[0].p === 'velha1' && t.calls.updatePw.length === 1 && t.calls.updatePw[0] === 'nova123', t.calls);
   check('depois de trocar: campos limpos, mensagem verde e aviso dos outros aparelhos', t.dom['acct-pw-cur'].value === '' && t.dom['acct-pw-new'].value === '' && t.dom['acct-pw-rep'].value === '' && /Senha trocada/.test(textOf(msgOf(t, 'pw'))) && /outros aparelhos/.test(textOf(msgOf(t, 'pw'))) && msgOf(t, 'pw').style.color === 'var(--accent)' && t.dom['acct-pw-go'].disabled === false);
+  check('depois de trocar a senha o app pede o aviso ao servidor (notifyPasswordChanged), UMA vez, sem mandar nenhum dado, e só DEPOIS de confirmar a senha atual e trocar, nessa ordem', notices(t).length === 1 && notices(t)[0].data === undefined && JSON.stringify(t.calls.order) === '["reauth","updatePw","notifyPw"]', [t.calls.callFn, t.calls.order]);
+  check('as recusas de antes (campos vazios, repetição diferente) não pediram aviso nenhum', t.calls.callFn.length === 1, t.calls.callFn);
   const t2 = makeEnv({ email: 'ana@x.com' });
   t2.api.openMyAccount();
   t2.dom['acct-pw-cur'].value = 'velha1'; t2.dom['acct-pw-new'].value = 'nova123'; t2.dom['acct-pw-rep'].value = 'nova123';
   const pa = t2.api.submitPasswordChange(), pb = t2.api.submitPasswordChange();   // segundo toque no meio da troca
   await pa; await pb;
   check('toque repetido no meio da troca de senha é ignorado (uma confirmação e uma troca só)', t2.calls.reauth.length === 1 && t2.calls.updatePw.length === 1, t2.calls);
+  check('…e o aviso também é pedido uma vez só', notices(t2).length === 1, t2.calls.callFn);
+  const hang = makeEnv({ email: 'ana@x.com' });
+  hang.api.openMyAccount();
+  hang.dom['acct-pw-cur'].value = 'velha1'; hang.dom['acct-pw-new'].value = 'nova123'; hang.dom['acct-pw-rep'].value = 'nova123';
+  hang.env.respond = () => new Promise(() => {});   // o servidor nunca responde ao aviso
+  const ended = await Promise.race([hang.api.submitPasswordChange().then(() => true), new Promise(r => setTimeout(() => r(false), 1500))]);   // se o app esperasse o aviso, nunca terminaria
+  check('o app NÃO espera a resposta do aviso: mesmo que o servidor nunca responda, a troca termina, a mensagem verde aparece e o botão volta ao normal', ended === true && /Senha trocada/.test(textOf(msgOf(hang, 'pw'))) && msgOf(hang, 'pw').style.color === 'var(--accent)' && hang.dom['acct-pw-go'].disabled === false && hang.api.acct.busy === '' && notices(hang).length === 1, textOf(msgOf(hang, 'pw')));
+  const boom = makeEnv({ email: 'ana@x.com' });
+  boom.api.openMyAccount();
+  boom.dom['acct-pw-cur'].value = 'velha1'; boom.dom['acct-pw-new'].value = 'nova123'; boom.dom['acct-pw-rep'].value = 'nova123';
+  boom.env.respond = () => { throw Object.assign(new Error('Não foi possível concluir agora.'), { code: 'unavailable' }); };   // o aviso dá erro no servidor
+  await boom.api.submitPasswordChange();
+  for (let i = 0; i < 6; i++) await tick();
+  check('se o pedido do aviso der erro: a senha foi trocada do mesmo jeito, a mensagem verde fica (nenhum erro aparece para a pessoa) e nada fica sem tratamento', /Senha trocada/.test(textOf(msgOf(boom, 'pw'))) && msgOf(boom, 'pw').style.color === 'var(--accent)' && boom.calls.updatePw.length === 1 && unhandled === 0, [textOf(msgOf(boom, 'pw')), unhandled]);
   t.dom['acct-pw-cur'].value = 'velha1'; t.dom['acct-pw-new'].value = 'nova456'; t.dom['acct-pw-rep'].value = 'nova456';
   t.user.failReauth.push('auth/wrong-password');
   await t.api.submitPasswordChange();
@@ -278,6 +298,7 @@ const tick = () => new Promise(r => setImmediate(r));
   t.user.failPw.push('auth/requires-recent-login');
   await t.api.submitPasswordChange();
   check('login velho demais na troca de senha: mensagem em português, sem código técnico', !/auth\//.test(textOf(msgOf(t, 'pw'))) && textOf(msgOf(t, 'pw')) !== '');
+  check('senha atual errada, senha fraca e login velho: a troca não valeu, então o aviso NÃO é pedido de novo (continua só o da troca que valeu)', notices(t).length === 1 && t.calls.updatePw.length === 3, [notices(t).length, t.calls.updatePw]);
 
   // ══ 5. CORRIGIR A CÓPIA DO E-MAIL NA ENTRADA ═══════════════════════════════════════════════════
   t = makeEnv({ email: 'ana@x.com', userDocEmail: 'ana@x.com' });
@@ -337,6 +358,7 @@ const tick = () => new Promise(r => setImmediate(r));
   check('o app NÃO usa o e-mail do próprio Firebase para a troca (verifyBeforeUpdateEmail: o link dele dá "The selected page mode is invalid") nem o updateEmail (o Firebase o desliga com a proteção contra descobrir cadastros): o pedido vai ao servidor', !/\.verifyBeforeUpdateEmail\(/.test(html) && !/\.updateEmail\(/.test(html) && /callFn\('requestEmailChange'/.test(accountCode));
   check('o app nunca grava o e-mail direto no cadastro (só o servidor pode; as regras barram)', !/\.update\(\{\s*email/.test(accountCode) && !/\.set\(\{[^}]*email/.test(accountCode));
   check('nenhuma chamada do Firebase fica sem tratamento de erro: cada pedido da tela está dentro de um try, e a correção do e-mail termina em catch', ['submitEmailChange', 'submitPasswordChange', 'applyEmailChange'].every(fn => new RegExp('async function ' + fn + '\\([^)]*\\) \\{[\\s\\S]*?\\btry \\{').test(accountCode)) && /callFn\('syncMyEmail'\)[\s\S]*?\.catch\(/.test(accountCode));
+  check('a troca de senha pede o aviso logo DEPOIS do updatePassword, sem esperar (callFn sem await) e engolindo o erro (.catch), e a função existe no servidor com esse nome', /await u\.updatePassword\(nw\);\n\s+callFn\('notifyPasswordChanged'\)\.catch\(\(\) => \{\}\);/.test(accountCode) && !/await callFn\('notifyPasswordChanged'/.test(accountCode) && /exports\.notifyPasswordChanged = onCall\(/.test(serverSrc));
   const priv = slice('function openPrivacyPolicy()', 'function openDeleteAccount()');
   check('a privacidade cita o direito de trocar o e-mail e a senha, o e-mail antigo e as cópias de segurança', /Trocar o e-mail do login e a senha/.test(priv) && /O e-mail antigo deixa de ser usado/.test(priv) && /cópias de segurança diárias/.test(priv));
   check('a privacidade não diz mais "Ambas as opções"', !/Ambas as opções/.test(priv) && /Essas opções ficam no fim da aba/.test(priv));
@@ -353,6 +375,8 @@ const tick = () => new Promise(r => setImmediate(r));
 
   check('manual: o e-mail chega de "Pelada na Mão" com o botão "Confirmar o novo e-mail", o link abre o app na tela "E-mail trocado", e a função requestEmailChange tem login recente, Resend e os limites (5 por minuto e 10 por hora)', /chega de Pelada na Mão \(avisos@notificacoes\.peladanamao\.com\.br\)/.test(sec) && /Confirmar o novo e-mail/.test(sec) && /E-mail trocado/.test(sec) && /requestEmailChange/.test(sec) && /5 chamadas por minuto e 10 por hora/.test(sec) && /Resend/.test(sec) && /login recente/.test(sec), sec.slice(0, 400));
   check('manual: explica o aviso ao e-mail antigo (assunto, endereço novo escondido pela metade, "nada mudou ainda", quem não pediu escreve ao suporte e troca a senha por Esqueci minha senha, sem link nem botão) e, por dentro, que ele sai depois do e-mail novo, vai ao e-mail do cadastro do Firebase e não bloqueia o pedido', /O e-mail antigo também é avisado/.test(sec) && (sec.match(/Pediram para trocar o e-mail de login da sua conta no Pelada na Mão/g) || []).length === 2 && /escondido pela metade/.test(sec) && /n\*\*\*@exemplo\.com/.test(sec) && (sec.match(/nada mudou ainda/g) || []).length === 2 && /Quem não pediu deve escrever para suporte@peladanamao\.com\.br \(ou responder o aviso\) e trocar a senha por Esqueci minha senha ?, na tela de entrada/.test(sec) && /não tem link nem botão/.test(sec) && /aviso ao e-mail atual/.test(sec) && /e-mail do cadastro do Firebase \(nunca para um endereço vindo do app\)/.test(sec) && /se o aviso não sair, o pedido segue valendo/.test(sec) && /dois e-mails dentro dos mesmos limites/.test(sec) && /o endereço antigo não recebeu nada do Firebase; por isso o aviso é nosso/.test(sec) && /o dono desfaz com o atalho do atendimento/.test(sec), sec.slice(0, 400));
+  check('manual: explica o aviso de senha trocada (quadro: e-mail da conta, de Pelada na Mão, assunto, dia e hora de Brasília, quem não trocou usa Esqueci minha senha e escreve ao suporte, sem link nem botão, e que o Esqueci minha senha não manda esse aviso; tabela de mensagens com o assunto)', /A senha trocada também gera um aviso/.test(sec) && (sec.match(/A senha da sua conta no Pelada na Mão foi trocada/g) || []).length === 2 && /o app manda um aviso ao e-mail da conta ?, também de Pelada na Mão ?, com o assunto/.test(sec) && /dia e a hora da troca \(horário de Brasília\)/.test(sec) && /Quem não trocou deve tocar em Esqueci minha senha na tela de entrada, para criar uma senha nova, e escrever para suporte@peladanamao\.com\.br \(ou responder o aviso\)/.test(sec) && /O aviso não tem link nem botão\. A troca pelo Esqueci minha senha não manda esse aviso: quem a faz já tem acesso ao e-mail da conta/.test(sec) && /Quem trocou não precisa fazer nada; quem não trocou usa Esqueci minha senha e escreve ao suporte/.test(sec), sec.slice(0, 400));
+  check('manual: por dentro, a notifyPasswordChanged não espera a resposta nem mostra erro, não recebe dado do app, lê o horário do Firebase (tokensValidAfterTime), só avisa se a senha mudou há no máximo 10 minutos e a conta tem senha, 3 por hora, registro sem endereço nem horário, e o aviso é nosso', /função notifyPasswordChanged ?, sem esperar a resposta e sem mostrar erro: se ela falhar, a senha foi trocada do mesmo jeito/.test(sec) && /A função não recebe nenhum dado do app: lê o e-mail e o horário da troca direto do cadastro do Firebase/.test(sec) && /tokensValidAfterTime ?, que o Firebase atualiza quando a senha muda, e não quando a pessoa só entra de novo ou troca o nome/.test(sec) && /só avisa se a senha mudou há no máximo 10 minutos e a conta tem senha \(quem entra só com o Google não recebe\)/.test(sec) && /O aviso vai sempre para o e-mail da própria conta, então a função não serve para mandar e-mail a ninguém/.test(sec) && /aceita 3 chamadas por hora em cada conta/.test(sec) && /o registro do servidor só leva frases fixas, sem endereço nem horário/.test(sec) && /O aviso é nosso: não depende de nenhum e-mail do Firebase/.test(sec), sec.slice(0, 400));
   check('manual: explica por que o e-mail do próprio Firebase não é usado ("The selected page mode is invalid"), a tela que aplica o código e que o link só vale uma vez e por tempo limitado', /The selected page mode is invalid/.test(sec) && /handleEmailChangeOnLoad/.test(sec) && /só vale uma vez e por tempo limitado/.test(sec), sec.slice(0, 400));
 
   // ══ 7. A TELA QUE CONFIRMA A TROCA (O LINK DO E-MAIL ABRE O APP) ═══════════════════════════════

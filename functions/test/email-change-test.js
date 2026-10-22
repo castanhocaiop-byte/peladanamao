@@ -256,7 +256,7 @@ const reset = () => {
 
   // ══ 7. COMO ESTÁ LIGADO NO CÓDIGO ════════════════════════════════════════════════════════════════
   const src = require('fs').readFileSync(path, 'utf8');
-  const body = src.slice(src.indexOf('exports.requestEmailChange = onCall('), src.indexOf('// ── Anonimizar meu nome no histórico'));
+  const body = src.slice(src.indexOf('exports.requestEmailChange = onCall('), src.indexOf('// Avisar o e-mail da conta de que a senha foi trocada pelo app'));
   check('a função declara o segredo do Resend (RESEND_API_KEY) e usa a região e o limite de instâncias de todas', /exports\.requestEmailChange = onCall\(\{ \.\.\.CALLABLE, secrets: \[RESEND_API_KEY\] \}/.test(src));
   check('o e-mail atual sai do cadastro do Firebase (getUser) e nunca de request.data', /admin\.auth\(\)\.getUser\(auth\.uid\)/.test(body) && !/request\.data\??\.(email|currentEmail|uid|to)\b/.test(body));
   check('o link do e-mail usa o endereço do ambiente (ENV.appUrl, que no site de teste é o do teste) e o envio passa por sendResendEmail (que põe [TESTE] no assunto lá)', /changeEmailUrl\(ENV\.appUrl, code\)/.test(body) && /sendResendEmail\(\{ to: \[parsed\.email\]/.test(body));

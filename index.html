@@ -3572,6 +3572,7 @@ async function submitPasswordChange() {
   try {
     await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, cur));
     await u.updatePassword(nw);
+    callFn('notifyPasswordChanged').catch(() => {}); // o servidor avisa o e-mail da conta de que a senha mudou (sem esperar: se o aviso não sair, a troca valeu do mesmo jeito)
     for (const id of ['acct-pw-cur', 'acct-pw-new', 'acct-pw-rep']) { const el = document.getElementById(id); if (el) el.value = ''; }
     _acctMsg('pw', 'Senha trocada. Nos outros aparelhos você vai precisar entrar de novo com a senha nova.', true);
   } catch (e) {

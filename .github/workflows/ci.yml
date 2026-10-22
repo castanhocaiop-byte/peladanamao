@@ -243,6 +243,10 @@ jobs:
         working-directory: functions
         run: node test/email-change-test.js
 
+      - name: Testes das Cloud Functions (aviso de senha trocada - o servidor manda o e-mail pelo Resend só se a senha mudou há pouco, conta com senha, janela de 10 minutos e limite de 3 por hora)
+        working-directory: functions
+        run: node test/password-notice-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
