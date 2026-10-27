@@ -11405,10 +11405,12 @@ function vFinanceiro() {
                 const expiredComp = d.comprovante && d.comprovanteAt &&
                   (new Date() - new Date(d.comprovanteAt)) > 39 * 86400000;
                 if (expiredComp) {
-                  ldoc(`financeiro_despesas/${d.id}`).update({
+                  // Comprovante vencido some da lista para todos, mas só o admin pode apagar o dado (regras do Firestore): quem só lê
+                  // não tenta gravar (dava "Missing or insufficient permissions" solto no monitor) e uma falha de rede não vira erro solto.
+                  if (isAdmin()) ldoc(`financeiro_despesas/${d.id}`).update({
                     comprovante: firebase.firestore.FieldValue.delete(),
                     comprovanteAt: firebase.firestore.FieldValue.delete(),
-                  });
+                  }).catch(() => {});
                   return '';
                 }
                 if (d.comprovante) {

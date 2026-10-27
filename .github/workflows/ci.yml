@@ -251,6 +251,10 @@ jobs:
         working-directory: functions
         run: node test/client-finance-recurring-test.js
 
+      - name: Testes do app (financeiro - o comprovante vencido so e apagado pelo admin e uma falha de rede nao vira erro solto no monitor)
+        working-directory: functions
+        run: node test/client-finance-receipt-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
