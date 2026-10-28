@@ -9054,7 +9054,7 @@ function render() {
   }
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -11117,21 +11117,42 @@ function getWeekdayOccurrences(y, m, diaSemana) {
   return dates;
 }
 
-function getDespMes(month) {
+// Despesa recorrente (mensal ou semanal) é UM registro só: cada mês ou semana da lista é calculado a partir dele e o "pago" de cada data fica em
+// `pagamentos`. Por isso apagar o registro leva embora TODOS os meses, inclusive os já pagos. Para parar de valer daqui para frente sem perder o
+// passado existe `fim` (data AAAA-MM-DD: as datas a partir dela deixam de existir) e, para tirar uma data só, `ignoradas` (data ou mês → true).
+// As datas de uma despesa recorrente num mês, já sem as encerradas e as tiradas:
+function despRecOcorrencias(d, month) {
   const [y, mon] = month.split('-').map(Number);
+  const out = [];
+  if (d.recorrencia === 'mensal') {
+    const day = Math.min(d.diaDoMes||1, daysInMonth(y, mon));
+    out.push({ occKey: month, data: `${month}-${String(day).padStart(2,'0')}` });
+  } else if (d.recorrencia === 'semanal') {
+    for (const date of getWeekdayOccurrences(y, mon, d.diaSemana||0)) out.push({ occKey: date, data: date });
+  }
+  return out.filter(o => !(d.fim && o.data >= d.fim) && !(d.ignoradas||{})[o.occKey]);
+}
+
+// Todas as datas de uma despesa recorrente, do mês de início (campo `data`) até `ateMes` (AAAA-MM).
+function despRecTodas(d, ateMes) {
+  const out = [];
+  let [sy, sm] = ((d.data||ateMes).slice(0,7)).split('-').map(Number);
+  const [ey, em] = ateMes.split('-').map(Number);
+  while (sy < ey || (sy===ey && sm<=em)) {
+    out.push(...despRecOcorrencias(d, `${sy}-${String(sm).padStart(2,'0')}`));
+    sm++; if (sm>12) { sm=1; sy++; }
+  }
+  return out;
+}
+
+function getDespMes(month) {
   const entries = [];
   for (const d of (st.finDesp||[])) {
     if (!d.recorrencia) {
       if ((d.data||'').startsWith(month)) entries.push({...d, occKey: null});
-    } else if (d.recorrencia === 'mensal') {
-      const day = Math.min(d.diaDoMes||1, daysInMonth(y, mon));
-      const data = `${month}-${String(day).padStart(2,'0')}`;
-      const paga = (d.pagamentos||{})[month] === true;
-      entries.push({...d, data, paga, occKey: month});
-    } else if (d.recorrencia === 'semanal') {
-      for (const date of getWeekdayOccurrences(y, mon, d.diaSemana||0)) {
-        const paga = (d.pagamentos||{})[date] === true;
-        entries.push({...d, data: date, paga, occKey: date});
+    } else {
+      for (const o of despRecOcorrencias(d, month)) {
+        entries.push({...d, data: o.data, paga: (d.pagamentos||{})[o.occKey] === true, occKey: o.occKey});
       }
     }
   }
@@ -11169,20 +11190,8 @@ function vFinanceiro() {
   let despRecPagas = 0, despRecPend = 0;
   for (const _d of (st.finDesp||[])) {
     if (!_d.recorrencia) continue;
-    let [sy,sm] = ((_d.data||curMon).slice(0,7)).split('-').map(Number);
-    const [ey,em] = curMon.split('-').map(Number);
-    while (sy < ey || (sy===ey && sm<=em)) {
-      const mon2 = `${sy}-${String(sm).padStart(2,'0')}`;
-      if (_d.recorrencia==='mensal') {
-        const paid=(_d.pagamentos||{})[mon2]===true;
-        if(paid) despRecPagas+=_d.valor||0; else despRecPend+=_d.valor||0;
-      } else if (_d.recorrencia==='semanal') {
-        for (const dt of getWeekdayOccurrences(sy,sm,_d.diaSemana||0)) {
-          const paid=(_d.pagamentos||{})[dt]===true;
-          if(paid) despRecPagas+=_d.valor||0; else despRecPend+=_d.valor||0;
-        }
-      }
-      sm++; if(sm>12){sm=1;sy++;}
+    for (const o of despRecTodas(_d, curMon)) {
+      if ((_d.pagamentos||{})[o.occKey]===true) despRecPagas+=_d.valor||0; else despRecPend+=_d.valor||0;
     }
   }
   const despPagas    = despOneTimePagas + despRecPagas;
@@ -11212,12 +11221,7 @@ function vFinanceiro() {
   const _curMon = new Date().toISOString().slice(0,7);
   for (const _rd of (st.finDesp||[])) {
     if (!_rd.recorrencia) continue;
-    let [_ry,_rm] = ((_rd.data||_curMon).slice(0,7)).split('-').map(Number);
-    const [_ey,_em] = _curMon.split('-').map(Number);
-    while (_ry<_ey||(_ry===_ey&&_rm<=_em)) {
-      _recMons.push(`${_ry}-${String(_rm).padStart(2,'0')}`);
-      _rm++; if(_rm>12){_rm=1;_ry++;}
-    }
+    for (const o of despRecTodas(_rd, _curMon)) _recMons.push(o.data.slice(0,7));
   }
   const allMonths = [...new Set([
     ...Object.keys(st.finMens||{}),
@@ -11425,7 +11429,7 @@ function vFinanceiro() {
                     onchange="uploadComprovante('${d.id}',this.files[0])">
                 </label>`;
               })()}
-            ${isAdmin()?`<button data-id="${d.id}" onclick="deleteDespesa(this.dataset.id)"
+            ${isAdmin()?`<button data-id="${d.id}" data-occ="${d.occKey||''}" data-data="${d.recorrencia?d.data:''}" onclick="deleteDespesa(this.dataset.id,this.dataset.occ||null,this.dataset.data||null)"
               style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;line-height:1;flex-shrink:0">🗑</button>`:''}
           </div>`;
         }).join('')
@@ -11587,6 +11591,39 @@ function mFinDespesa() {
         </label>
       </div>`:''}
       <button onclick="addDespesa()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer">Salvar Despesa</button>
+    </div>
+  </div>`;
+}
+
+// Janela que aparece ao excluir uma despesa recorrente (ver deleteDespesa): o que apagar.
+function mFinDespesaExcluir() {
+  const m = st.modal;
+  if (!m || m.type!=='finDespesaExcluir') return '';
+  const d = (st.finDesp||[]).find(x => x.id === m.id);
+  if (!d || !d.recorrencia) return '';
+  const semanal = d.recorrencia === 'semanal';
+  const REPETE = ['todo domingo','toda segunda','toda terça','toda quarta','toda quinta','toda sexta','todo sábado'];
+  const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const [oy, om, od] = (m.data || '').split('-');
+  const quando = semanal ? `${od}/${om}` : `${MESES[(+om||1)-1]}/${(oy||'').slice(2)}`;
+  const resumo = despRecPagasResumo(d);
+  const estaPaga = (d.pagamentos||{})[m.occKey] === true;
+  const fmtR = v => 'R$ ' + Number(v||0).toFixed(2).replace('.',',');
+  const opt = (modo, titulo, sub, destaque, perigo) => `<button onclick="excluirDespesaRec('${modo}')"
+    style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:10px;cursor:pointer;
+           border:1px solid ${perigo?'var(--danger)':destaque?'var(--accent)':'var(--border)'};background:${destaque?'#00d67f18':'none'}">
+    <div style="font-size:14px;font-weight:700;color:${perigo?'var(--danger)':destaque?'var(--accent)':'var(--text)'}">${titulo}</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:3px;line-height:1.4">${sub}</div>
+  </button>`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">🗑 Excluir despesa recorrente</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5"><strong>${esc(d.descricao||'')}</strong> se repete ${semanal?REPETE[d.diaSemana||0]:'todo mês'}. O que você quer apagar?</div>
+      ${opt('uma', semanal?`Só esta data (${quando})`:`Só este mês (${quando})`, (semanal?'As outras datas continuam.':'Os outros meses continuam.')+(estaPaga?' Esta já estava paga: o valor deixa de contar no caixa.':''))}
+      ${opt('daqui', 'Esta e as próximas', `Para de valer a partir de ${quando}. O que veio antes fica como está, com o que já foi pago. É o jeito de encerrar uma despesa.`, true)}
+      ${opt('tudo', 'Tudo: apagar a despesa inteira', 'Apaga todos os meses'+(resumo.n?`, inclusive ${resumo.n} já ${resumo.n===1?'paga':'pagas'} (${fmtR(resumo.total)})`:'')+'. O saldo em caixa muda.', false, true)}
+      <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:10px;border:none;background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;margin-top:4px">Cancelar</button>
     </div>
   </div>`;
 }
@@ -11774,12 +11811,53 @@ async function addDespesa() {
   } catch(e) { toast('Erro: '+(e?.message||e)); }
 }
 
-async function deleteDespesa(id) {
+async function deleteDespesa(id, occKey, data) {
   if (!DB) return;
+  const d = (st.finDesp||[]).find(x => x.id === id);
+  if (d?.recorrencia) {
+    // A recorrente é um registro só para todos os meses: apagar direto levava embora também os meses já pagos (e mudava o saldo em caixa).
+    // Pergunta o que apagar: só esta data, esta e as próximas (o passado fica) ou tudo.
+    st.modal = { type:'finDespesaExcluir', id, occKey: occKey || null, data: data || null };
+    render();
+    return;
+  }
   if (!confirm('Excluir esta despesa? Esta ação não pode ser desfeita.')) return;
   try {
     await ldoc(`financeiro_despesas/${id}`).delete();
     toast('Despesa removida');
+  } catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+// Quantas datas já pagas uma despesa recorrente tem até o mês atual (e quanto somam): é o que se perde ao apagar tudo.
+function despRecPagasResumo(d) {
+  const pagas = despRecTodas(d, new Date().toISOString().slice(0,7)).filter(o => (d.pagamentos||{})[o.occKey] === true);
+  return { n: pagas.length, total: pagas.length * (d.valor||0) };
+}
+
+// modo: 'uma' (só esta data ou mês), 'daqui' (esta e as próximas: grava `fim`, o passado continua) ou 'tudo' (apaga o registro inteiro).
+async function excluirDespesaRec(modo) {
+  const m = st.modal;
+  if (!m || m.type!=='finDespesaExcluir' || !DB) return;
+  const d = (st.finDesp||[]).find(x => x.id === m.id);
+  if (!d) { closeModal(); return; }
+  try {
+    if (modo === 'uma') {
+      if (!m.occKey) return;
+      await ldoc(`financeiro_despesas/${m.id}`).update({ [`ignoradas.${m.occKey}`]: true });
+      toast('Data removida', 'ok');
+    } else if (modo === 'daqui') {
+      if (!m.data) return;
+      await ldoc(`financeiro_despesas/${m.id}`).update({ fim: m.data });
+      toast('A despesa para de valer a partir dessa data', 'ok');
+    } else if (modo === 'tudo') {
+      const r = despRecPagasResumo(d);
+      const pagas = r.n ? `, inclusive ${r.n} já ${r.n===1?'paga':'pagas'} (R$ ${r.total.toFixed(2).replace('.',',')})` : '';
+      if (!confirm(`Apagar "${d.descricao||'esta despesa'}" de todos os meses${pagas}? O saldo em caixa muda e não dá para desfazer.`)) return;
+      await ldoc(`financeiro_despesas/${m.id}`).delete();
+      toast('Despesa removida');
+    } else return;
+    st.modal = null;
+    render();
   } catch(e) { toast('Erro: '+(e?.message||e)); }
 }
 

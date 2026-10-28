@@ -1373,6 +1373,22 @@ p strong {
       </div>
 
       <p>O botão 💬 desaparece automaticamente quando a mensalidade é marcada como paga. Jogadores marcados como <em>Só Churrasco</em> não têm botão de cobrança de mensalidade. A linha da chave PIX aparece apenas se a chave estiver configurada, e a última linha (o convite para pagar com PIX no app) só aparece quando a chave é reconhecida e há valor a cobrar. A mensagem usa o nome da sua liga.</p>
+
+      <h3 id="despesas-recorrentes">🧾 Despesas, inclusive as fixas e as semanais</h3>
+      <p>Em <strong>Financeiro → Despesas → + Nova</strong>, o admin lança uma despesa <strong>Única</strong> (uma data), <strong>Fixa mensal</strong> (todo mês, no dia escolhido) ou <strong>Semanal</strong> (toda semana, no dia da semana escolhido), valendo a partir da data de <em>A partir de</em>. A despesa fixa ou semanal é <strong>um registro só</strong>: o app mostra cada mês (ou cada semana) a partir dele, e o ✓ Paga é marcado data a data.</p>
+      <p>Por isso, ao tocar no 🗑 de uma despesa fixa ou semanal, o app <strong>pergunta o que apagar</strong>:</p>
+      <table class="data-table">
+        <thead><tr><th>Opção</th><th>O que acontece</th></tr></thead>
+        <tbody>
+          <tr><td>Só esta data (ou Só este mês)</td><td>Tira só aquela data. As outras continuam, e o que já foi pago nelas segue contando no caixa. Se a data tirada já estava paga, o valor dela deixa de contar no caixa.</td></tr>
+          <tr><td>Esta e as próximas</td><td>A despesa <strong>para de valer</strong> a partir daquela data. Tudo o que veio antes fica como está, com o que já foi pago, e o saldo em caixa não muda. É o jeito de encerrar uma despesa recorrente.</td></tr>
+          <tr><td>Tudo: apagar a despesa inteira</td><td>Apaga a despesa de <strong>todos os meses, inclusive as datas já pagas</strong>, e o saldo em caixa muda. Antes de apagar, o app mostra quantas datas pagas serão perdidas e quanto somam, e pede uma confirmação. Não dá para desfazer.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <div class="callout-label warn">Para encerrar uma despesa fixa, use "Esta e as próximas"</div>
+        A despesa <strong>única</strong> continua com a pergunta simples de excluir. Nas fixas e semanais, <strong>"Tudo"</strong> serve para desfazer um lançamento feito por engano: ele leva embora também os meses já pagos.
+      </div>
     </section>
 
     <!-- 13. Conquistas (Badges) -->

@@ -247,6 +247,10 @@ jobs:
         working-directory: functions
         run: node test/password-notice-test.js
 
+      - name: Testes do app (financeiro - despesas recorrentes - apagar so esta data, esta e as proximas ou tudo, sem perder os meses ja pagos)
+        working-directory: functions
+        run: node test/client-finance-recurring-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
