@@ -711,6 +711,9 @@ exports.listMembers = onCall(CALLABLE, async request => {
     throw fail("invalid-argument", "Filtro inválido.");
   }
 
+  // Pedido do Elenco e da votação de destaques (`push: true`): acrescenta QUANTOS aparelhos de aviso cada conta tem, para o admin ver quem
+  // recebe notificação no celular. Só o número: os aparelhos em si (tokens) nunca saem do servidor. Sem o pedido a resposta é a de sempre.
+  const withPush = request.data?.push === true;
   const snap = await db.collection("users").where(new FieldPath("leagues", liga, "role"), "in", [...new Set(roles)]).get();
   const members = snap.docs.map(doc => {
     const user = doc.data();
@@ -722,6 +725,7 @@ exports.listMembers = onCall(CALLABLE, async request => {
       role: entry.role,
       playerKey: entry.playerKey || user.playerKey || "",
       joinedAt: entry.joinedAt || "",
+      ...(withPush ? { devices: Array.isArray(user.fcmTokens) ? user.fcmTokens.length : 0 } : {}),
     };
   });
   members.sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email, "pt"));

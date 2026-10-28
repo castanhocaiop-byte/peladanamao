@@ -441,6 +441,22 @@ const reset = () => {
   check('list: dono do sistema verificado lista qualquer liga (B)', JSON.stringify(res.members.map(m => m.uid).sort()) === JSON.stringify(['admB', 'ana', 'soB']) && res.members.find(m => m.uid === 'ana').playerKey === 'ana_b' && res.members.find(m => m.uid === 'ana').role === 'admin', res.members);
   check('list: a mesma pessoa vem com o papel de cada liga', (await lm({ liga: 'L' }, authOf('adm'))).members.find(m => m.uid === 'ana').role === 'player');
 
+  // pedido do Elenco e da votação (`push: true`): acrescenta só QUANTOS aparelhos de aviso a conta tem, nunca os aparelhos em si
+  store.set('users/ruim', { email: 'ruim@x.com', displayName: 'Zé Cadastro Ruim', role: 'pending', fcmTokens: 'tokRuim', leagues: { L: { role: 'player', playerKey: 'ze' } } });
+  res = await lm({ liga: 'L', push: true }, authOf('adm'));
+  const anaP = res.members.find(m => m.uid === 'ana');
+  check('list push: acrescenta só o número de aparelhos (devices) aos campos de sempre', JSON.stringify(Object.keys(anaP).sort()) === JSON.stringify(['devices', 'displayName', 'email', 'joinedAt', 'playerKey', 'role', 'uid']), Object.keys(anaP));
+  check('list push: conta com 2 aparelhos → 2, com 1 → 1, sem nenhum → 0', anaP.devices === 2 && res.members.find(m => m.uid === 'adm').devices === 1 && res.members.find(m => m.uid === 'pend').devices === 0 && res.members.find(m => m.uid === 'legacy').devices === 0, res.members.map(m => [m.uid, m.devices]));
+  check('list push: cadastro com aparelhos num formato estranho (não é lista) conta 0 e não derruba a função', res.members.find(m => m.uid === 'ruim').devices === 0, res.members.find(m => m.uid === 'ruim'));
+  const serializedPush = JSON.stringify(res);
+  check('list push: AINDA NÃO vaza os tokens de notificação', !serializedPush.includes('tokA1') && !serializedPush.includes('tokA2') && !serializedPush.includes('tokB') && !serializedPush.includes('tokRuim') && !serializedPush.includes('fcmTokens') && !serializedPush.includes('notifEnabled'), serializedPush);
+  check('list push: NÃO vaza dados de outra liga', !serializedPush.includes('ana_b') && !serializedPush.includes('sob@x.com') && !serializedPush.includes('earnedBadges'), serializedPush);
+  const semPedido = async data => (await lm({ liga: 'L', ...data }, authOf('adm'))).members;
+  check('list push: sem o pedido a resposta continua SEM "devices" (só `push: true` vale; "true", 1 e null não)', (await semPedido({})).every(m => !('devices' in m)) && (await semPedido({ push: 'true' })).every(m => !('devices' in m)) && (await semPedido({ push: 1 })).every(m => !('devices' in m)) && (await semPedido({ push: null })).every(m => !('devices' in m)));
+  check('list push: o filtro por papéis continua valendo junto', JSON.stringify((await semPedido({ push: true, roles: ['admin', 'player'] })).map(m => m.uid).sort()) === JSON.stringify(['adm', 'ana', 'dono', 'legacy', 'ruim']), (await semPedido({ push: true, roles: ['admin', 'player'] })).map(m => m.uid));
+  check('list push: continua só para o admin da liga (jogador, pendente e outra liga são recusados)', await codeOf(lm({ liga: 'L', push: true }, authOf('ana'))) === 'permission-denied' && await codeOf(lm({ liga: 'L', push: true }, authOf('pend'))) === 'permission-denied' && await codeOf(lm({ liga: 'L', push: true }, authOf('soB'))) === 'permission-denied');
+  store.delete('users/ruim');
+
   // ───────── migrateContacts ─────────
   const seedLegacy = () => {
     reset();

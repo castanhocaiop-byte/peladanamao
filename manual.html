@@ -1672,6 +1672,9 @@ p strong {
         </tbody>
       </table>
 
+      <h3 id="quem-tem-notificacao">Quem tem notificação ativa <span class="tag">Admin</span></h3>
+      <p>No <strong>Elenco</strong>, o admin vê embaixo do nome de cada jogador se ele recebe avisos no celular: <strong>🔔 notificações ativas</strong> (a conta tem pelo menos um aparelho cadastrado), <strong>🔕 sem notificações</strong> (a conta não tem aparelho: nunca ativou, ou o aparelho foi descartado) ou <strong>👤 sem conta vinculada</strong> (nenhuma conta ligada ao jogador). Serve para saber quem chamar por outro meio, como o WhatsApp, quando um aviso importante precisa chegar. A informação é só <em>sim ou não</em>: o admin nunca vê o aparelho em si. Ela é buscada ao abrir o Elenco ou o Histórico (no máximo a cada 5 minutos), então aparece um instante depois da tela.</p>
+
       <div class="callout">
         <div class="callout-label">Como funciona</div>
         Disparado por <strong>Firebase Cloud Functions</strong> que escutam mudanças no Firestore em tempo real. O token FCM de cada dispositivo é armazenado automaticamente quando as notificações são autorizadas. Tokens que o Firebase informa estarem inválidos são removidos automaticamente do cadastro do usuário.
@@ -2049,7 +2052,7 @@ p strong {
         <tbody>
           <tr>
             <td>Aberta</td>
-            <td>Abre ao finalizar o campeonato. Fica aberta por <strong>3 dias</strong>. O card mostra só quantos jogadores já votaram — o resultado não aparece.</td>
+            <td>Abre ao finalizar o campeonato. Fica aberta por <strong>3 dias</strong>. O card mostra só quantos jogadores já votaram — o resultado não aparece. O <strong>admin</strong> vê também <strong>quem ainda não votou</strong> (só os nomes, ver "Quem ainda não votou" abaixo).</td>
           </tr>
           <tr>
             <td>Encerrada</td>
@@ -2064,8 +2067,20 @@ p strong {
 
       <div class="callout warn">
         <div class="callout-label warn">Sobre o sigilo do voto</div>
-        Na tela ninguém vê quem votou em quem — só as contagens. Os votos ficam gravados no documento do campeonato, então quem mexer diretamente no banco de dados conseguiria ver as escolhas. Votos de quem não estava no elenco ou em si mesmo são ignorados na apuração.
+        Na tela ninguém vê quem votou em quem — só as contagens; o admin vê apenas o nome de quem <strong>ainda não votou</strong>, para cobrar. Os votos ficam gravados no documento do campeonato, então quem mexer diretamente no banco de dados conseguiria ver as escolhas. Votos de quem não estava no elenco ou em si mesmo são ignorados na apuração.
       </div>
+
+      <h3 id="quem-falta-votar">Quem ainda não votou <span class="tag">Admin</span></h3>
+      <p>Enquanto a votação está aberta, o card <em>Destaques do campeonato</em> (Histórico) mostra ao admin a lista <strong>Faltam votar (N de M)</strong>, com o nome de cada jogador do elenco que ainda não votou. Em quem cada um votou <strong>continua em segredo</strong>: o app só diz quem ainda falta. Quando todos votam, a lista vira <em>✅ Todo o elenco já votou</em>.</p>
+      <table class="data-table">
+        <thead><tr><th>Na lista</th><th>O que significa</th></tr></thead>
+        <tbody>
+          <tr><td>🔔 notificações ativas</td><td>A conta do jogador tem pelo menos um aparelho cadastrado: o aviso <em>Votação aberta</em> chega ao celular dele.</td></tr>
+          <tr><td>🔕 sem notificações</td><td>A conta não tem aparelho cadastrado (nunca ativou as notificações, ou o aparelho foi descartado): não recebe avisos no celular. Ele ainda vê o banner <em>🗳️ Votação aberta</em> ao abrir o app e pode votar.</td></tr>
+          <tr><td>👤 sem conta vinculada</td><td>Nenhuma conta está ligada a esse jogador: ele <strong>não recebe o aviso e não consegue votar pelo app</strong>.</td></tr>
+          <tr><td>💬</td><td>Abre o WhatsApp com uma mensagem pronta (nome da liga, prêmios em votação, prazo e o endereço do app). Só aparece para quem tem WhatsApp cadastrado no Elenco.</td></tr>
+        </tbody>
+      </table>
 
       <h3>Aviso aos jogadores</h3>
       <div class="ind-grid">
@@ -2242,7 +2257,7 @@ p strong {
             <td>Listar os membros da liga (Painel Admin e selo do ⚙️)</td>
             <td><code>listMembers</code></td>
             <td>Admin da liga e o dono do sistema</td>
-            <td>Quem pede é admin <em>daquela</em> liga. Devolve só nome, e-mail, papel, jogador vinculado e data de entrada dos membros <em>daquela</em> liga — sem aparelhos de notificação e sem dados de outras ligas.</td>
+            <td>Quem pede é admin <em>daquela</em> liga. Devolve só nome, e-mail, papel, jogador vinculado e data de entrada dos membros <em>daquela</em> liga — sem dados de outras ligas. Quando o admin abre o Elenco ou a votação de destaques, o pedido acrescenta só quantos aparelhos de aviso cada conta tem (um número), nunca os aparelhos em si.</td>
           </tr>
           <tr>
             <td>Mover os números de WhatsApp antigos para a área do admin</td>
@@ -2321,12 +2336,14 @@ p strong {
       </table>
 
       <h3>Dados pessoais (LGPD)</h3>
-      <p>Cada conta lê <strong>somente o próprio cadastro</strong>. Nome, e-mail e vínculo de outras pessoas não são legíveis pelo aplicativo: o admin de uma liga recebe a lista dos <strong>membros da sua liga</strong> pela função <code>listMembers</code>, que devolve apenas o que o Painel Admin usa — nunca os aparelhos de notificação nem dados de outras ligas.</p>
+      <p>Cada conta lê <strong>somente o próprio cadastro</strong>. Nome, e-mail e vínculo de outras pessoas não são legíveis pelo aplicativo: o admin de uma liga recebe a lista dos <strong>membros da sua liga</strong> pela função <code>listMembers</code>, que devolve apenas o que o Painel Admin usa — nunca os aparelhos de notificação em si nem dados de outras ligas. No Elenco e na votação de destaques, a mesma função acrescenta apenas quantos aparelhos de aviso cada conta tem (um número), para o admin saber quem recebe notificação.</p>
       <table class="data-table">
         <thead><tr><th>Dado</th><th>Quem consegue ler</th></tr></thead>
         <tbody>
           <tr><td>Nome, e-mail, ligas e papéis da conta</td><td>A própria conta. O admin vê nome, e-mail e papel dos membros <em>da sua liga</em> no Painel Admin.</td></tr>
           <tr><td>Aparelhos de notificação (tokens)</td><td>Só a própria conta e o servidor que envia os avisos. Não aparecem no Painel Admin.</td></tr>
+          <tr><td>Se a conta tem notificações ativas (sim ou não)</td><td>A própria conta e o admin da liga, no Elenco e na votação de destaques, para saber quem chamar por outro meio. O admin nunca vê o aparelho em si.</td></tr>
+          <tr><td>Quem ainda não votou na votação de destaques</td><td>O admin da liga vê só o nome de quem ainda falta, enquanto a votação está aberta. Em quem cada um votou, ninguém vê pelo app.</td></tr>
           <tr><td>Pedido de vinculação (nome e e-mail)</td><td>O admin da liga e quem fez o pedido.</td></tr>
           <tr><td>Foto de perfil</td><td>Membros ativos da liga leem o link. Ao apagar (admin, o próprio jogador, anonimização ou exclusão de conta), o servidor também tenta apagar o arquivo no Cloudinary — ver o callout técnico no fim desta seção.</td></tr>
           <tr><td>Financeiro (mensalidades, avulsos, despesas)</td><td>Membros ativos da liga: a aba Financeiro é aberta a todo o grupo.</td></tr>

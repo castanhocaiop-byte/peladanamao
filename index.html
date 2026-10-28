@@ -3235,6 +3235,7 @@ function openPrivacyPolicy() {
       ${h3('Quem vê o quê')}
       <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.6">
         ${li('Seu e-mail e seus dados de conta: só você. O admin da sua liga vê seu nome, e-mail e papel na liga, para gerenciar quem participa.')}
+        ${li('Notificações: o admin da sua liga vê se você tem notificações ativas (sim ou não, nunca o aparelho), no Elenco e na votação de destaques, para saber quem chamar por outro meio, como o WhatsApp. Na votação aberta ele vê também o nome de quem ainda não votou, para cobrar; em quem você votou, ninguém vê pelo app.')}
         ${li('Elenco, resultados e conquistas: os membros ativos da liga.')}
         ${li('Notas de estrelas: cada pessoa vê só as notas que deu. Pelo app, ninguém (nem o admin da liga) vê quem deu qual nota; a média de cada jogador, com quantas pessoas votaram, aparece para os membros ativos da liga, a partir de 3 votos.')}
         ${li('Financeiro: os membros ativos da liga (é aberto ao grupo, para todos acompanharem as contas).')}
@@ -6661,6 +6662,7 @@ function vPlayers() {
       <div style="flex:1 1 120px;min-width:0;overflow-wrap:anywhere">
         <div style="font-size:14px;font-weight:600">${esc(p.name)}${isChurr&&st.appCfg?.hasChurrasco?` <span style="font-size:10px;font-weight:700;color:#FF8A3C;background:#FF8A3C18;padding:2px 5px;border-radius:10px">🍖</span>`:''}${isGoal?` <span style="font-size:10px;font-weight:700;color:#4FC3F7;background:#4FC3F718;padding:2px 5px;border-radius:10px">🧤</span>`:''}</div>
         ${isAdmin()&&waOf(p)?`<div style="font-size:11px;color:#25D366;margin-top:1px">💬 +55 ${esc(waOf(p))}</div>`:''}
+        ${isAdmin()&&pushLabel(p.name)?`<div style="font-size:11px;margin-top:1px">${pushLabel(p.name)}</div>`:''}
         ${starsCaption(p)?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${esc(starsCaption(p))}</div>`:''}
       </div>
       <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto">
@@ -9054,6 +9056,7 @@ function render() {
   }
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
+  if(isAdmin()&&(st.view==='players'||st.view==='history')) loadPushInfo(); // 🔔 do Elenco e lista de quem falta votar: busca (no máximo a cada 5 min) quantos aparelhos cada conta tem
   if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
@@ -9833,6 +9836,92 @@ async function notifyVoting(champId) {
   } catch(e) { toast('Erro: ' + (e?.message||e)); }
 }
 
+/* ── Quem tem notificação ativa e quem ainda não votou (só o admin) ─────────────────────────────────────────────────────────────────
+   O admin vê, no Elenco e na votação de destaques, se cada jogador tem algum aparelho cadastrado para receber avisos no celular (🔔 sim,
+   🔕 não, 👤 sem conta vinculada ao jogador) e, com a votação aberta, QUEM ainda não votou, com o botão de WhatsApp para chamar quem não
+   recebe o aviso. A informação das notificações vem da função listMembers (pedido `push: true`), que só responde ao admin da liga e devolve
+   apenas QUANTOS aparelhos a conta tem, nunca os aparelhos em si. Em quem cada um votou continua em segredo: o app só diz quem ainda falta. */
+const PUSH_INFO_TTL = 5 * 60 * 1000;
+let _pushInfoBusy = false;
+async function loadPushInfo(force = false) {
+  if (!DB || !isAdmin() || !st.leagueId || _pushInfoBusy) return;
+  const lid = st.leagueId;
+  const cur = st.pushInfo;
+  if (!force && cur && cur.liga === lid && Date.now() - cur.at < PUSH_INFO_TTL) return;
+  _pushInfoBusy = true;
+  try {
+    const res = await callFn('listMembers', { liga: lid, roles: ['admin', 'player'], push: true });
+    if (st.leagueId !== lid) return; // trocou de liga durante a consulta
+    const members = res?.members || [];
+    // servidor ainda sem o campo `devices` (a função nova ainda não subiu): sem o dado a tela não mostra nada, em vez de acusar todo mundo de estar sem notificação
+    if (members.length && !members.some(m => 'devices' in m)) { st.pushInfo = { liga: lid, at: Date.now(), byKey: null }; return; }
+    const byKey = {};
+    for (const m of members) {
+      if (!m.playerKey) continue; // conta sem jogador vinculado
+      const e = byKey[m.playerKey] || (byKey[m.playerKey] = { devices: 0 });
+      e.devices += Number(m.devices) || 0;
+    }
+    st.pushInfo = { liga: lid, at: Date.now(), byKey };
+    render();
+  } catch(e) {
+    st.pushInfo = { liga: lid, at: Date.now(), byKey: null }; // sem o dado a tela só não mostra os avisos; tenta de novo depois do prazo
+    console.warn('pushInfo:', e?.message || e);
+  } finally { _pushInfoBusy = false; }
+}
+
+// 'on' (a conta do jogador tem aparelho), 'off' (tem conta, sem aparelho), 'none' (nenhuma conta ligada ao jogador) ou '' (ainda não sei, ou não é admin)
+function pushStatus(name) {
+  const info = st.pushInfo;
+  if (!isAdmin() || !info || info.liga !== st.leagueId || !info.byKey) return '';
+  const m = info.byKey[playerKey(name)];
+  if (!m) return 'none';
+  return m.devices > 0 ? 'on' : 'off';
+}
+
+function pushLabel(name) {
+  const s = pushStatus(name);
+  if (s === 'on') return `<span style="color:var(--accent)" title="Tem aparelho cadastrado: recebe os avisos no celular">🔔 notificações ativas</span>`;
+  if (s === 'off') return `<span style="color:var(--text3)" title="A conta não tem nenhum aparelho cadastrado: não recebe os avisos no celular (convocação, resultado, votação)">🔕 sem notificações</span>`;
+  if (s === 'none') return `<span style="color:var(--text3)" title="Nenhuma conta está vinculada a este jogador: ele não recebe avisos nem vota pelo app">👤 sem conta vinculada</span>`;
+  return '';
+}
+
+function waVotacaoLink(whatsapp, playerName, champ) {
+  const num = whatsapp.replace(/\D/g,'');
+  const full = num.startsWith('55') ? num : '55' + num;
+  const liga = pixLeagueName() || 'Pelada na Mão';
+  const cats = [champ.voting?.pos?'na Bola Cheia':'', champ.voting?.neg?'na Bola Murcha':''].filter(Boolean).join(' e ');
+  const dl = votingDeadline(champ);
+  const ate = dl.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) + ' às ' + dl.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const dia = champ.date ? ` de ${champ.date.slice(8,10)}/${champ.date.slice(5,7)}` : '';
+  const msg = `⚽ Olá, ${playerName}!\n\nA votação dos destaques do campeonato${dia} da liga *${liga}* está aberta e falta o seu voto: vote ${cats}. Vale até ${ate}.\n\n🗳️ Entre no app e toque em "Votar": ${location.origin}`;
+  return `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
+}
+
+// Só para o admin, com a votação aberta: os nomes de quem ainda não votou (do elenco do campeonato), se cada um recebe avisos no celular e o botão de WhatsApp.
+function votePendingList(champ) {
+  if (!isAdmin()) return ''; // quem ainda não votou é só do admin (quem chama já confere, aqui é a segunda trava)
+  const roster = votingRoster(champ);
+  const faltam = roster.filter(n => !champ.votes?.[playerKey(n)]).sort((a,b)=>a.localeCompare(b,'pt'));
+  const wrap = inner => `<div style="border-top:1px solid var(--border2);padding:10px 14px">${inner}</div>`;
+  if (!faltam.length) return wrap(`<div style="font-size:12px;color:var(--text2)">✅ Todo o elenco já votou.</div>`);
+  const rows = faltam.map(n => {
+    const p = (st.players||[]).find(x => playerKey(x.name) === playerKey(n));
+    const wa = p ? waOf(p) : '';
+    const label = pushLabel(n);
+    const btn = wa ? `<a href="${waVotacaoLink(wa, n, champ)}" target="_blank" rel="noopener"
+        style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#25D36618;border:1.5px solid #25D366;color:#25D366;font-size:14px;text-decoration:none;flex-shrink:0" title="Chamar ${esc(n)} para votar pelo WhatsApp">💬</a>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border2)">
+      ${playerAvatar(n, 26)}
+      <div style="flex:1;min-width:0;overflow-wrap:anywhere"><div style="font-size:13px;font-weight:600">${esc(n)}</div>${label?`<div style="font-size:11px;margin-top:1px">${label}</div>`:''}</div>
+      ${btn}
+    </div>`;
+  }).join('');
+  return wrap(`<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:4px">Faltam votar (${faltam.length} de ${roster.length})</div>${rows}
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Só os nomes: em quem cada um votou continua em segredo. O 💬 só aparece para quem tem WhatsApp cadastrado no Elenco.</div>`);
+}
+/* ── fim de quem tem notificação e quem ainda não votou ─────────────────────────────────────────────────────────────────────── */
+
 function renderVoteBanners() {
   const me = myVotePlayer();
   if (!me) return '';
@@ -9879,7 +9968,9 @@ function renderVotingCard(champ) {
           ${isAdmin()?`<button onclick="notifyVoting('${champ.id}')" style="${ghost}">🔔 Avisar jogadores</button>`:''}
           ${isAdmin()?`<button onclick="closeVoting('${champ.id}')" style="${ghost}">Encerrar agora</button>`:''}
         </div>
-      </div></div>`;
+      </div>
+      ${isAdmin()?votePendingList(champ):''}
+    </div>`;
   }
   const aw = getChampAwards(champ);
   const row = (emoji, title, res) => `<div style="padding:10px 14px;border-top:1px solid var(--border2)">

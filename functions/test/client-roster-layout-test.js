@@ -19,7 +19,7 @@ function slice(from, to) {
   if (a < 0 || b < 0) throw new Error('marcador não encontrado no index.html: ' + from + ' … ' + to);
   return html.slice(a, b);
 }
-const code = [slice('function playerAvatar(', 'function resizeImageToBlob('), slice('/* ── Estrelas: o que vale', 'async function setPlayerStars('), slice('function renderStars(', 'function renderDrawCard('), slice('function vPlayers() {', 'function vRanking() {')].join('\n');
+const code = [slice('function playerAvatar(', 'function resizeImageToBlob('), slice('/* ── Estrelas: o que vale', 'async function setPlayerStars('), slice('function renderStars(', 'function renderDrawCard('), slice('function vPlayers() {', 'function vRanking() {'), slice('function pushStatus(', 'function waVotacaoLink(')].join('\n'); // a última é o rótulo 🔔/🔕 do admin (sem a informação carregada, não aparece nada)
 
 const NOMES = ['Caio', 'Davidson', 'Felipe', 'Guilherme', 'Leandro', 'Nego Du', 'Samuel', 'Wagner'];
 function render({ admin = true, churrasco = true, players } = {}) {

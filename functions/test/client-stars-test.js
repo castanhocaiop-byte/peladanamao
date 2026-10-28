@@ -31,6 +31,7 @@ const voteMeCode = slice('function myVotePlayer() {', 'function canVoteIn(');
 const renameCode = slice('async function deleteRegisteredPlayer(key) {', 'async function migrateRenameInChamps(');
 const keyCode = slice('const playerKey = name =>', '\n\n');
 const escCode = slice('const esc = s =>', 'function toast(');
+const pushCode = slice('function pushStatus(', 'function waVotacaoLink('); // o rótulo 🔔/🔕 que o admin vê embaixo do nome no Elenco (sem a informação carregada, não aparece nada)
 
 const PLAYERS = [
   { id: 'ana', name: 'Ana', stars: 3 }, { id: 'bia', name: 'Bia', stars: 4 }, { id: 'caio', name: 'Caio', stars: 2, goleiro: true }, { id: 'dani', name: 'Dani', stars: 5 },
@@ -61,7 +62,7 @@ function makeEnv({ players = PLAYERS, appCfg = { peerStars: true }, admin = true
     getPlayerDrawStats: () => ({ titles: 0, goals: 0, last_date: null }), importPlayersFromRanking: () => {}, fdt: s => s,
   };
   const names = Object.keys(env);
-  const body = [escCode, keyCode, avatarCode, voteMeCode, helpersCode, actionsCode, drawCode, renderStarsCode, drawCardCode, vPlayersCode, renameCode].join('\n') + `
+  const body = [escCode, keyCode, avatarCode, voteMeCode, helpersCode, actionsCode, drawCode, renderStarsCode, drawCardCode, vPlayersCode, pushCode, renameCode].join('\n') + `
 return { peerStarsOn, playingPlayers, neededVotes, starsInfo, starsOf, starsText, starsDisplay, starsCaption, drawWeight, setPlayerStars, toggleStarsPinned, starSync, ratingTargets,
   openRateStars, rateStarSet, submitRateStars, mRateStars, starsCallPending, starsCallDone, dismissStarsCall, renderStarsCallBanner, callStarRaters, starsCallKey, balancedDraw, randomDraw, renderStars, renderDrawCard, vPlayers, deleteRegisteredPlayer, renamePlayer, playerKey };`;
   const api = new Function(...names, body)(...names.map(n => env[n]));

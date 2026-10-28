@@ -393,6 +393,13 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
   check('dono do sistema (e-mail verificado) lista qualquer liga', r.status === 200 && r.result.members.length === 1 && r.result.members[0].uid === U.admB.uid, r.raw);
   r = await callFn('listMembers', U.admA.token, { liga: 'la', roles: ['admin', 'hacker'] });
   check('filtro com papel inexistente → argumento inválido', r.status === 400, r.raw);
+  r = await callFn('listMembers', U.admA.token, { liga: 'la', push: true });
+  const membersPush = (r.result && r.result.members) || [];
+  check('com `push: true` a lista traz só o número de aparelhos (devices) a mais', r.status === 200 && membersPush.length === 4 && membersPush.every(m => typeof m.devices === 'number' && JSON.stringify(Object.keys(m).sort()) === JSON.stringify(['devices', 'displayName', 'email', 'joinedAt', 'playerKey', 'role', 'uid'])), r.raw);
+  check('…quem tem aparelho conta 1 e quem não tem conta 0', membersPush.find(m => m.uid === U.pl1.uid).devices === 1 && membersPush.find(m => m.uid === U.admA.uid).devices === 1 && membersPush.find(m => m.uid === U.pend.uid).devices === 0, membersPush.map(m => [m.uid, m.devices]));
+  check('…e os aparelhos em si continuam sem sair', JSON.stringify(r.raw).indexOf('secreto') < 0 && JSON.stringify(r.raw).indexOf('fcmTokens') < 0 && JSON.stringify(r.raw).indexOf('tokA') < 0 && JSON.stringify(r.raw).indexOf('tokP1') < 0);
+  r = await callFn('listMembers', U.pl1.token, { liga: 'la', push: true });
+  check('…e jogador comum continua sem listar membros, mesmo pedindo os aparelhos', r.status === 403 && r.error.status === 'PERMISSION_DENIED', r.raw);
 
   console.log('── funções: badges e sair da liga');
   r = await callFn('saveEarnedBadges', U.pl1.token, { liga: 'la', ids: ['hat_trick', 'sonho_do_adm'] });
