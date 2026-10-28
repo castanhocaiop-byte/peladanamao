@@ -5,7 +5,9 @@
 //  - agora o 🗑 de uma despesa recorrente pergunta o que apagar: só esta data, esta e as próximas (grava `fim`: o passado continua como está) ou tudo
 //    (avisa quantas datas já pagas se perdem e pede confirmação); a despesa única segue com a pergunta simples;
 //  - a lista do mês, os totais pagos e pendentes e os meses da evolução ficam iguais aos de antes quando não há `fim` nem `ignoradas` (conferido
-//    contra uma cópia do código antigo), e respeitam `fim` (exclusivo) e `ignoradas` quando existem.
+//    contra uma cópia do código antigo), e respeitam `fim` (exclusivo) e `ignoradas` quando existem;
+//  - ajuste de 28/10/2026: a despesa fixa só aparece a partir do MÊS do "A partir de" (antes a lista a mostrava também nos meses anteriores, como
+//    "em aberto", enquanto os totais já começavam no mês de início); no mês de início continuam aparecendo todas as datas do mês.
 const fs = require('fs');
 const path = require('path');
 
@@ -131,8 +133,14 @@ function legacyTotals(env, curMon) {
   ];
   const env0 = makeEnv({ finDesp: clone(SERIES) });
   const meses = ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03'];
-  const difMes = meses.filter(m => JSON.stringify(env0.getDespMes(m)) !== JSON.stringify(legacyGetDespMes(env0, m)));
-  check('sem "fim" nem "ignoradas", a lista de cada mês é igual à do código antigo (10 meses, 12 despesas de todos os tipos)', difMes.length === 0, difMes);
+  // a única diferença para o código antigo: a despesa fixa não aparece nos meses ANTERIORES ao mês do "A partir de"
+  const inicioDe = (e, id) => (e.st.finDesp.find(x => x.id === id) || {}).data;
+  const aindaNaoComecou = (e, x, m) => !!x.recorrencia && typeof inicioDe(e, x.id) === 'string' && m < inicioDe(e, x.id).slice(0, 7);
+  const antigoDesdeOInicio = (e, m) => legacyGetDespMes(e, m).filter(x => !aindaNaoComecou(e, x, m));
+  const difMes = meses.filter(m => JSON.stringify(env0.getDespMes(m)) !== JSON.stringify(antigoDesdeOInicio(env0, m)));
+  check('sem "fim" nem "ignoradas", a lista de cada mês é igual à do código antigo, menos as despesas fixas dos meses anteriores ao "A partir de" (10 meses, 12 despesas de todos os tipos)', difMes.length === 0, difMes);
+  const sumiram = meses.flatMap(m => legacyGetDespMes(env0, m).filter(x => aindaNaoComecou(env0, x, m)).map(x => x.id + '@' + m));
+  check('... e essa diferença existe de verdade na série de teste (o código antigo listava as despesas fixas antes de elas começarem)', sumiram.length > 40, sumiram.length);
   check('a lista do mês não ficou vazia por engano (setembro tem despesas recorrentes e a única)', env0.getDespMes('2026-09').length > 20, env0.getDespMes('2026-09').length);
   for (const cur of ['2026-10', '2026-12', '2027-02']) {
     const novo = totaisDe(env0, cur), velho = legacyTotals(env0, cur);
@@ -140,6 +148,52 @@ function legacyTotals(env, curMon) {
   }
   const mesesNovo = mesesDe(env0), mesesVelho = legacyTotals(env0, '2026-10').recMons;
   check('sem "fim" nem "ignoradas", os meses da evolução mensal são os mesmos do código antigo', JSON.stringify(mesesNovo) === JSON.stringify(mesesVelho), { mesesNovo, mesesVelho });
+
+  // ── 1b. a despesa só aparece a partir do MÊS do "A partir de" ─────────────────────────────────────────────────────────────────────────────────────
+  // Antes a lista mostrava a despesa fixa também nos meses anteriores ao início (como "em aberto"), mas os totais já começavam no mês de início.
+  const listadaEm = (e, id, mes) => e.getDespMes(mes).filter(x => x.id === id).map(x => x.data);
+  const mesesListada = (e, id, de, ate) => {
+    const out = [];
+    let [y, m] = de.split('-').map(Number);
+    const [ey, em] = ate.split('-').map(Number);
+    while (y < ey || (y === ey && m <= em)) {
+      const mes = `${y}-${String(m).padStart(2, '0')}`;
+      if (e.getDespMes(mes).some(x => x.id === id)) out.push(mes);
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return out;
+  };
+  const MENS = { id: 'M', descricao: 'Taxa do campo', recorrencia: 'mensal', diaDoMes: 5, data: '2026-10-15', valor: 100 }; // começa em outubro, dia 15 (o dia 05 já passou)
+  const SEMA = { id: 'S', descricao: 'Água', recorrencia: 'semanal', diaSemana: 4, data: '2026-10-15', valor: 10 };    // quintas; 15/10/2026 é quinta
+  const eB = makeEnv({ finDesp: clone([MENS, SEMA]) });
+  check('a mensal que começa em outubro não aparece em setembro nem em agosto', listadaEm(eB, 'M', '2026-09').length === 0 && listadaEm(eB, 'M', '2026-08').length === 0, listadaEm(eB, 'M', '2026-09'));
+  check('... e a semanal também não (nem em setembro nem no começo do ano)', listadaEm(eB, 'S', '2026-09').length === 0 && listadaEm(eB, 'S', '2026-01').length === 0, listadaEm(eB, 'S', '2026-09'));
+  check('no MÊS de início aparecem todas as datas do mês, mesmo as anteriores ao dia escolhido (mensal dia 05 com início em 15/10; quintas 1, 8, 15, 22 e 29)',
+    JSON.stringify(listadaEm(eB, 'M', '2026-10')) === '["2026-10-05"]' && JSON.stringify(listadaEm(eB, 'S', '2026-10')) === '["2026-10-01","2026-10-08","2026-10-15","2026-10-22","2026-10-29"]', { m: listadaEm(eB, 'M', '2026-10'), s: listadaEm(eB, 'S', '2026-10') });
+  check('depois do mês de início a despesa continua aparecendo (novembro e março do ano seguinte)', listadaEm(eB, 'M', '2026-11').length === 1 && listadaEm(eB, 'S', '2026-11').length === 4 && listadaEm(eB, 'M', '2027-03').length === 1, [listadaEm(eB, 'M', '2026-11'), listadaEm(eB, 'S', '2026-11'), listadaEm(eB, 'M', '2027-03')]);
+  const tB = totaisDe(eB);
+  check('os totais não mudaram: contam outubro inteiro (a mensal R$ 100 e as 5 quintas R$ 50) e nada dos meses anteriores', tB.despRecPagas === 0 && tB.despRecPend === 150, tB);
+
+  // limites: primeiro e último dia do mês, virada de ano e o mesmo mês de outro ano
+  const inicio = data => makeEnv({ finDesp: [{ id: 'X', descricao: 'X', recorrencia: 'mensal', diaDoMes: 5, data, valor: 1 }] });
+  check('início no dia 1 ou no dia 31 de outubro: outubro já mostra e setembro não', inicio('2026-10-01').getDespMes('2026-10').length === 1 && inicio('2026-10-01').getDespMes('2026-09').length === 0 && inicio('2026-10-31').getDespMes('2026-10').length === 1 && inicio('2026-10-31').getDespMes('2026-09').length === 0);
+  check('virada de ano: início em 10/01/2027 mostra janeiro de 2027 e não mostra dezembro nem outubro de 2026', inicio('2027-01-10').getDespMes('2027-01').length === 1 && inicio('2027-01-10').getDespMes('2026-12').length === 0 && inicio('2027-01-10').getDespMes('2026-10').length === 0);
+  check('o mesmo mês de um ano antes também não mostra (outubro e dezembro de 2025), e outubro de 2027 mostra', inicio('2026-10-05').getDespMes('2025-10').length === 0 && inicio('2026-10-05').getDespMes('2025-12').length === 0 && inicio('2026-10-05').getDespMes('2027-10').length === 1);
+
+  // a lista e os totais passam a concordar: cada despesa fixa é listada exatamente nos meses que os totais contam
+  const envS = makeEnv({ finDesp: clone(SERIES) });
+  const comInicio = SERIES.filter(x => x.recorrencia && x.data);
+  const desencontros = comInicio.filter(x => JSON.stringify(mesesListada(envS, x.id, '2025-06', '2027-03')) !== JSON.stringify([...new Set(envS.despRecTodas(x, '2027-03').map(o => o.data.slice(0, 7)))]));
+  check('a lista e os totais concordam: cada despesa fixa é listada exatamente nos meses que os totais contam (10 despesas, de 06/2025 a 03/2027)', desencontros.length === 0 && comInicio.length === 10, desencontros.map(x => x.id));
+
+  // pagamentos marcados em meses anteriores ao início (não existem nos dados reais): a lista e os totais os ignoram, e nada é apagado do banco
+  const eP = makeEnv({ finDesp: clone([{ ...MENS, pagamentos: { '2026-08': true, '2026-09': true } }]) });
+  const tP = totaisDe(eP);
+  check('pagamentos marcados antes do início ficam fora da lista e dos totais (só outubro conta: R$ 100 em aberto)', listadaEm(eP, 'M', '2026-09').length === 0 && tP.despRecPagas === 0 && tP.despRecPend === 100 && eP.st.finDesp[0].pagamentos['2026-09'] === true, tP);
+  const eF = makeEnv({ finDesp: clone([{ ...MENS, fim: '2026-09-01' }]) });
+  check('`fim` antes do início: a despesa não aparece em mês nenhum e os totais ficam zerados', mesesListada(eF, 'M', '2025-01', '2027-12').length === 0 && totaisDe(eF).despRecPend === 0 && totaisDe(eF).despRecPagas === 0);
+  const eD = makeEnv({ finDesp: clone([{ id: 'SD', descricao: 'Sem data', recorrencia: 'mensal', diaDoMes: 3, valor: 5 }, { id: 'ND', descricao: 'Data estranha', recorrencia: 'mensal', diaDoMes: 3, data: 20261005, valor: 5 }, { id: 'LX', descricao: 'Lixo', recorrencia: 'mensal', diaDoMes: 3, data: 'abc', valor: 5 }]) });
+  check('sem `data` (ou com `data` que não é uma data) nada é escondido: a despesa aparece em qualquer mês, como antes, e nada quebra', ['SD', 'ND', 'LX'].every(id => listadaEm(eD, id, '2020-01').length === 1 && listadaEm(eD, id, '2026-10').length === 1), ['SD', 'ND', 'LX'].map(id => listadaEm(eD, id, '2020-01')));
 
   // ── 2. o caso real: apagar de outubro sem perder setembro ─────────────────────────────────────────────────────────────────────────────────────────
   // Terças de 2026: setembro 1, 8, 15, 22, 29; outubro 6, 13, 20, 27.
@@ -282,6 +336,7 @@ function legacyTotals(env, curMon) {
   check('as regras só deixam o ADMIN gravar nas despesas e não limitam os campos (o `fim` e as `ignoradas` passam)', /allow write: if isLeagueAdmin\(leagueId\);/.test(despBlock) && !/hasOnly|affectedKeys|keys\(\)/.test(despBlock), despBlock);
   check('o manual explica as três opções, cada uma na sua linha da tabela, e o que se perde ao apagar tudo', manual.includes('<tr><td>Só esta data (ou Só este mês)</td>') && manual.includes('<tr><td>Esta e as próximas</td>') && manual.includes('<tr><td>Tudo: apagar a despesa inteira</td>') && /todos os meses, inclusive as datas já pagas/.test(manual) && /um registro só/.test(manual));
   check('o manual manda encerrar a despesa fixa por "Esta e as próximas"', /Para encerrar uma despesa fixa, use "Esta e as próximas"/.test(manual));
+  check('o manual explica que a despesa vale a partir do MÊS de "A partir de" (meses anteriores sem a despesa, mês de início com todas as datas)', /vale a partir do <strong>mês<\/strong> de <em>A partir de<\/em>: os meses anteriores a ele <strong>não mostram<\/strong> a despesa nem a somam\./.test(manual) && /aparecem <strong>todas as datas do mês<\/strong>, mesmo as anteriores ao dia escolhido/.test(manual));
 
   console.log(fails ? `\n${fails} FALHA(S)` : '\nTodos os testes passaram');
   process.exit(fails ? 1 : 0);

@@ -11211,9 +11211,15 @@ function getWeekdayOccurrences(y, m, diaSemana) {
 // Despesa recorrente (mensal ou semanal) é UM registro só: cada mês ou semana da lista é calculado a partir dele e o "pago" de cada data fica em
 // `pagamentos`. Por isso apagar o registro leva embora TODOS os meses, inclusive os já pagos. Para parar de valer daqui para frente sem perder o
 // passado existe `fim` (data AAAA-MM-DD: as datas a partir dela deixam de existir) e, para tirar uma data só, `ignoradas` (data ou mês → true).
+// A despesa só existe a partir do MÊS do "A partir de" (`data`): os meses anteriores não a mostram, como os totais, que já começavam nesse mês. No mês de
+// início aparecem todas as datas do mês, mesmo as anteriores ao dia escolhido, para dar para registrar o que já foi pago nele.
 // As datas de uma despesa recorrente num mês, já sem as encerradas e as tiradas:
 function despRecOcorrencias(d, month) {
   const [y, mon] = month.split('-').map(Number);
+  if (typeof d.data === 'string') {
+    const [sy, sm] = d.data.slice(0,7).split('-').map(Number);
+    if (y < sy || (y === sy && mon < sm)) return [];
+  }
   const out = [];
   if (d.recorrencia === 'mensal') {
     const day = Math.min(d.diaDoMes||1, daysInMonth(y, mon));
