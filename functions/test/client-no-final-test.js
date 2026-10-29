@@ -75,7 +75,7 @@ function makeEnv({ hasFinais = true, champs = [], admin = true, badgeCache = nul
     matchCard: (m, editable) => `<match id="${m.id}" phase="${m.phase}" played="${m.played ? 1 : 0}"${editable ? ' editable' : ''}/>`,
     getBadgeCache: () => badgeCache, computeNewBadgesInChamp: () => newBadges,
     waLeagueTitle: () => 'Liga X', WA_APP_FOOTER: '[rodapé]', getChampAwards: () => null, champPlayerGames: () => 1,
-    votingUsed: () => state.voting, rivalBadgesShown: () => false, h2hOn: () => true, rivalAward: () => false, magicalDayPeriod: () => ({ word: 'Noite', fem: true }), enabledColors: () => [['azul', {}]],
+    votingUsed: () => state.voting, monthBadgesOn: () => true, rivalBadgesShown: () => false, h2hOn: () => true, rivalAward: () => false, magicalDayPeriod: () => ({ word: 'Noite', fem: true }), enabledColors: () => [['azul', {}]],
   };
   const names = Object.keys(env);
   const api = new Function(...names, CODE + '\nreturn { ' + EXPORTS + ' };')(...names.map(n => env[n]));
@@ -555,7 +555,8 @@ const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s
     const sem = ocultas();
     const metade = cat.filter(b => b.visible && /showHalfTitles/.test(String(b.visible))).map(b => b.id);
     const novas = [...sem].filter(id => !com.has(id)).sort();
-    check('liga sem final: as conquistas que somem são EXATAMENTE as 11 da final + as de ½ título (4), e mais nenhuma', JSON.stringify(novas) === JSON.stringify([...FINAL_IDS, ...metade].sort()) && metade.length === 4, { novas, metade });
+    const DO_MES = ['mes_rei_art_final', 'mes_rei_finais']; // as duas conquistas do mês (item 42) ligadas às finais
+    check('liga sem final: as conquistas que somem são EXATAMENTE as 11 da final + as de ½ título (4) + as 2 do mês ligadas às finais, e mais nenhuma', JSON.stringify(novas) === JSON.stringify([...FINAL_IDS, ...metade, ...DO_MES].sort()) && metade.length === 4, { novas, metade });
     check('as 11 conquistas da final existem no catálogo e cada uma tem regra de visibilidade (nenhuma esquecida)', FINAL_IDS.every(id => cat.some(b => b.id === id && typeof b.visible === 'function')), FINAL_IDS.filter(id => !cat.some(b => b.id === id && b.visible)));
     E.st.appCfg.hasFinais = true;
     check('liga com final (como sempre): as 11 estão visíveis (a de votação, com a votação ligada)', FINAL_IDS.every(id => cat.find(b => b.id === id).visible()), FINAL_IDS.filter(id => !cat.find(b => b.id === id).visible()));

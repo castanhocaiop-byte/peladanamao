@@ -1201,6 +1201,20 @@ const BADGE_CATALOG = [
   { id:'rival_3m',        emoji:'🐕', label:'Rival de Estimação',    desc:'3 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_3m') },
   { id:'rival_6m',        emoji:'⚔️', label:'Arquirrival',           desc:'6 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_6m') },
   { id:'rival_12m',       emoji:'🏛️', label:'Rivalidade Histórica',  desc:'12 meses com o mesmo rival', visible: () => rivalBadgesShown(), check: s => rivalAward(s, 'rival_12m') },
+  // destaques do mês (item 42): calculadas no aparelho com os campeonatos de cada mês FECHADO (a conta está em getMonthHighlights); o admin da liga pode desligar todas
+  { id:'mes_campeao',       emoji:'🏆', label:'Maior Campeão do Mês',                 desc:'Mais títulos no mês (pelo menos 2)',                                  visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.campeao || 0) >= 1 },
+  { id:'mes_artilheiro',    emoji:'⚽', label:'Artilheiro do Mês',                    desc:'Mais gols no mês (pelo menos 2)',                                     visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.artilheiro || 0) >= 1,    fieldOnly: true },
+  { id:'mes_rei_art',       emoji:'🥾', label:'Rei das Artilharias do Mês',           desc:'Artilheiro em mais campeonatos do mês (pelo menos 2)',                visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.rei_art || 0) >= 1,       fieldOnly: true },
+  { id:'mes_rei_art_final', emoji:'🎯', label:'Rei das Artilharias de Finais do Mês', desc:'Artilheiro da final em mais campeonatos do mês (pelo menos 2)',       visible: () => monthBadgesOn() && finalsEnabled(),                check: s => (s.mh?.n.rei_art_final || 0) >= 1, fieldOnly: true },
+  { id:'mes_rei_finais',    emoji:'🏟️', label:'Rei das Finais do Mês',                desc:'Mais finais disputadas no mês (pelo menos 2)',                        visible: () => monthBadgesOn() && finalsEnabled(),                check: s => (s.mh?.n.rei_finais || 0) >= 1 },
+  { id:'mes_xodo',          emoji:'🥰', label:'Xodó do Mês',                          desc:'Mais votos de Bola Cheia no mês (pelo menos 2)',                      visible: () => monthBadgesOn() && votingUsed('pos'),              check: s => (s.mh?.n.xodo || 0) >= 1 },
+  { id:'mes_perna_pau',     emoji:'🪵', label:'Perna de Pau do Mês',                  desc:'Mais votos de Bola Murcha no mês (pelo menos 2)',                     visible: () => monthBadgesOn() && votingUsed('neg'),              check: s => (s.mh?.n.perna_pau || 0) >= 1 },
+  { id:'mes_cartao_ponto',  emoji:'📆', label:'Cartão Ponto',                         desc:'Esteve em todos os campeonatos do mês (mês com 3 ou mais)',           visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.cartao_ponto || 0) >= 1 },
+  { id:'mes_marca_todas',   emoji:'🥅', label:'Marca Todas',                          desc:'Fez gol em todos os campeonatos que jogou no mês (3 ou mais)',        visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.marca_todas || 0) >= 1,   fieldOnly: true },
+  { id:'mes_varreu',        emoji:'🧹', label:'Varreu o Mês',                         desc:'Foi campeão de todos os campeonatos do mês (mês com 3 ou mais)',      visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.varreu || 0) >= 1 },
+  { id:'mes_craque',        emoji:'👑', label:'Craque do Mês',                        desc:'Levou o maior número de destaques do mês (pelo menos 2)',             visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.craque || 0) >= 1 },
+  { id:'mes_hegemonia',     emoji:'🔁', label:'Hegemonia',                            desc:'Maior Campeão do Mês em 2 meses seguidos',                            visible: () => monthBadgesOn(),                                   check: s => !!s.mh?.hegemonia },
+  { id:'mes_dinastia',      emoji:'🏛️', label:'Dinastia',                             desc:'Maior Campeão do Mês em 3 meses seguidos',                            visible: () => monthBadgesOn(),                                   check: s => !!s.mh?.dinastia },
 ];
 
 /* ── championship logic (pure) ──────────────────────────────── */
@@ -1491,6 +1505,7 @@ function startListeners() {
       starsCallAt:       data.starsCallAt       || null,
       starsCallBy:       data.starsCallBy       || '',
       h2hBadges:         data.h2hBadges         ?? true,
+      monthBadges:       data.monthBadges       ?? true,
     };
     st.cfgReady = true;
     render();
@@ -2279,6 +2294,12 @@ const MJ_KINDS = {
     file: { story: 'duelo-pelada-na-mao-story.png', feed: 'duelo-pelada-na-mao.png' }, draw: { feed: drawMjRivalNumCard, story: drawMjRivalNumStory },
     text: d => `Meu duelo do mês contra o meu rival no Pelada na Mão ⚔️${mjRivalNumVerdict(d) ? ' ' + mjRivalNumVerdict(d) : ''}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjRivalDuelCaption(d),
   },
+  destaques: {
+    title: '📤 Destaques do mês', busy: 'Montando os destaques…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Destaques do mês no Pelada na Mão', shareTitle: 'Destaques do mês no Pelada na Mão',
+    note: 'O card mostra o nome dos jogadores da liga: poste só se o grupo estiver de acordo.',
+    file: { story: 'destaques-pelada-na-mao-story.png', feed: 'destaques-pelada-na-mao.png' }, draw: { feed: drawMjDestaquesCard, story: drawMjDestaquesStory },
+    text: d => `Destaques de ${d.monthName} no Pelada na Mão 🏅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjDestaquesCaption(d),
+  },
 };
 const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
@@ -2794,6 +2815,65 @@ function drawMjRivalNumCard(ctx, c, photoImg, logoImg, opts = {}) {
 }
 function drawMjRivalNumStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjRivalNumCard, c, photoImg, logoImg, 400); }
 
+// Os nomes de uma linha do card: até 3 separados por "·" e, se houver mais, "+N".
+const mjNamesText = (names, max = 3) => (names.length <= max ? names.join(' · ') : names.slice(0, max).join(' · ') + ' +' + (names.length - max));
+// Dados do cartão "Destaques do mês": uma linha por destaque (emoji, nome do destaque, quem levou e o número) e o Craque do Mês. Só leva o que a liga já mostra a todos (nomes e números);
+// sem foto de ninguém. Dourado no mês fechado e verde no parcial. Pura.
+function mjDestaquesData(s = {}) {
+  const names = a => (Array.isArray(a) ? a : []).map(n => String(n).trim()).filter(Boolean);
+  const rows = (Array.isArray(s.rows) ? s.rows : []).filter(r => r && r.label).slice(0, 12)
+    .map(r => ({ emoji: String(r.emoji || '🏅'), label: String(r.label), value: String(r.value ?? ''), negative: !!r.negative, names: names(r.names) }))
+    .filter(r => r.names.length).map(r => ({ ...r, who: mjNamesText(r.names) }));
+  const cn = names(s.craque?.names);
+  const craque = cn.length ? { names: cn, who: mjNamesText(cn), value: Math.max(0, Math.round(Number(s.craque.value) || 0)) } : null;
+  const partial = !!s.partial, tier = partial ? 'common' : 'legendary';
+  return { league: String(s.league || '').trim(), month: String(s.month || ''), monthName: String(s.monthName || '').trim() || 'mês', partial, rows, craque, tier, tone: MJ_TIERS[tier] };
+}
+// Cartão "Destaques do mês" (Feed 4:5): o mês, o Craque do Mês (se houver) e uma linha por destaque. As linhas se repartem entre o alto e o rodapé (no máximo 78 px cada) e o conjunto fica centralizado.
+function drawMjDestaquesCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.legendary, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 330, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+
+  // topo: logo, nome da liga, o que é e o mês
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
+  ctx.fillText(c.partial ? 'DESTAQUES DO MÊS · PARCIAL' : 'DESTAQUES DO MÊS', cx, 214);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.monthName.toUpperCase(), 940, 150, 80, MJ_HEAD, 400), cx, 352);
+
+  // o Craque do Mês
+  let top = 400;
+  if (c.craque) {
+    ctx.fillStyle = 'rgba(240,180,41,0.14)'; mjRoundRect(ctx, 64, top, W - 128, 96, 24); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = MJ_GOLD; mjRoundRect(ctx, 64, top, W - 128, 96, 24); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 52px ${MJ_BODY}`; ctx.fillText('👑', 92, top + 50);
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_GOLD; ctx.font = `800 24px ${MJ_BODY}`; ctx.fillText(`CRAQUE DO MÊS · ${c.craque.value} DESTAQUES`, 170, top + 38);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.craque.who, W - 170 - 96, 40, 26, MJ_BODY, 800), 170, top + 78);
+    top += 96 + 22;
+  }
+
+  // as linhas: emoji, nome do destaque, quem levou e o número
+  const n = c.rows.length, bottom = 1180, rowH = n ? Math.min(78, Math.floor((bottom - top) / n)) : 78, y0 = top + Math.max(0, (bottom - top - n * rowH) / 2), k = Math.min(1, rowH / 78);
+  c.rows.forEach((r, i) => {
+    const y = y0 + i * rowH, my = y + rowH / 2, valW = r.value ? 250 : 0, maxW = W - 92 - 168 - valW;
+    if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; mjRoundRect(ctx, 64, y + 3, W - 128, rowH - 6, 16); ctx.fill(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 ${Math.round(46 * k)}px ${MJ_BODY}`; ctx.fillText(r.emoji, 112, my + 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = MJ_MUTED; ctx.fillText(mjFitText(ctx, r.label.toUpperCase(), maxW, Math.round(22 * k), 15, MJ_BODY, 700), 168, my - Math.round(8 * k));
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, r.who, maxW, Math.round(36 * k), 22, MJ_BODY, 800), 168, my + Math.round(30 * k));
+    if (r.value) { ctx.textAlign = 'right'; ctx.fillStyle = r.negative ? '#ff7b72' : accent; ctx.fillText(mjFitText(ctx, r.value.toUpperCase(), valW - 10, Math.round(52 * k), 28, MJ_HEAD, 400), W - 92, my + Math.round(18 * k)); }
+  });
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+function drawMjDestaquesStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjDestaquesCard, c, photoImg, logoImg, 330); }
+
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
 function mjLoadImage(url) {
   return new Promise(resolve => {
@@ -2853,7 +2933,7 @@ function mjReadyBody() {
       <button onclick="shareMjCard()" style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Compartilhar</button>
       <button onclick="copyMjCaption()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">📋 Copiar legenda</button>
       <button onclick="downloadMjCard()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Baixar a imagem</button>
-      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">No Instagram a legenda não vai junto com a imagem: toque em Copiar legenda e cole na publicação. A imagem foi feita no seu aparelho e só sai dele se você compartilhar. Não leva e-mail nem WhatsApp.</div>`;
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.5">No Instagram a legenda não vai junto com a imagem: toque em Copiar legenda e cole na publicação. A imagem foi feita no seu aparelho e só sai dele se você compartilhar. Não leva e-mail nem WhatsApp.</div>${mjKindNow().note ? `<div style="font-size:11px;color:var(--text2);text-align:center;margin-top:6px;line-height:1.5">${mjKindNow().note}</div>` : ''}`;
 }
 
 // Troca o formato. As duas imagens já estão prontas: não há trabalho assíncrono (o iPhone só deixa compartilhar arquivo logo depois de um toque).
@@ -2952,6 +3032,10 @@ function mjRivalNumCaption(d) {
 function mjRivalDuelCaption(d) {
   const v = mjRivalNumVerdict(d);
   return `Duelo do mês contra o meu rival no Pelada na Mão ⚔️\n${v ? v + '\n' : ''}Quem é o destaque de verdade na sua pelada? Dispute o seu duelo: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+// A legenda dos destaques nunca leva nome de pessoa nem da liga (a imagem leva, e quem compartilha escolhe).
+function mjDestaquesCaption(d) {
+  return `Destaques de ${d.monthName} na minha pelada 🏅⚽${d.partial ? ' (parcial)' : ''}\nMaior campeão, artilheiro, Xodó e mais: os números do mês num card só.\nCrie a liga da sua pelada: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
 async function copyMjCaption() {
   if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
@@ -6771,7 +6855,7 @@ function vRanking() {
              font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${label}</button>`;
   };
 
-  return `<div class="card">
+  return `${mhRankingCard()}<div class="card">
     <div class="card-hdr"><span class="card-lbl">Ranking de Campeões</span></div>
     <div style="padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border2);align-items:center">
       ${['Todos','Ativos'].map((lbl,i)=>{const act=st.showInactive===(i===0);return`<button onclick="setShowInactive(${i===0})"
@@ -8016,7 +8100,7 @@ function vMeuJogador() {
     }
   }
   const consecGoalless = goallessStreak([...done].reverse(), myName);
-  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), ...h2hFlags(doneAll, myName), ...rivalPublicStats(myName), myName };
+  const _bStats = { champsPlayed, champsPlayedCutoff, attendedChurrascoChamps, done_count:done.length, titles:titlesFromCutoff, fullTitles, halfTitles, maxConsecWins, winRate, totalGoals, myArt, myArtFin, myArtFinChamp, hatTricks, maxGoalsSingleChamp, maxGoalsSingleGame, hasMachineChamp, maxBorrowedMatches, hasUndefeatedTitle, hasCleanSheetChamp, penaltyChamp, hasArtLastPlace, hasViceStreak3, hatTrickFinalWin, hatTrickFinalLoss, consecHatTrickChamps, consecGoalless, hasLastPlaceChurrasco, colorsPlayed, colorsWon, hasViouSaf, hasBaggio, hasSalvoCompanheiros, sonhoDoAdm, hasDevendoLuxando, hasMagicalDay, ...computeAwardStats(myName, doneAll), ...h2hFlags(doneAll, myName), ...rivalPublicStats(myName), ...monthAwardStats(myName), myName };
   const earnedBadges = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && b.check(_bStats));
   const lockedBadges  = BADGE_CATALOG.filter(b => !(b.fieldOnly && isGK) && !(b.gkOnly && !isGK) && (!b.visible || b.visible()) && !isBadgeImpossible(b) && !b.check(_bStats));
 
@@ -8279,7 +8363,7 @@ function vMeuJogador() {
         const e = showAll || earned;
         return `<div onclick="st.modal={type:'badgeInfo',id:'${b.id}',earned:${earned}};render()" title="${esc(b.desc)}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 10px;border-radius:10px;min-width:70px;max-width:84px;text-align:center;flex:1;${e?'background:var(--accent)15;border:1px solid var(--accent)35;':'background:var(--s2);border:1px solid var(--border2);opacity:0.38;'}">
           ${e && b.icon ? `<span style="width:28px;height:28px;display:flex;align-items:center;justify-content:center">${b.icon}</span>` : `<span style="font-size:22px;${e?'':'filter:grayscale(1)'}">${e?b.emoji:'🔒'}</span>`}
-          <span style="font-size:9px;font-weight:700;line-height:1.3;color:${e?'var(--accent)':'var(--text3)'}">${esc(b.label)}</span>
+          <span style="font-size:9px;font-weight:700;line-height:1.3;color:${e?'var(--accent)':'var(--text3)'}">${esc(b.label)}${earned && mhTimes(myName, b.id) > 1 ? ` ×${mhTimes(myName, b.id)}` : ''}</span>
         </div>`;
       };
       return `<div class="card" style="margin-top:0">
@@ -8935,6 +9019,14 @@ function mAdminPanel() {
             </div>
           </div>
           <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">📅 Destaques do mês</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Todo mês fechado (com 3 ou mais campeonatos, a partir de outubro de 2026) a liga elege o Maior Campeão, o Artilheiro, o Xodó e outros destaques, entrega as conquistas do mês e mostra o card na aba Ranking, que qualquer jogador pode gerar como imagem para o Instagram. Desligados, as conquistas e o card somem para todo o grupo.</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="saveAppCfg({monthBadges:true})" style="${tog(cfg.monthBadges !== false)}">Ligados</button>
+              <button onclick="saveAppCfg({monthBadges:false})" style="${tog(cfg.monthBadges === false)}">Desligados</button>
+            </div>
+          </div>
+          <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">🗳️ Votação de destaques</div>
             <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Depois de cada campeonato, quem estava no elenco vota. Cada votação é opcional e vale para os próximos campeonatos finalizados.</div>
             <div style="margin-bottom:10px">
@@ -9550,7 +9642,7 @@ function computePlayerBadgeStats(name) {
       if(late){ hasDevendoLuxando=true; break; }
     }
   }
-  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),...h2hFlags(doneAll,name),...rivalPublicStats(name),myName:name};
+  return {champsPlayed,champsPlayedCutoff,attendedChurrascoChamps,done_count:done.length,titles:titlesFromCutoff,fullTitles,halfTitles,maxConsecWins,winRate,totalGoals,myArt,myArtFin,myArtFinChamp,hatTricks,maxGoalsSingleChamp,maxGoalsSingleGame,hasMachineChamp,maxBorrowedMatches,hasUndefeatedTitle,hasCleanSheetChamp,penaltyChamp,hasArtLastPlace,hasViceStreak3,hatTrickFinalWin,hatTrickFinalLoss,consecHatTrickChamps,consecGoalless,hasLastPlaceChurrasco,colorsPlayed,colorsWon,hasViouSaf,hasBaggio,hasSalvoCompanheiros,sonhoDoAdm,hasDevendoLuxando,hasMagicalDay,...computeAwardStats(name,doneAll),...h2hFlags(doneAll,name),...rivalPublicStats(name),...monthAwardStats(name),myName:name};
 }
 
 function getBadgeCache() {
@@ -9711,7 +9803,7 @@ function computeNewBadgesInChamp(champId) {
   for (const name of allPart) {
     const before = new Set(cacheBefore.playerBadges[name]||[]);
     const after = cacheAfter.playerBadges[name]||[];
-    const gained = after.filter(id=>!before.has(id));
+    const gained = after.filter(id=>!before.has(id)&&!MH_BADGE_IDS.includes(id)); // as conquistas do mês saem do fechamento do mês, não de um campeonato
     if (gained.length) result[name] = gained;
   }
   return result;
@@ -12490,6 +12582,196 @@ function mFinalGoals() {
   </div>`;
 }
 
+/* ── Destaques do mês (item 42) ──────────────────────────────────────────────────────────────────────────────────────────────
+   Todo mês FECHADO tem os seus destaques, calculados no aparelho com os campeonatos concluídos da liga (fora do plano gratuito): o Maior Campeão (mais títulos), o Artilheiro (mais gols), o Rei das
+   Artilharias (artilheiro em mais campeonatos), o Rei das Finais (mais finais disputadas) e o das Artilharias de Finais, o Xodó e o Perna de Pau (mais VOTOS recebidos no mês) e três feitos de quem não
+   precisa ser o melhor (Cartão Ponto, Marca Todas, Varreu o Mês), além do Craque do Mês (quem levou mais destaques) e das sequências (Hegemonia e Dinastia). Regras: valem os meses a partir de MH_FIRST
+   (o primeiro mês completo, com gols e elencos registrados) com pelo menos MH_MIN_CHAMPS campeonatos concluídos; o jogador precisa ter jogado pelo menos MH_MIN_PLAYED deles; o destaque precisa repetir o
+   feito pelo menos MH_MIN_REPEAT vezes (senão, num mês de campeões diferentes, metade da liga seria "o maior campeão"); empate: todos levam; goleiro fica fora dos destaques de gol. O mês fecha como no
+   Duelo do mês (rivalMonthClosed): só depois do último dia do mês e sem campeonato dele em andamento nem com a votação aberta; o mês em andamento aparece como PARCIAL e não dá badge. As 13 badges, o
+   card da aba Ranking e a imagem do card (Story e Feed, pelo mesmo mecanismo do cartão do jogador) saem deste mesmo cálculo. Nada disso vai ao servidor. O admin pode desligar tudo (appCfg.monthBadges). */
+const MH_FIRST = '2026-10', MH_MIN_CHAMPS = 3, MH_MIN_PLAYED = 2, MH_MIN_REPEAT = 2, MH_MIN_VOTINGS = 2;
+function monthBadgesOn() { return st.appCfg?.monthBadges !== false; }
+// Os destaques "o melhor do mês": um número por jogador (`from`, um campo de mhRows), ganha quem tem o maior, com pelo menos MH_MIN_REPEAT. `field`: só jogador de linha. `needs`: depende de final ou de votação.
+const MH_LEADERS = [
+  { id:'campeao',       badge:'mes_campeao',       emoji:'🏆', label:'Maior Campeão do Mês',                 short:'Maior Campeão',                 from:'titles', unit:['título','títulos'] },
+  { id:'artilheiro',    badge:'mes_artilheiro',    emoji:'⚽', label:'Artilheiro do Mês',                    short:'Artilheiro',                    from:'goals',  unit:['gol','gols'], field:true },
+  { id:'rei_art',       badge:'mes_rei_art',       emoji:'🥾', label:'Rei das Artilharias do Mês',           short:'Rei das Artilharias',           from:'art',    unit:['artilharia','artilharias'], field:true },
+  { id:'rei_art_final', badge:'mes_rei_art_final', emoji:'🎯', label:'Rei das Artilharias de Finais do Mês', short:'Rei das Artilharias de Finais', from:'artFin', unit:['vez','vezes'], field:true, needs:'finals' },
+  { id:'rei_finais',    badge:'mes_rei_finais',    emoji:'🏟️', label:'Rei das Finais do Mês',                short:'Rei das Finais',                from:'finals', unit:['final','finais'], needs:'finals' },
+  { id:'xodo',          badge:'mes_xodo',          emoji:'🥰', label:'Xodó do Mês',                          short:'Xodó do Mês',                   from:'pos',    unit:['voto','votos'], needs:'pos' },
+  { id:'perna_pau',     badge:'mes_perna_pau',     emoji:'🪵', label:'Perna de Pau do Mês',                  short:'Perna de Pau do Mês',           from:'neg',    unit:['voto','votos'], needs:'neg', negative:true },
+];
+// Os feitos do mês: quem cumprir leva, não precisa ser o melhor.
+const MH_FEATS = [
+  { id:'cartao_ponto', badge:'mes_cartao_ponto', emoji:'📆', label:'Cartão Ponto', short:'Cartão Ponto', test:(r, m) => r.played === m.nChamps },
+  { id:'marca_todas',  badge:'mes_marca_todas',  emoji:'🥅', label:'Marca Todas',  short:'Marca Todas',  field:true, test:r => r.played >= MH_MIN_CHAMPS && r.scoredIn === r.played },
+  { id:'varreu',       badge:'mes_varreu',       emoji:'🧹', label:'Varreu o Mês', short:'Varreu o Mês', test:(r, m) => r.fullTitles === m.nChamps },
+];
+const MH_BADGE_IDS = [...MH_LEADERS.map(d => d.badge), ...MH_FEATS.map(d => d.badge), 'mes_craque', 'mes_hegemonia', 'mes_dinastia'];
+const MH_BY_BADGE = Object.fromEntries([...MH_LEADERS, ...MH_FEATS].map(d => [d.badge, d.id]).concat([['mes_craque', 'craque']]));
+const mhNum = v => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10).replace('.', ',')); // sem "½" nos textos de divulgação: 2,5
+const mhValueText = (def, v) => `${mhNum(v)} ${def.unit[Math.abs(v - 1) < 1e-9 ? 0 : 1]}`;
+// Os números de cada jogador nos campeonatos (concluídos) de um mês.
+function mhRows(champs) {
+  const rows = {};
+  const row = n => rows[n] || (rows[n] = { played: 0, titles: 0, fullTitles: 0, goals: 0, art: 0, artFin: 0, finals: 0, pos: 0, neg: 0, scoredIn: 0 });
+  const top = o => { const mx = Math.max(0, ...Object.values(o)); return mx > 0 ? Object.keys(o).filter(n => o[n] === mx) : []; };
+  for (const c of champs) {
+    const rosters = c.teamRosters || {};
+    const inRoster = new Set(Object.values(rosters).flat());
+    for (const n of inRoster) row(n).played++;
+    for (const cp of (c.champion_players || [])) {
+      const n = String(cp?.name || '').trim();
+      if (!n) continue;
+      const w = cp.weight || 1;
+      row(n).titles += w;
+      if (w >= 1) row(n).fullTitles++;
+    }
+    const per = {}, fin = {};
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      const isFin = m.phase === 'final';
+      for (const g of ((isFin && m.finalGoals?.length) ? m.finalGoals : (m.goals || []))) {
+        per[g.player] = (per[g.player] || 0) + 1;
+        if (isFin) fin[g.player] = (fin[g.player] || 0) + 1;
+      }
+    }
+    for (const [n, v] of Object.entries(per)) row(n).goals += v;
+    for (const n of top(per)) row(n).art++;
+    for (const n of top(fin)) row(n).artFin++;
+    for (const n of inRoster) if ((per[n] || 0) >= 1) row(n).scoredIn++;
+    const fm = (c.matches || []).find(m => m.phase === 'final' && m.played);
+    if (fm) for (const n of new Set([...(rosters[fm.home] || []), ...(rosters[fm.away] || [])])) row(n).finals++;
+    const aw = getChampAwards(c);
+    for (const cat of ['pos', 'neg']) for (const [n, v] of (aw?.[cat]?.tally || [])) row(n)[cat] += v;
+  }
+  return rows;
+}
+// Um mês: se vale (`valid`), se já fechou (`closed`), os números de cada jogador e quem levou cada destaque.
+function mhBuildMonth(month, champs, gk) {
+  const nChamps = champs.length, valid = month >= MH_FIRST && nChamps >= MH_MIN_CHAMPS;
+  const mo = { month, nChamps, valid, closed: rivalMonthClosed(month), nFinals: 0, nVot: { pos: 0, neg: 0 }, rows: {}, leaders: {}, feats: {}, craque: null };
+  if (!valid) return mo;
+  mo.rows = mhRows(champs);
+  mo.nFinals = finalsEnabled() ? champs.filter(c => (c.matches || []).some(m => m.phase === 'final' && m.played)).length : 0;
+  for (const cat of ['pos', 'neg']) mo.nVot[cat] = champs.filter(c => c.voting?.[cat] && isVotingClosed(c)).length;
+  const eligible = Object.keys(mo.rows).filter(n => mo.rows[n].played >= MH_MIN_PLAYED);
+  const pt = (a, b) => a.localeCompare(b, 'pt');
+  for (const def of MH_LEADERS) {
+    if (def.needs === 'finals' && (!finalsEnabled() || mo.nFinals < MH_MIN_CHAMPS)) continue;
+    if ((def.needs === 'pos' || def.needs === 'neg') && (!votingUsed(def.needs) || mo.nVot[def.needs] < MH_MIN_VOTINGS)) continue;
+    let best = 0, names = [];
+    for (const n of eligible) {
+      if (def.field && gk.has(n)) continue;
+      const v = mo.rows[n][def.from];
+      if (v > best) { best = v; names = [n]; } else if (v === best && v > 0) names.push(n);
+    }
+    if (best >= MH_MIN_REPEAT) mo.leaders[def.id] = { names: names.sort(pt), value: best };
+  }
+  for (const def of MH_FEATS) {
+    const names = eligible.filter(n => !(def.field && gk.has(n)) && def.test(mo.rows[n], mo)).sort(pt);
+    if (names.length) mo.feats[def.id] = names;
+  }
+  const cnt = {};
+  for (const def of MH_LEADERS) if (!def.negative) for (const n of (mo.leaders[def.id]?.names || [])) cnt[n] = (cnt[n] || 0) + 1;
+  const topN = Math.max(0, ...Object.values(cnt));
+  if (topN >= 2) mo.craque = { names: Object.keys(cnt).filter(n => cnt[n] === topN).sort(pt), value: topN };
+  return mo;
+}
+// Todos os meses da liga e, por jogador, quantas vezes levou cada destaque (só meses válidos e já FECHADOS dão badge). Guardado até mudar a lista de campeonatos ou de jogadores, uma votação
+// fechar, o mês virar ou uma configuração mudar.
+let _mh = null;
+function getMonthHighlights() {
+  const key = [finalsEnabled() ? 1 : 0, votingUsed('pos') ? 1 : 0, votingUsed('neg') ? 1 : 0, localDate().slice(0, 7), brtMonth(), votingCacheKey()].join('|');
+  if (_mh && _mh.champs === st.champs && _mh.players === st.players && _mh.key === key) return _mh.data;
+  const gk = new Set((st.players || []).filter(p => p.goleiro).map(p => p.name));
+  const byMonthChamps = {};
+  for (const c of (st.champs || [])) {
+    if (c.status !== 'completed' || c.freeMode) continue;
+    const m = String(c.date || '').slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(m)) (byMonthChamps[m] || (byMonthChamps[m] = [])).push(c);
+  }
+  const months = Object.keys(byMonthChamps).sort().map(m => mhBuildMonth(m, byMonthChamps[m], gk));
+  const byPlayer = {};
+  const mine = n => byPlayer[n] || (byPlayer[n] = { n: {}, months: {}, hegemonia: false, dinastia: false });
+  const add = (n, id, month) => { const p = mine(n); p.n[id] = (p.n[id] || 0) + 1; (p.months[id] || (p.months[id] = [])).push(month); };
+  let streak = {}; // há quantos meses válidos seguidos cada um é o Maior Campeão do Mês (mês sem 3 campeonatos não conta nem quebra; mês válido sem ele quebra)
+  for (const x of months.filter(x => x.valid && x.closed)) {
+    for (const def of MH_LEADERS) for (const n of (x.leaders[def.id]?.names || [])) add(n, def.id, x.month);
+    for (const def of MH_FEATS) for (const n of (x.feats[def.id] || [])) add(n, def.id, x.month);
+    for (const n of (x.craque?.names || [])) add(n, 'craque', x.month);
+    const next = {};
+    for (const n of (x.leaders.campeao?.names || [])) {
+      next[n] = (streak[n] || 0) + 1;
+      if (next[n] >= 2) mine(n).hegemonia = true;
+      if (next[n] >= 3) mine(n).dinastia = true;
+    }
+    streak = next;
+  }
+  const data = { months, byMonth: Object.fromEntries(months.map(x => [x.month, x])), byPlayer };
+  _mh = { champs: st.champs, players: st.players, key, data };
+  return data;
+}
+const MH_EMPTY = { n: {}, months: {}, hegemonia: false, dinastia: false };
+// O que as conquistas do mês precisam saber de um jogador (entra nas contas das duas telas: a aba Meu Craque e o cache de todos os jogadores).
+function monthAwardStats(name) { return { mh: getMonthHighlights().byPlayer[name] || MH_EMPTY }; }
+// Quantas vezes um jogador levou a conquista do mês (0 se não for uma delas) e os meses em que levou.
+function mhTimes(name, badgeId) { const id = MH_BY_BADGE[badgeId]; return id ? (getMonthHighlights().byPlayer[name]?.n[id] || 0) : 0; }
+function mhMonthsOf(name, badgeId) { const id = MH_BY_BADGE[badgeId]; return id ? (getMonthHighlights().byPlayer[name]?.months[id] || []) : []; }
+// Na janela da conquista, ao lado do nome de quem a tem: quantas vezes e em quais meses (só nas conquistas do mês).
+function mhHolderNote(name, badgeId) {
+  const ms = mhMonthsOf(name, badgeId);
+  return ms.length ? ` <span style="font-size:11px;color:var(--text3);font-weight:700">${ms.length > 1 ? '×' + ms.length + ' · ' : ''}${ms.map(fmtMonth).join(', ')}</span>` : '';
+}
+// Os meses que têm destaques (válidos, fechados ou em andamento), do mais antigo ao mais novo; o escolhido na aba Ranking (o mais novo por padrão).
+function mhNavMonths() { return getMonthHighlights().months.filter(x => x.valid).map(x => x.month); }
+function mhSelected() { const nav = mhNavMonths(); return nav.includes(st.mhMonth) ? st.mhMonth : (nav[nav.length - 1] || ''); }
+function mhSetMonth(m) { st.mhMonth = m; render(); }
+// As linhas de um mês, na ordem em que aparecem no card e na imagem: o que o mês tem de destaque e de feito.
+function mhLines(mo) {
+  const out = [];
+  for (const def of MH_LEADERS) { const l = mo.leaders[def.id]; if (l) out.push({ emoji: def.emoji, label: def.short, names: l.names, value: mhValueText(def, l.value), negative: !!def.negative }); }
+  for (const def of MH_FEATS) { const l = mo.feats[def.id]; if (l?.length) out.push({ emoji: def.emoji, label: def.short, names: l, value: '', negative: false }); }
+  return out;
+}
+// O card "Destaques do mês" da aba Ranking: o mês escolhido (setas para os outros), quem levou cada destaque e o botão que gera a imagem para o Instagram.
+function mhRankingCard() {
+  if (!monthBadgesOn()) return '';
+  const nav = mhNavMonths();
+  if (!nav.length) return '';
+  const sel = mhSelected(), i = nav.indexOf(sel), mo = getMonthHighlights().byMonth[sel], lines = mhLines(mo);
+  const arrow = (to, ch, label) => `<button onclick="mhSetMonth('${to}')" ${to ? '' : 'disabled'} aria-label="${label}" style="width:30px;height:30px;border-radius:50%;border:1px solid var(--border);background:var(--s2);color:${to ? 'var(--text)' : 'var(--text3)'};font-size:14px;line-height:1;cursor:${to ? 'pointer' : 'default'};opacity:${to ? 1 : .4};font-family:inherit">${ch}</button>`;
+  const rowHtml = r => `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--border2)">
+      <span style="font-size:20px;line-height:1">${r.emoji}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">${esc(r.label)}</div><div style="font-size:14px;font-weight:700;overflow-wrap:anywhere">${r.names.map(esc).join(' · ')}</div></div>
+      ${r.value ? `<span style="font-weight:800;font-size:14px;color:${r.negative ? 'var(--danger)' : 'var(--gold)'};white-space:nowrap">${esc(r.value)}</span>` : ''}
+    </div>`;
+  return `<div class="card">
+    <div class="card-hdr"><span class="card-lbl">📅 Destaques de ${esc(monthLabel(sel))}</span>${mo.closed ? '' : '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#4DB8FF22;color:#4DB8FF">PARCIAL</span>'}</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px">
+      ${arrow(i > 0 ? nav[i - 1] : '', '◀', 'Mês anterior')}
+      <span style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--text2)">${fmtMonth(sel)} · ${mo.nChamps} campeonatos</span>
+      ${arrow(i < nav.length - 1 ? nav[i + 1] : '', '▶', 'Próximo mês')}
+      <button onclick="openMjDestaques('${sel}')" style="padding:6px 12px;border:none;border-radius:20px;background:var(--accent);color:#000;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">📤 Compartilhar</button>
+    </div>
+    ${mo.craque ? `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0b42914;border-top:1px solid var(--border2)"><span style="font-size:24px;line-height:1">👑</span><div><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Craque do Mês</div><div style="font-size:15px;font-weight:800;color:var(--gold)">${mo.craque.names.map(esc).join(' · ')} <span style="font-size:12px;font-weight:700;color:var(--text2)">· ${mo.craque.value} destaques</span></div></div></div>` : ''}
+    ${lines.length ? lines.map(rowHtml).join('') : '<p style="padding:12px;font-size:13px;color:var(--text3);border-top:1px solid var(--border2)">Ninguém chegou ao mínimo de um destaque neste mês.</p>'}
+    <p style="padding:9px 12px;font-size:11px;color:var(--text3);line-height:1.5;border-top:1px solid var(--border2)">${mo.closed ? 'Mês fechado: as conquistas do mês já foram entregues.' : 'Mês em andamento: os destaques mudam até o último dia e as conquistas saem quando o mês fecha.'} Vale o mês com 3 ou mais campeonatos, a partir de outubro de 2026.</p>
+  </div>`;
+}
+// Gera a imagem do card (Story 9:16 e Feed 4:5) do mês: a mesma janela do cartão do jogador (Compartilhar, Copiar legenda, Baixar).
+function mhShareData(month) {
+  const mo = getMonthHighlights().byMonth[month];
+  if (!mo || !mo.valid) return null;
+  return mjDestaquesData({ league: (st.availableLeagues || []).find(l => l.id === st.leagueId)?.name || '', month, monthName: monthLabel(month), partial: !mo.closed, rows: mhLines(mo), craque: mo.craque });
+}
+function openMjDestaques(month) {
+  const d = mhShareData(month || mhSelected());
+  if (!d || (!d.rows.length && !d.craque)) { toast('Este mês ainda não tem destaques para compartilhar.'); return; }
+  return openMjShare('destaques', d);
+}
+
 function mBadgeInfo() {
   const m = st.modal; if (m?.type !== 'badgeInfo') return '';
   const b = BADGE_CATALOG.find(x => x.id === m.id); if (!b) return '';
@@ -12516,7 +12798,7 @@ function mBadgeInfo() {
         ${holders.length > 0 ? `<div style="display:flex;flex-direction:column;gap:3px;max-height:190px;overflow-y:auto">
           ${holders.map((n,i) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;background:var(--s1)">
             <span style="font-size:10px;color:var(--text3);font-weight:700;min-width:16px;text-align:right">${i+1}</span>
-            <span style="font-size:13px;color:var(--text2);font-weight:500;flex:1">${esc(n)}</span>
+            <span style="font-size:13px;color:var(--text2);font-weight:500;flex:1">${esc(n)}${mhHolderNote(n, b.id)}</span>
           </div>`).join('')}
         </div>` : `<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px">Nenhum jogador conquistou ainda</div>`}
       </div>

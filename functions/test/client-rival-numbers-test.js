@@ -64,7 +64,7 @@ const CHAMPS = [
 // Carla: 3 camp., 9 jogos (3 V, 3 E, 3 D), 8 gols, 2 vezes artilheira, 1 título.  Gil (goleiro): 3 camp., 9 jogos (2 V, 3 E, 4 D), 0 gols, 1 título.  Éder: 1 camp., 2 jogos (0 V, 0 E, 2 D), 1 gol, 0 título.
 const RANKS = [['Ana', 1], ['Bruno', 3], ['Carla', 1], ['Gil', 1], ['Éder', 0]].map(([name, titles]) => ({ id: name === 'Éder' ? 'eder' : name.toLowerCase(), name, titles }));
 
-const statsApi = (players, champs) => { const env2 = { st: { players, champs, ranks: [], finMens: {}, finCfg: {} }, getChampAwards: () => null, computeAwardStats: () => ({ posAwards: 0, negAwards: 0, hasCarregado: false, hasCraqueTimePequeno: false }), getPaid: () => false, getPaidDate: () => null, h2hFlags: () => ({}), rivalPublicStats: () => ({}) }; const n2 = Object.keys(env2); return new Function(...n2, streakCode + '\n' + statsCode + '\nreturn { computePlayerBadgeStats };')(...n2.map(x => env2[x])); };
+const statsApi = (players, champs) => { const env2 = { st: { players, champs, ranks: [], finMens: {}, finCfg: {} }, getChampAwards: () => null, computeAwardStats: () => ({ posAwards: 0, negAwards: 0, hasCarregado: false, hasCraqueTimePequeno: false }), getPaid: () => false, getPaidDate: () => null, h2hFlags: () => ({}), rivalPublicStats: () => ({}), monthAwardStats: () => ({}) }; const n2 = Object.keys(env2); return new Function(...n2, streakCode + '\n' + statsCode + '\nreturn { computePlayerBadgeStats };')(...n2.map(x => env2[x])); };
 
 function makeEnv({ champs = CHAMPS, players = PLAYERS, ranks = RANKS, me = 'ana', sim = null, canShare = true, copyOk = true, storage = {}, patchStats = null, league = 'Série B Aceoma' } = {}) {
   const calls = { events: [], toasts: [], shared: [], clicks: [], revoked: [], canvases: [], copied: [], renders: 0 };

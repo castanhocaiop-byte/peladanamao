@@ -31,7 +31,7 @@ const GOLF = golfLine ? new Function('return (' + golfLine.trim().replace(/,$/, 
 
 // ── ambiente do aplicativo falso ─────────────────────────────────────────────────────────────────
 function makeStats(players, champs) {
-  const env = { st: { players, champs, ranks: [], finMens: {}, finCfg: {} }, getChampAwards: () => null, computeAwardStats: () => ({}), getPaid: () => false, getPaidDate: () => null, h2hFlags: () => ({}), rivalPublicStats: () => ({}) };
+  const env = { st: { players, champs, ranks: [], finMens: {}, finCfg: {} }, getChampAwards: () => null, computeAwardStats: () => ({}), getPaid: () => false, getPaidDate: () => null, h2hFlags: () => ({}), rivalPublicStats: () => ({}), monthAwardStats: () => ({}) };
   const names = Object.keys(env);
   return new Function(...names, streakCode + '\n' + statsCode + '\nreturn { goallessStreak, computePlayerBadgeStats };')(...names.map(n => env[n]));
 }
