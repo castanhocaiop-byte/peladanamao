@@ -1212,6 +1212,11 @@ const BADGE_CATALOG = [
   { id:'mes_cartao_ponto',  emoji:'📆', label:'Cartão Ponto',                         desc:'Esteve em todos os campeonatos do mês (mês com 3 ou mais)',           visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.cartao_ponto || 0) >= 1 },
   { id:'mes_marca_todas',   emoji:'🥅', label:'Marca Todas',                          desc:'Fez gol em todos os campeonatos que jogou no mês (3 ou mais)',        visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.marca_todas || 0) >= 1,   fieldOnly: true },
   { id:'mes_varreu',        emoji:'🧹', label:'Varreu o Mês',                         desc:'Foi campeão de todos os campeonatos do mês (mês com 3 ou mais)',      visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.varreu || 0) >= 1 },
+  { id:'mes_pe_quente',     emoji:'🔥', label:'Pé Quente do Mês',                     desc:'Melhor aproveitamento de pontos no mês (pelo menos 5 jogos)',         visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.pe_quente || 0) >= 1 },
+  { id:'mes_pe_frio',       emoji:'🥶', label:'Pé Frio do Mês',                       desc:'Pior aproveitamento de pontos no mês (pelo menos 5 jogos)',           visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.pe_frio || 0) >= 1 },
+  { id:'mes_invicto',       emoji:'🛡️', label:'Invicto do Mês',                       desc:'Não perdeu nenhum jogo no mês (pelo menos 5 jogos)',                  visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.invicto || 0) >= 1 },
+  { id:'mes_paredao',       emoji:'🧤', label:'Paredão do Mês',                       desc:'Goleiro que menos tomou gol por jogo no mês (pelo menos 5 jogos)',    visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.paredao || 0) >= 1,       gkOnly: true },
+  { id:'mes_pipoca',        emoji:'🍿', label:'Pipoca do Mês',                        desc:'Perdeu mais finais no mês (pelo menos 2)',                            visible: () => monthBadgesOn() && finalsEnabled(),                check: s => (s.mh?.n.pipoca || 0) >= 1 },
   { id:'mes_craque',        emoji:'👑', label:'Craque do Mês',                        desc:'Levou o maior número de destaques do mês (pelo menos 2)',             visible: () => monthBadgesOn(),                                   check: s => (s.mh?.n.craque || 0) >= 1 },
   { id:'mes_hegemonia',     emoji:'🔁', label:'Hegemonia',                            desc:'Maior Campeão do Mês em 2 meses seguidos',                            visible: () => monthBadgesOn(),                                   check: s => !!s.mh?.hegemonia },
   { id:'mes_dinastia',      emoji:'🏛️', label:'Dinastia',                             desc:'Maior Campeão do Mês em 3 meses seguidos',                            visible: () => monthBadgesOn(),                                   check: s => !!s.mh?.dinastia },
@@ -2300,6 +2305,16 @@ const MJ_KINDS = {
     file: { story: 'destaques-pelada-na-mao-story.png', feed: 'destaques-pelada-na-mao.png' }, draw: { feed: drawMjDestaquesCard, story: drawMjDestaquesStory },
     text: d => `Destaques de ${d.monthName} no Pelada na Mão 🏅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjDestaquesCaption(d),
   },
+  meumes: {
+    title: '📤 Meu mês', busy: 'Montando o seu mês…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Meu mês no Pelada na Mão', shareTitle: 'Meu mês no Pelada na Mão',
+    file: { story: 'meu-mes-pelada-na-mao-story.png', feed: 'meu-mes-pelada-na-mao.png' }, draw: { feed: drawMjMeuMesCard, story: drawMjMeuMesStory },
+    text: d => `Meu ${d.monthName} no Pelada na Mão ⚽📅 Faça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjMeuMesCaption(d),
+  },
+  comparativo: {
+    title: '📤 Meu mês × mês anterior', busy: 'Montando o comparativo…', fail: 'Não foi possível montar a imagem agora. Tente de novo.', alt: 'Meu mês contra o mês anterior no Pelada na Mão', shareTitle: 'Meu mês x o mês anterior no Pelada na Mão',
+    file: { story: 'evolucao-pelada-na-mao-story.png', feed: 'evolucao-pelada-na-mao.png' }, draw: { feed: drawMjComparativoCard, story: drawMjComparativoStory },
+    text: d => `Meu ${d.monthB} contra o ${d.monthA} no Pelada na Mão 📈 ${mjComparativoVerdict(d)}\nFaça a liga da sua pelada: ${MJ_CARD.LINK}`, caption: d => mjComparativoCaption(d),
+  },
 };
 const mjKindNow = () => (Object.prototype.hasOwnProperty.call(MJ_KINDS, _mjKind) ? MJ_KINDS[_mjKind] : MJ_KINDS.player);
 
@@ -2821,19 +2836,22 @@ const mjNamesText = (names, max = 3) => (names.length <= max ? names.join(' · '
 // sem foto de ninguém. Dourado no mês fechado e verde no parcial. Pura.
 function mjDestaquesData(s = {}) {
   const names = a => (Array.isArray(a) ? a : []).map(n => String(n).trim()).filter(Boolean);
-  const rows = (Array.isArray(s.rows) ? s.rows : []).filter(r => r && r.label).slice(0, 12)
-    .map(r => ({ emoji: String(r.emoji || '🏅'), label: String(r.label), value: String(r.value ?? ''), negative: !!r.negative, names: names(r.names) }))
+  const rows = (Array.isArray(s.rows) ? s.rows : []).filter(r => r && r.label).slice(0, 16)
+    .map(r => ({ emoji: String(r.emoji || '🏅'), label: String(r.label), value: String(r.value ?? ''), negative: !!r.negative, feat: !!r.feat, names: names(r.names) }))
     .filter(r => r.names.length).map(r => ({ ...r, who: mjNamesText(r.names) }));
   const cn = names(s.craque?.names);
   const craque = cn.length ? { names: cn, who: mjNamesText(cn), value: Math.max(0, Math.round(Number(s.craque.value) || 0)) } : null;
   const partial = !!s.partial, tier = partial ? 'common' : 'legendary';
   return { league: String(s.league || '').trim(), month: String(s.month || ''), monthName: String(s.monthName || '').trim() || 'mês', partial, rows, craque, tier, tone: MJ_TIERS[tier] };
 }
-// Cartão "Destaques do mês" (Feed 4:5): o mês, o Craque do Mês (se houver) e uma linha por destaque. As linhas se repartem entre o alto e o rodapé (no máximo 78 px cada) e o conjunto fica centralizado.
+// Cartão "Destaques do mês" (Feed 4:5): o mês, o Craque do Mês (se houver), uma linha por destaque ("o melhor") e, embaixo, uma linha compacta por feito (Cartão Ponto, Marca Todas…). Com mais de 9 linhas o alto
+// encolhe (mês menor, faixa do Craque mais baixa) para as linhas ficarem legíveis. As linhas se repartem entre o alto e o rodapé (no máximo 78 px cada) e o conjunto fica centralizado.
 function drawMjDestaquesCard(ctx, c, photoImg, logoImg, opts = {}) {
   const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.legendary, accent = tone.color;
   if (!opts.noBg) drawMjBackground(ctx, c, W, H, 330, 500);
   ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+  const leaders = c.rows.filter(r => !r.feat), feats = c.rows.filter(r => r.feat), compact = c.rows.length > 9;
+  const P = compact ? { titleY: 312, titleSize: 112, stripTop: 336, stripH: 84, gap: 16 } : { titleY: 352, titleSize: 150, stripTop: 400, stripH: 96, gap: 22 };
 
   // topo: logo, nome da liga, o que é e o mês
   if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
@@ -2843,22 +2861,34 @@ function drawMjDestaquesCard(ctx, c, photoImg, logoImg, opts = {}) {
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 34px ${MJ_BODY}`;
   ctx.fillText(c.partial ? 'DESTAQUES DO MÊS · PARCIAL' : 'DESTAQUES DO MÊS', cx, 214);
-  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.monthName.toUpperCase(), 940, 150, 80, MJ_HEAD, 400), cx, 352);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.monthName.toUpperCase(), 940, P.titleSize, 80, MJ_HEAD, 400), cx, P.titleY);
 
   // o Craque do Mês
-  let top = 400;
+  let top = P.stripTop;
   if (c.craque) {
-    ctx.fillStyle = 'rgba(240,180,41,0.14)'; mjRoundRect(ctx, 64, top, W - 128, 96, 24); ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = MJ_GOLD; mjRoundRect(ctx, 64, top, W - 128, 96, 24); ctx.stroke();
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 52px ${MJ_BODY}`; ctx.fillText('👑', 92, top + 50);
-    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_GOLD; ctx.font = `800 24px ${MJ_BODY}`; ctx.fillText(`CRAQUE DO MÊS · ${c.craque.value} DESTAQUES`, 170, top + 38);
-    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.craque.who, W - 170 - 96, 40, 26, MJ_BODY, 800), 170, top + 78);
-    top += 96 + 22;
+    const sh = P.stripH;
+    ctx.fillStyle = 'rgba(240,180,41,0.14)'; mjRoundRect(ctx, 64, top, W - 128, sh, 24); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = MJ_GOLD; mjRoundRect(ctx, 64, top, W - 128, sh, 24); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 ${compact ? 46 : 52}px ${MJ_BODY}`; ctx.fillText('👑', 92, top + sh / 2 + 2);
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_GOLD; ctx.font = `800 24px ${MJ_BODY}`; ctx.fillText(`CRAQUE DO MÊS · ${c.craque.value} DESTAQUES`, 170, top + sh * 0.4);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.craque.who, W - 170 - 96, compact ? 36 : 40, 26, MJ_BODY, 800), 170, top + sh * 0.8);
+    top += sh + P.gap;
   }
 
-  // as linhas: emoji, nome do destaque, quem levou e o número
-  const n = c.rows.length, bottom = 1180, rowH = n ? Math.min(78, Math.floor((bottom - top) / n)) : 78, y0 = top + Math.max(0, (bottom - top - n * rowH) / 2), k = Math.min(1, rowH / 78);
-  c.rows.forEach((r, i) => {
+  // os feitos, em linhas compactas no pé do cartão (nome do feito e quem cumpriu)
+  const featH = feats.length ? feats.length * 44 + 14 : 0, bottom = 1180 - featH;
+  feats.forEach((r, i) => {
+    const my = bottom + 14 + i * 44 + 22;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 30px ${MJ_BODY}`; ctx.fillText(r.emoji, 100, my + 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = `700 20px ${MJ_BODY}`;
+    const lab = r.label.toUpperCase(), lw = ctx.measureText(lab).width;
+    ctx.fillStyle = MJ_MUTED; ctx.fillText(lab, 140, my + 7);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, r.who, W - 92 - (140 + lw + 16), 26, 18, MJ_BODY, 800), 140 + lw + 16, my + 9);
+  });
+
+  // os destaques: emoji, nome do destaque, quem levou e o número
+  const n = leaders.length, rowH = n ? Math.min(78, Math.floor((bottom - top) / n)) : 78, y0 = top + Math.max(0, (bottom - top - n * rowH) / 2), k = Math.min(1, rowH / 78);
+  leaders.forEach((r, i) => {
     const y = y0 + i * rowH, my = y + rowH / 2, valW = r.value ? 250 : 0, maxW = W - 92 - 168 - valW;
     if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; mjRoundRect(ctx, 64, y + 3, W - 128, rowH - 6, 16); ctx.fill(); }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 ${Math.round(46 * k)}px ${MJ_BODY}`; ctx.fillText(r.emoji, 112, my + 2);
@@ -2873,6 +2903,128 @@ function drawMjDestaquesCard(ctx, c, photoImg, logoImg, opts = {}) {
   ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
 }
 function drawMjDestaquesStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjDestaquesCard, c, photoImg, logoImg, 330); }
+
+const MM_GOOD = '#00d67f', MM_BAD = '#ff7b72';
+const mjInitials = n => n.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '⚽';
+// Dados do cartão "Meu mês": os quadradinhos (nome, valor e uma linha de apoio) e os destaques do mês que o jogador levou (sem os negativos: quem compartilha escolhe o que mostra). A foto é a de quem
+// compartilha (o próprio perfil). Dourado no mês fechado e verde no parcial. Pura.
+function mjMeuMesData(s = {}) {
+  const name = String(s.name || '').trim() || 'Jogador';
+  const tiles = (Array.isArray(s.tiles) ? s.tiles : []).filter(t => t && t.label).slice(0, 10).map(t => ({ label: String(t.label), value: String(t.value ?? ''), sub: String(t.sub ?? '') }));
+  const badges = (Array.isArray(s.badges) ? s.badges : []).filter(b => b && b.emoji && b.label).slice(0, 20).map(b => ({ emoji: String(b.emoji), label: String(b.label) }));
+  const partial = !!s.partial, tier = partial ? 'common' : 'legendary';
+  return { name, league: String(s.league || '').trim(), photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '', initials: mjInitials(name),
+    monthName: String(s.monthName || '').trim() || 'mês', partial, tiles, badges, tier, tone: MJ_TIERS[tier] };
+}
+// Cartão "Meu mês" (Feed 4:5): foto, nome, o mês, os quadradinhos em 2 colunas e, embaixo, os destaques do mês (emojis e os primeiros nomes).
+function drawMjMeuMesCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.legendary, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 262, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+  mjAvatar(ctx, c, photoImg, cx, 262, 78, accent);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 30px ${MJ_BODY}`;
+  ctx.fillText(c.partial ? 'MEU MÊS · PARCIAL' : 'MEU MÊS', cx, 392);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.name.toUpperCase(), 920, 92, 52, MJ_HEAD, 400), cx, 480);
+  ctx.fillStyle = MJ_TEXT; ctx.fillText(mjFitText(ctx, c.monthName.toUpperCase(), 920, 40, 26, MJ_BODY, 700), cx, 534);
+
+  // os quadradinhos: 2 colunas, o último centralizado se a conta for ímpar
+  const n = c.tiles.length, hasB = c.badges.length > 0, top = 575, bottom = hasB ? 1030 : 1170, cols = 2, gap = 14, rows = Math.ceil(n / cols);
+  const tw = (W - 128 - gap) / cols, th = rows ? Math.min(118, Math.floor((bottom - top - (rows - 1) * gap) / rows)) : 118, gy = top + Math.max(0, (bottom - top - (rows * th + (rows - 1) * gap)) / 2);
+  c.tiles.forEach((t, i) => {
+    const col = i % cols, row = Math.floor(i / cols), inRow = Math.min(cols, n - row * cols);
+    const x = 64 + ((cols - inRow) * (tw + gap)) / 2 + col * (tw + gap), y = gy + row * (th + gap);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; mjRoundRect(ctx, x, y, tw, th, 20); ctx.fill();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, t.label.toUpperCase(), tw - 44, Math.max(16, Math.round(th * 0.2)), 14, MJ_BODY, 700), x + 22, y + Math.round(th * 0.3));
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, t.value, tw * 0.46, Math.round(th * 0.5), 26, MJ_HEAD, 400), x + 22, y + Math.round(th * 0.84));
+    if (t.sub) { ctx.textAlign = 'right'; ctx.fillStyle = MJ_MUTED; ctx.fillText(mjFitText(ctx, t.sub, tw * 0.5 - 22, Math.max(15, Math.round(th * 0.2)), 13, MJ_BODY, 600), x + tw - 22, y + Math.round(th * 0.84)); }
+  });
+
+  // os destaques do mês que o jogador levou
+  if (hasB) {
+    const shown = c.badges.slice(0, 12), more = c.badges.length - shown.length;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 24px ${MJ_BODY}`; ctx.fillText(c.partial ? 'LIDERANDO ATÉ AGORA' : 'DESTAQUES DO MÊS', cx, 1068);
+    const step = Math.min(78, 900 / (shown.length + (more ? 1 : 0))), x0 = cx - (step * (shown.length + (more ? 1 : 0) - 1)) / 2;
+    ctx.textBaseline = 'middle'; ctx.fillStyle = MJ_TEXT; ctx.font = `400 50px ${MJ_BODY}`;
+    shown.forEach((b, i) => ctx.fillText(b.emoji, x0 + i * step, 1118));
+    if (more) { ctx.fillStyle = accent; ctx.font = `800 36px ${MJ_BODY}`; ctx.fillText('+' + more, x0 + shown.length * step, 1120); }
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `600 26px ${MJ_BODY}`;
+    ctx.fillText(mjFitText(ctx, mjNamesText(c.badges.map(b => b.label)), 920, 26, 18, MJ_BODY, 600), cx, 1176);
+  }
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+function drawMjMeuMesStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjMeuMesCard, c, photoImg, logoImg, 262); }
+
+// Dados do cartão "Meu mês × mês anterior": as linhas (número, valor antes, valor agora, a variação e se melhorou, piorou ou ficou igual) e o placar. Dourado se melhorou em mais números do que piorou, azul se piorou
+// em mais e verde se empatou. Pura.
+function mjComparativoData(s = {}) {
+  const name = String(s.name || '').trim() || 'Jogador';
+  const rows = (Array.isArray(s.rows) ? s.rows : []).filter(r => r && r.label).slice(0, 13)
+    .map(r => ({ label: String(r.label), fa: String(r.fa ?? ''), fb: String(r.fb ?? ''), dText: String(r.dText ?? ''), verdict: ['better', 'worse'].includes(r.verdict) ? r.verdict : 'same' }));
+  const better = rows.filter(r => r.verdict === 'better').length, worse = rows.filter(r => r.verdict === 'worse').length, same = rows.length - better - worse;
+  const tier = better > worse ? 'legendary' : worse > better ? 'rare' : 'common';
+  return { name, league: String(s.league || '').trim(), photo: typeof s.photo === 'string' && /^https:\/\//i.test(s.photo) ? s.photo : '', initials: mjInitials(name),
+    monthA: String(s.monthA || '').trim() || 'mês anterior', monthB: String(s.monthB || '').trim() || 'mês', rows, better, worse, same, tier, tone: MJ_TIERS[tier] };
+}
+// O resumo do comparativo em primeira pessoa (o cartão e a legenda são de quem compartilha).
+function mjComparativoVerdict(d) {
+  const n = k => `${k} ${k === 1 ? 'número' : 'números'}`;
+  if (d.better > d.worse) return `Melhorei em ${n(d.better)}${d.worse ? ' e piorei em ' + d.worse : ''}!`;
+  if (d.worse > d.better) return `Piorei em ${n(d.worse)}${d.better ? ' e melhorei em ' + d.better : ''}`;
+  return d.better ? `Melhorei em ${d.better} e piorei em ${d.worse}: empate!` : 'Tudo igual ao mês anterior';
+}
+// Cartão "Meu mês × mês anterior" (Feed 4:5): foto, nome, os meses, o placar (melhoraram, pioraram, iguais) e a tabela com ▲ verde, ▼ vermelho e = cinza.
+function drawMjComparativoCard(ctx, c, photoImg, logoImg, opts = {}) {
+  const { W, H } = MJ_CARD, cx = W / 2, tone = c.tone || MJ_TIERS.common, accent = tone.color;
+  if (!opts.noBg) drawMjBackground(ctx, c, W, H, 262, 500);
+  ctx.lineWidth = 6; ctx.strokeStyle = accent; mjRoundRect(ctx, 24, 24, W - 48, H - 48, 44); ctx.stroke();
+  if (logoImg) ctx.drawImage(logoImg, 56, 44, 130, 130);
+  if (c.league) {
+    ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED;
+    ctx.fillText(mjFitText(ctx, c.league, 680, 38, 26, MJ_BODY, 700), W - 60, 124);
+  }
+  mjAvatar(ctx, c, photoImg, cx, 252, 66, accent);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent; ctx.font = `800 30px ${MJ_BODY}`;
+  ctx.fillText(mjFitText(ctx, `MEU MÊS · ${c.monthB} × ${c.monthA}`.toUpperCase(), 920, 30, 20, MJ_BODY, 800), cx, 366);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, c.name.toUpperCase(), 920, 76, 44, MJ_HEAD, 400), cx, 444);
+
+  // o placar: quantos números melhoraram, pioraram e ficaram iguais
+  const chips = [[`▲ ${c.better} ${c.better === 1 ? 'MELHOROU' : 'MELHORARAM'}`, MM_GOOD], [`▼ ${c.worse} ${c.worse === 1 ? 'PIOROU' : 'PIORARAM'}`, MM_BAD], [`= ${c.same} ${c.same === 1 ? 'IGUAL' : 'IGUAIS'}`, MJ_MUTED]];
+  ctx.font = `800 26px ${MJ_BODY}`;
+  const widths = chips.map(([t]) => ctx.measureText(t).width + 44), gap = 16, total = widths.reduce((s, w) => s + w, 0) + gap * 2;
+  let x = cx - total / 2;
+  chips.forEach(([t, col], i) => {
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; mjRoundRect(ctx, x, 480, widths[i], 54, 27); ctx.fill();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(t, x + widths[i] / 2, 508);
+    x += widths[i] + gap;
+  });
+
+  // a tabela: as linhas centradas entre o placar e o rodapé e, logo acima da primeira, o cabeçalho com os dois meses
+  const n = c.rows.length, top = 600, bottom = 1180, rowH = n ? Math.min(60, Math.floor((bottom - top) / n)) : 60, y0 = top + Math.max(0, (bottom - top - n * rowH) / 2), k = Math.min(1, rowH / 60);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_MUTED; ctx.font = `700 22px ${MJ_BODY}`;
+  ctx.fillText(c.monthA.slice(0, 3).toUpperCase(), 600, y0 - 14); ctx.fillText(c.monthB.slice(0, 3).toUpperCase(), 750, y0 - 14);
+  c.rows.forEach((r, i) => {
+    const y = y0 + i * rowH, my = y + rowH / 2, col = r.verdict === 'better' ? MM_GOOD : r.verdict === 'worse' ? MM_BAD : MJ_MUTED;
+    if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; mjRoundRect(ctx, 64, y + 2, W - 128, rowH - 4, 14); ctx.fill(); }
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, r.label, 400, Math.round(28 * k), 18, MJ_BODY, 700), 92, my + 1);
+    ctx.textAlign = 'center'; ctx.fillStyle = MJ_MUTED; ctx.fillText(mjFitText(ctx, r.fa, 130, Math.round(40 * k), 24, MJ_HEAD, 400), 600, my + 2);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(mjFitText(ctx, r.fb, 130, Math.round(46 * k), 26, MJ_HEAD, 400), 750, my + 2);
+    ctx.textAlign = 'right'; ctx.fillStyle = col; ctx.fillText(mjFitText(ctx, `${r.verdict === 'better' ? '▲ ' : r.verdict === 'worse' ? '▼ ' : ''}${r.dText}`, 170, Math.round(28 * k), 18, MJ_BODY, 800), W - 92, my + 1);
+  });
+
+  // rodapé: chamada para criar a liga
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = MJ_TEXT; ctx.font = `700 32px ${MJ_BODY}`; ctx.fillText('Crie a liga da sua pelada', cx, H - 114);
+  ctx.fillStyle = accent; ctx.font = `800 40px ${MJ_BODY}`; ctx.fillText('peladanamao.com.br', cx, H - 54);
+}
+function drawMjComparativoStory(ctx, c, photoImg, logoImg) { drawMjStoryOf(ctx, drawMjComparativoCard, c, photoImg, logoImg, 262); }
 
 // Carrega uma imagem (foto de perfil do Cloudinary precisa de CORS para o canvas poder exportar). Falhou ou demorou: null.
 function mjLoadImage(url) {
@@ -3036,6 +3188,13 @@ function mjRivalDuelCaption(d) {
 // A legenda dos destaques nunca leva nome de pessoa nem da liga (a imagem leva, e quem compartilha escolhe).
 function mjDestaquesCaption(d) {
   return `Destaques de ${d.monthName} na minha pelada 🏅⚽${d.partial ? ' (parcial)' : ''}\nMaior campeão, artilheiro, Xodó e mais: os números do mês num card só.\nCrie a liga da sua pelada: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+// A legenda do Meu mês e a do comparativo: só números e frases em primeira pessoa, sem nome de pessoa nem da liga.
+function mjMeuMesCaption(d) {
+  return `Meu ${d.monthName} no Pelada na Mão ⚽📅${d.partial ? ' (parcial)' : ''}\nPresença, jogos, gols, títulos e destaques do mês numa imagem só.\nCrie a liga da sua pelada: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
+}
+function mjComparativoCaption(d) {
+  return `Meu ${d.monthB} contra o ${d.monthA} no Pelada na Mão 📈\n${mjComparativoVerdict(d)}\nMelhorou ou piorou? Compare os seus meses: ${MJ_CARD.LINK}\n#pelada #futebolamador #peladanamao`;
 }
 async function copyMjCaption() {
   if (await pixCopyText(mjKindNow().caption(_mjData))) toast('Legenda copiada! Cole na publicação do Instagram.', 'ok');
@@ -8220,6 +8379,8 @@ function vMeuJogador() {
     name: myName, league: st.availableLeagues.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey], total: earnedBadges.length + lockedBadges.length,
     earned: mjByRarity(earnedBadges.map(b => ({ id: b.id, emoji: b.emoji, label: b.label, desc: b.desc, holders: getBadgeHolders(b.id).length, eligible: badgeEligibleCount(b) }))),
   } : null;
+  // Para compartilhar o Meu mês e o comparativo: só no próprio perfil (nunca na simulação do admin). Guarda só o nome, a liga e a foto.
+  st._mmShare = !isSimulating ? { name: myName, league: st.availableLeagues.find(l => l.id === st.leagueId)?.name, photo: st.photos?.[myKey] } : null;
 
   return `<div style="padding:14px">
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
@@ -8327,6 +8488,7 @@ function vMeuJogador() {
       </div>
       <div style="text-align:center;padding:0 14px 10px;font-size:11px;color:var(--text3)">${myMatchesPlayed} jogo${myMatchesPlayed>1?'s':''} no total${myMatchesPlayed>0?` · ${Math.round(myW/myMatchesPlayed*100)}% de aproveitamento`:''}</div>
     </div>`:''}
+    ${mmCard(myName, isSimulating)}
 
     ${(()=>{
       const rowS=(lbl,val,sub,color)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text2)">${lbl}</div>${sub?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${sub}</div>`:''}</div><span style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:${color}">${val}</span></div>`;
@@ -9020,7 +9182,7 @@ function mAdminPanel() {
           </div>
           <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">📅 Destaques do mês</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Todo mês fechado (com 3 ou mais campeonatos, a partir de outubro de 2026) a liga elege o Maior Campeão, o Artilheiro, o Xodó e outros destaques, entrega as conquistas do mês e mostra o card na aba Ranking, que qualquer jogador pode gerar como imagem para o Instagram. Desligados, as conquistas e o card somem para todo o grupo.</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Todo mês fechado (com 3 ou mais campeonatos, a partir de outubro de 2026) a liga elege o Maior Campeão, o Artilheiro, o Xodó e outros destaques, entrega as conquistas do mês, mostra o card na aba Ranking e o Meu mês e o comparativo na aba Meu Craque, que viram imagem para o Instagram. Desligados, as conquistas, o card, o Meu mês e o comparativo somem para todo o grupo.</div>
             <div style="display:flex;gap:8px">
               <button onclick="saveAppCfg({monthBadges:true})" style="${tog(cfg.monthBadges !== false)}">Ligados</button>
               <button onclick="saveAppCfg({monthBadges:false})" style="${tog(cfg.monthBadges === false)}">Desligados</button>
@@ -12590,9 +12752,10 @@ function mFinalGoals() {
    feito pelo menos MH_MIN_REPEAT vezes (senão, num mês de campeões diferentes, metade da liga seria "o maior campeão"); empate: todos levam; goleiro fica fora dos destaques de gol. O mês fecha como no
    Duelo do mês (rivalMonthClosed): só depois do último dia do mês e sem campeonato dele em andamento nem com a votação aberta; o mês em andamento aparece como PARCIAL e não dá badge. As 13 badges, o
    card da aba Ranking e a imagem do card (Story e Feed, pelo mesmo mecanismo do cartão do jogador) saem deste mesmo cálculo. Nada disso vai ao servidor. O admin pode desligar tudo (appCfg.monthBadges). */
-const MH_FIRST = '2026-10', MH_MIN_CHAMPS = 3, MH_MIN_PLAYED = 2, MH_MIN_REPEAT = 2, MH_MIN_VOTINGS = 2;
+const MH_FIRST = '2026-10', MH_MIN_CHAMPS = 3, MH_MIN_PLAYED = 2, MH_MIN_REPEAT = 2, MH_MIN_VOTINGS = 2, MH_MIN_GAMES = 5, MH_MIN_GOALKEEPERS = 2;
 function monthBadgesOn() { return st.appCfg?.monthBadges !== false; }
 // Os destaques "o melhor do mês": um número por jogador (`from`, um campo de mhRows), ganha quem tem o maior, com pelo menos MH_MIN_REPEAT. `field`: só jogador de linha. `needs`: depende de final ou de votação.
+// `rate`: o resultado em campo, que compara uma razão (aproveitamento de pontos 'apr', ou gols sofridos por jogo 'ga'; `best`: 'max' ou 'min') entre quem jogou pelo menos MH_MIN_GAMES jogos.
 const MH_LEADERS = [
   { id:'campeao',       badge:'mes_campeao',       emoji:'🏆', label:'Maior Campeão do Mês',                 short:'Maior Campeão',                 from:'titles', unit:['título','títulos'] },
   { id:'artilheiro',    badge:'mes_artilheiro',    emoji:'⚽', label:'Artilheiro do Mês',                    short:'Artilheiro',                    from:'goals',  unit:['gol','gols'], field:true },
@@ -12601,21 +12764,27 @@ const MH_LEADERS = [
   { id:'rei_finais',    badge:'mes_rei_finais',    emoji:'🏟️', label:'Rei das Finais do Mês',                short:'Rei das Finais',                from:'finals', unit:['final','finais'], needs:'finals' },
   { id:'xodo',          badge:'mes_xodo',          emoji:'🥰', label:'Xodó do Mês',                          short:'Xodó do Mês',                   from:'pos',    unit:['voto','votos'], needs:'pos' },
   { id:'perna_pau',     badge:'mes_perna_pau',     emoji:'🪵', label:'Perna de Pau do Mês',                  short:'Perna de Pau do Mês',           from:'neg',    unit:['voto','votos'], needs:'neg', negative:true },
+  { id:'pe_quente',     badge:'mes_pe_quente',     emoji:'🔥', label:'Pé Quente do Mês',                     short:'Pé Quente (aproveitamento)',    rate:'apr', best:'max', fmt:v => Math.round(v * 100) + '%' },
+  { id:'pe_frio',       badge:'mes_pe_frio',       emoji:'🥶', label:'Pé Frio do Mês',                       short:'Pé Frio (aproveitamento)',      rate:'apr', best:'min', fmt:v => Math.round(v * 100) + '%', negative:true },
+  { id:'paredao',       badge:'mes_paredao',       emoji:'🧤', label:'Paredão do Mês',                       short:'Paredão (gols sofridos)',       rate:'ga',  best:'min', fmt:v => mhNum2(v) + ' por jogo' },
+  { id:'pipoca',        badge:'mes_pipoca',        emoji:'🍿', label:'Pipoca do Mês',                        short:'Pipoca (finais perdidas)',      from:'finalsLost', unit:['final','finais'], needs:'finals', negative:true },
 ];
 // Os feitos do mês: quem cumprir leva, não precisa ser o melhor.
 const MH_FEATS = [
   { id:'cartao_ponto', badge:'mes_cartao_ponto', emoji:'📆', label:'Cartão Ponto', short:'Cartão Ponto', test:(r, m) => r.played === m.nChamps },
   { id:'marca_todas',  badge:'mes_marca_todas',  emoji:'🥅', label:'Marca Todas',  short:'Marca Todas',  field:true, test:r => r.played >= MH_MIN_CHAMPS && r.scoredIn === r.played },
   { id:'varreu',       badge:'mes_varreu',       emoji:'🧹', label:'Varreu o Mês', short:'Varreu o Mês', test:(r, m) => r.fullTitles === m.nChamps },
+  { id:'invicto',      badge:'mes_invicto',      emoji:'🛡️', label:'Invicto do Mês', short:'Invicto do Mês', test:r => r.matches >= MH_MIN_GAMES && r.l === 0 },
 ];
-const MH_BADGE_IDS = [...MH_LEADERS.map(d => d.badge), ...MH_FEATS.map(d => d.badge), 'mes_craque', 'mes_hegemonia', 'mes_dinastia'];
+const MH_BADGE_IDS = ['mes_campeao', 'mes_artilheiro', 'mes_rei_art', 'mes_rei_art_final', 'mes_rei_finais', 'mes_xodo', 'mes_perna_pau', 'mes_cartao_ponto', 'mes_marca_todas', 'mes_varreu', 'mes_pe_quente', 'mes_pe_frio', 'mes_invicto', 'mes_paredao', 'mes_pipoca', 'mes_craque', 'mes_hegemonia', 'mes_dinastia'];
 const MH_BY_BADGE = Object.fromEntries([...MH_LEADERS, ...MH_FEATS].map(d => [d.badge, d.id]).concat([['mes_craque', 'craque']]));
 const mhNum = v => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10).replace('.', ',')); // sem "½" nos textos de divulgação: 2,5
-const mhValueText = (def, v) => `${mhNum(v)} ${def.unit[Math.abs(v - 1) < 1e-9 ? 0 : 1]}`;
+const mhNum2 = v => String(Math.round(v * 100) / 100).replace('.', ','); // 2 casas, com vírgula
+const mhValueText = (def, v) => (def.fmt ? def.fmt(v) : `${mhNum(v)} ${def.unit[Math.abs(v - 1) < 1e-9 ? 0 : 1]}`);
 // Os números de cada jogador nos campeonatos (concluídos) de um mês.
 function mhRows(champs) {
   const rows = {};
-  const row = n => rows[n] || (rows[n] = { played: 0, titles: 0, fullTitles: 0, goals: 0, art: 0, artFin: 0, finals: 0, pos: 0, neg: 0, scoredIn: 0 });
+  const row = n => rows[n] || (rows[n] = { played: 0, titles: 0, fullTitles: 0, goals: 0, art: 0, artFin: 0, finals: 0, finalsLost: 0, pos: 0, neg: 0, scoredIn: 0, matches: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, cs: 0 });
   const top = o => { const mx = Math.max(0, ...Object.values(o)); return mx > 0 ? Object.keys(o).filter(n => o[n] === mx) : []; };
   for (const c of champs) {
     const rosters = c.teamRosters || {};
@@ -12642,11 +12811,41 @@ function mhRows(champs) {
     for (const n of top(fin)) row(n).artFin++;
     for (const n of inRoster) if ((per[n] || 0) >= 1) row(n).scoredIn++;
     const fm = (c.matches || []).find(m => m.phase === 'final' && m.played);
-    if (fm) for (const n of new Set([...(rosters[fm.home] || []), ...(rosters[fm.away] || [])])) row(n).finals++;
+    if (fm) {
+      for (const n of new Set([...(rosters[fm.home] || []), ...(rosters[fm.away] || [])])) row(n).finals++;
+      const win = fm.hs > fm.as ? fm.home : fm.as > fm.hs ? fm.away : (fm.penaltyWinner || ''); // final empatada: quem ganhou nos pênaltis
+      for (const n of (rosters[win ? (win === fm.home ? fm.away : fm.home) : ''] || [])) row(n).finalsLost++;
+    }
+    // os jogos do time de cada jogador (a mesma conta do Resumo de Jogos): vitórias, empates, derrotas, gols marcados e sofridos e jogos sem sofrer gol
+    const rec = {};
+    for (const m of (c.matches || [])) {
+      if (!m.played) continue;
+      for (const [team, gf, ga] of [[m.home, m.hs || 0, m.as || 0], [m.away, m.as || 0, m.hs || 0]]) {
+        const x = rec[team] || (rec[team] = { matches: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, cs: 0 });
+        x.matches++; x.gf += gf; x.ga += ga;
+        if (gf === ga) x.d++; else if (gf > ga) x.w++; else x.l++;
+        if (ga === 0) x.cs++;
+      }
+    }
+    for (const [team, roster] of Object.entries(rosters)) {
+      const x = rec[team];
+      if (x) for (const n of roster) { const r = row(n); r.matches += x.matches; r.w += x.w; r.d += x.d; r.l += x.l; r.gf += x.gf; r.ga += x.ga; r.cs += x.cs; }
+    }
     const aw = getChampAwards(c);
     for (const cat of ['pos', 'neg']) for (const [n, v] of (aw?.[cat]?.tally || [])) row(n)[cat] += v;
   }
   return rows;
+}
+// Entre `pool`, quem tem a menor (wantMin) ou a maior razão num/den; empate leva todos. Compara multiplicando em cruz, sem arredondar. Se a menor e a maior razão são iguais (todos empatados) ou há menos de 2
+// concorrentes, ninguém leva. Devolve { names, value } (value é a razão de quem levou).
+function mhRatePick(rows, pool, num, den, wantMin) {
+  if (pool.length < 2) return null;
+  const less = (x, y) => num(rows[x]) * den(rows[y]) < num(rows[y]) * den(rows[x]);
+  let lo = pool[0], hi = pool[0];
+  for (const n of pool) { if (less(n, lo)) lo = n; if (less(hi, n)) hi = n; }
+  if (!less(lo, hi)) return null;
+  const target = wantMin ? lo : hi;
+  return { names: pool.filter(n => !less(n, target) && !less(target, n)), value: num(rows[target]) / den(rows[target]) };
 }
 // Um mês: se vale (`valid`), se já fechou (`closed`), os números de cada jogador e quem levou cada destaque.
 function mhBuildMonth(month, champs, gk) {
@@ -12658,7 +12857,15 @@ function mhBuildMonth(month, champs, gk) {
   for (const cat of ['pos', 'neg']) mo.nVot[cat] = champs.filter(c => c.voting?.[cat] && isVotingClosed(c)).length;
   const eligible = Object.keys(mo.rows).filter(n => mo.rows[n].played >= MH_MIN_PLAYED);
   const pt = (a, b) => a.localeCompare(b, 'pt');
+  // resultado em campo: o melhor e o pior aproveitamento de pontos (vitória 3, empate 1) e o goleiro que menos tomou gol por jogo (só com pelo menos MH_MIN_GOALKEEPERS goleiros concorrendo)
+  const rated = eligible.filter(n => mo.rows[n].matches >= MH_MIN_GAMES), keepers = rated.filter(n => gk.has(n));
   for (const def of MH_LEADERS) {
+    if (def.rate) {
+      const pick = def.rate === 'apr' ? mhRatePick(mo.rows, rated, r => 3 * r.w + r.d, r => 3 * r.matches, def.best === 'min')
+        : (keepers.length >= MH_MIN_GOALKEEPERS ? mhRatePick(mo.rows, keepers, r => r.ga, r => r.matches, def.best === 'min') : null);
+      if (pick) mo.leaders[def.id] = { names: pick.names.sort(pt), value: pick.value };
+      continue;
+    }
     if (def.needs === 'finals' && (!finalsEnabled() || mo.nFinals < MH_MIN_CHAMPS)) continue;
     if ((def.needs === 'pos' || def.needs === 'neg') && (!votingUsed(def.needs) || mo.nVot[def.needs] < MH_MIN_VOTINGS)) continue;
     let best = 0, names = [];
@@ -12732,7 +12939,7 @@ function mhSetMonth(m) { st.mhMonth = m; render(); }
 function mhLines(mo) {
   const out = [];
   for (const def of MH_LEADERS) { const l = mo.leaders[def.id]; if (l) out.push({ emoji: def.emoji, label: def.short, names: l.names, value: mhValueText(def, l.value), negative: !!def.negative }); }
-  for (const def of MH_FEATS) { const l = mo.feats[def.id]; if (l?.length) out.push({ emoji: def.emoji, label: def.short, names: l, value: '', negative: false }); }
+  for (const def of MH_FEATS) { const l = mo.feats[def.id]; if (l?.length) out.push({ emoji: def.emoji, label: def.short, names: l, value: '', negative: false, feat: true }); }
   return out;
 }
 // O card "Destaques do mês" da aba Ranking: o mês escolhido (setas para os outros), quem levou cada destaque e o botão que gera a imagem para o Instagram.
@@ -12770,6 +12977,143 @@ function openMjDestaques(month) {
   const d = mhShareData(month || mhSelected());
   if (!d || (!d.rows.length && !d.craque)) { toast('Este mês ainda não tem destaques para compartilhar.'); return; }
   return openMjShare('destaques', d);
+}
+
+/* ── Meu mês e Comparativo entre meses (item 42, entrega 2) ───────────────────────────────────────────────────────────────────
+   Na aba Meu Craque, o card "Meu mês" mostra os números do jogador num mês que vale (os mesmos meses dos destaques): presença, jogos, aproveitamento, títulos, gols, artilharias, finais e votos; o goleiro vê os
+   gols sofridos. O "Comparativo" põe o mês escolhido ao lado do mês anterior, número por número, com ▲ (melhorou), ▼ (piorou) ou = (igual); em derrotas, votos de Bola Murcha e gols sofridos, menos é melhor.
+   Só compara mês fechado com mês fechado e só se o jogador jogou pelo menos MH_MIN_PLAYED campeonatos nos dois. As duas viram imagem (Story e Feed) pelo mesmo mecanismo do cartão do jogador, só no PRÓPRIO
+   perfil (nunca na simulação do admin). Tudo é calculado no aparelho com os mesmos números dos destaques; nada vai ao servidor. O interruptor do admin dos destaques do mês também esconde estes dois. */
+// Os meses em que o jogador tem números (mês que vale e com pelo menos 1 campeonato dele), do mais antigo ao mais novo; o escolhido (o mais novo por padrão).
+function mmNavMonths(name) { return getMonthHighlights().months.filter(x => x.valid && (x.rows[name]?.played || 0) >= 1).map(x => x.month); }
+function mmSelected(name) { const nav = mmNavMonths(name); return nav.includes(st.mmMonth) ? st.mmMonth : (nav[nav.length - 1] || ''); }
+function mmSetMonth(m) { st.mmMonth = m; render(); }
+function mmSetMode(mode) { st.mmMode = mode === 'comparar' ? 'comparar' : 'mes'; render(); }
+// Os números de UM jogador num mês (null se o mês não vale ou ele não jogou): presença, jogos, aproveitamento de pontos, gols, finais, votos, gols sofridos e os destaques do mês que ele levou.
+function mhPlayerMonth(name, month) {
+  const mo = getMonthHighlights().byMonth[month], r = mo?.rows[name];
+  if (!mo || !mo.valid || !r || r.played < 1) return null;
+  const per = (a, b) => (b ? a / b : null);
+  const won = [];
+  for (const def of MH_LEADERS) if ((mo.leaders[def.id]?.names || []).includes(name)) won.push({ id: def.id, emoji: def.emoji, label: def.label, negative: !!def.negative });
+  for (const def of MH_FEATS) if ((mo.feats[def.id] || []).includes(name)) won.push({ id: def.id, emoji: def.emoji, label: def.label, negative: false });
+  if ((mo.craque?.names || []).includes(name)) won.push({ id: 'craque', emoji: '👑', label: 'Craque do Mês', negative: false });
+  return { month, closed: mo.closed, nChamps: mo.nChamps, nFinals: mo.nFinals, nVot: mo.nVot, isGK: !!(st.players || []).find(p => p.name === name)?.goleiro, played: r.played, pres: Math.round(r.played / mo.nChamps * 100),
+    matches: r.matches, w: r.w, d: r.d, l: r.l, apr: per(3 * r.w + r.d, 3 * r.matches), titles: r.titles, goals: r.goals, gpj: per(r.goals, r.matches), art: r.art, artFin: r.artFin, finals: r.finals, finalsLost: r.finalsLost,
+    pos: r.pos, neg: r.neg, ga: r.ga, gapj: per(r.ga, r.matches), cs: r.cs, won };
+}
+// Os quadradinhos do Meu mês (os mesmos no card da aba e na imagem): o que não se aplica (final, votação, goleiro × linha) não aparece.
+function mmTiles(pm) {
+  const t = [{ key: 'pres', label: 'Presença', value: pm.pres + '%', sub: `${pm.played} de ${pm.nChamps} campeonatos` }];
+  if (pm.matches) t.push({ key: 'jogos', label: 'Jogos', value: String(pm.matches), sub: `${pm.w}V · ${pm.d}E · ${pm.l}D` }, { key: 'apr', label: 'Aproveitamento', value: Math.round(pm.apr * 100) + '%', sub: 'dos pontos' });
+  t.push({ key: 'titles', label: 'Títulos', value: mhNum(pm.titles), sub: '' });
+  if (!pm.isGK) t.push({ key: 'goals', label: 'Gols', value: String(pm.goals), sub: pm.matches ? mhNum2(pm.gpj) + ' por jogo' : '' }, { key: 'art', label: 'Artilharias', value: String(pm.art), sub: 'como artilheiro' });
+  else if (pm.matches) t.push({ key: 'ga', label: 'Gols sofridos', value: String(pm.ga), sub: mhNum2(pm.gapj) + ' por jogo' }, { key: 'cs', label: 'Sem sofrer gol', value: String(pm.cs), sub: pm.cs === 1 ? 'jogo' : 'jogos' });
+  if (pm.nFinals >= 1) t.push({ key: 'finals', label: 'Finais', value: String(pm.finals), sub: pm.finalsLost ? `${pm.finalsLost} perdida${pm.finalsLost === 1 ? '' : 's'}` : '' });
+  if (pm.nVot.pos >= 1) t.push({ key: 'pos', label: 'Bola Cheia', value: String(pm.pos), sub: pm.pos === 1 ? 'voto' : 'votos' });
+  if (pm.nVot.neg >= 1) t.push({ key: 'neg', label: 'Bola Murcha', value: String(pm.neg), sub: pm.neg === 1 ? 'voto' : 'votos' });
+  return t;
+}
+// Os números que o comparativo põe lado a lado: `dir` 1 = quanto mais, melhor; -1 = quanto menos, melhor. `always`: a linha aparece mesmo com os dois meses em zero. `pp`: diferença em pontos (de percentagem).
+// `field`: só jogador de linha; `gk`: só goleiro; `needs`: só se os dois meses têm final ou votação.
+const MH_COMPARE = [
+  { key: 'pres', label: 'Presença', get: p => p.pres, fmt: v => v + '%', dir: 1, pp: true, always: true },
+  { key: 'apr', label: 'Aproveitamento', get: p => (p.apr == null ? null : Math.round(p.apr * 100)), fmt: v => v + '%', dir: 1, pp: true, always: true },
+  { key: 'w', label: 'Vitórias', get: p => p.w, dir: 1, always: true },
+  { key: 'l', label: 'Derrotas', get: p => p.l, dir: -1, always: true },
+  { key: 'titles', label: 'Títulos', get: p => p.titles, fmt: mhNum, dir: 1 },
+  { key: 'goals', label: 'Gols', get: p => p.goals, dir: 1, field: true },
+  { key: 'gpj', label: 'Gols por jogo', get: p => (p.gpj == null ? null : Math.round(p.gpj * 100) / 100), fmt: mhNum2, dec: true, dir: 1, field: true },
+  { key: 'art', label: 'Artilharias', get: p => p.art, dir: 1, field: true },
+  { key: 'gapj', label: 'Gols sofridos por jogo', get: p => (p.gapj == null ? null : Math.round(p.gapj * 100) / 100), fmt: mhNum2, dec: true, dir: -1, gk: true, always: true },
+  { key: 'cs', label: 'Jogos sem sofrer gol', get: p => p.cs, dir: 1, gk: true },
+  { key: 'finals', label: 'Finais disputadas', get: p => p.finals, dir: 1, needs: 'finals' },
+  { key: 'pos', label: 'Votos de Bola Cheia', get: p => p.pos, dir: 1, needs: 'pos' },
+  { key: 'neg', label: 'Votos de Bola Murcha', get: p => p.neg, dir: -1, needs: 'neg' },
+];
+// O mês escolhido (monthB) contra o mês anterior que vale (monthA): { ok: true, rows, better, worse, same } ou { ok: false, why } (sem mês anterior, mês ainda aberto, ou jogou menos de MH_MIN_PLAYED campeonatos).
+function mhCompare(name, monthB) {
+  const hs = getMonthHighlights(), valid = hs.months.filter(x => x.valid).map(x => x.month), i = valid.indexOf(monthB);
+  const monthA = i > 0 ? valid[i - 1] : '';
+  const no = why => ({ ok: false, why, monthA, monthB });
+  if (!monthA) return no('sem-anterior');
+  if (!hs.byMonth[monthA].closed || !hs.byMonth[monthB].closed) return no('parcial');
+  const a = mhPlayerMonth(name, monthA), b = mhPlayerMonth(name, monthB);
+  if (!a || a.played < MH_MIN_PLAYED) return no('poucos-a');
+  if (!b || b.played < MH_MIN_PLAYED) return no('poucos-b');
+  const rows = [];
+  for (const def of MH_COMPARE) {
+    if ((def.field && b.isGK) || (def.gk && !b.isGK)) continue;
+    if (def.needs === 'finals' && !(a.nFinals >= 1 && b.nFinals >= 1)) continue;
+    if ((def.needs === 'pos' || def.needs === 'neg') && !(a.nVot[def.needs] >= 1 && b.nVot[def.needs] >= 1)) continue;
+    const va = def.get(a), vb = def.get(b);
+    if (va == null || vb == null || (!def.always && va === 0 && vb === 0)) continue;
+    const d = Math.round((vb - va) * 100) / 100, fmt = def.fmt || String;
+    rows.push({ key: def.key, label: def.label, fa: fmt(va), fb: fmt(vb), delta: d, verdict: d === 0 ? 'same' : (def.dir * d > 0 ? 'better' : 'worse'),
+      dText: d === 0 ? '=' : (d > 0 ? '+' : '−') + (def.pp ? mhNum(Math.abs(d)) + ' pts' : (def.dec ? mhNum2(Math.abs(d)) : mhNum(Math.abs(d)))) });
+  }
+  const count = v => rows.filter(r => r.verdict === v).length;
+  return { ok: true, monthA, monthB, rows, better: count('better'), worse: count('worse'), same: count('same'), isGK: b.isGK };
+}
+// Por que o comparativo não sai (o texto do card da aba).
+function mmWhy(cmp) {
+  if (cmp.why === 'sem-anterior') return 'Este é o primeiro mês com destaques: ainda não há mês anterior para comparar.';
+  if (cmp.why === 'parcial') return 'O comparativo só sai com os dois meses fechados: este mês ainda está em andamento.';
+  if (cmp.why === 'poucos-a') return `Você jogou menos de ${MH_MIN_PLAYED} campeonatos em ${monthLabel(cmp.monthA)}: sem base para comparar.`;
+  if (cmp.why === 'poucos-b') return `Você jogou menos de ${MH_MIN_PLAYED} campeonatos em ${monthLabel(cmp.monthB)}: sem base para comparar.`;
+  return '';
+}
+// O card da aba Meu Craque: o mês escolhido (setas), as duas visões (Meu mês e Comparar com o mês anterior) e o botão que gera a imagem (só no próprio perfil).
+function mmCard(name, simulating) {
+  if (!monthBadgesOn()) return '';
+  const nav = mmNavMonths(name);
+  if (!nav.length) return '';
+  const sel = mmSelected(name), i = nav.indexOf(sel), pm = mhPlayerMonth(name, sel), compare = st.mmMode === 'comparar', cmp = compare ? mhCompare(name, sel) : null;
+  const arrow = (to, ch, label) => `<button onclick="mmSetMonth('${to}')" ${to ? '' : 'disabled'} aria-label="${label}" style="width:30px;height:30px;border-radius:50%;border:1px solid var(--border);background:var(--s2);color:${to ? 'var(--text)' : 'var(--text3)'};font-size:14px;line-height:1;cursor:${to ? 'pointer' : 'default'};opacity:${to ? 1 : .4};font-family:inherit">${ch}</button>`;
+  const seg = (mode, label) => { const on = (mode === 'comparar') === compare; return `<button onclick="mmSetMode('${mode}')" aria-pressed="${on}" style="flex:1;padding:8px 6px;border-radius:10px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? '#00d67f18' : 'var(--s2)'};color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">${label}</button>`; };
+  const tile = t => `<div style="padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--s2)"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">${esc(t.label)}</div><div style="font-size:22px;font-weight:800;line-height:1.15;margin-top:3px">${esc(t.value)}</div>${t.sub ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(t.sub)}</div>` : ''}</div>`;
+  const share = (fn, label) => (!simulating && st._mmShare ? `<div style="padding:4px 12px 12px"><button onclick="${fn}()" style="width:100%;padding:11px;border:none;border-radius:20px;background:var(--accent);color:#000;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">${label}</button></div>` : '');
+  let body;
+  if (!compare) {
+    body = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 10px">${mmTiles(pm).map(tile).join('')}</div>
+      ${pm.won.length ? `<div style="padding:2px 12px 10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">${pm.closed ? 'Destaques do mês' : 'Liderando até agora'}</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${pm.won.map(w => `<span style="padding:4px 9px;border-radius:14px;background:${w.negative ? '#ff5c5c18' : '#f0b42918'};border:1px solid ${w.negative ? '#ff5c5c40' : '#f0b42940'};font-size:12px;font-weight:700">${w.emoji} ${esc(w.label)}</span>`).join('')}</div></div>` : ''}
+      ${share('openMjMeuMes', '📤 Compartilhar meu mês')}`;
+  } else if (!cmp.ok) {
+    body = `<p style="padding:6px 14px 14px;font-size:13px;color:var(--text3);line-height:1.5">${esc(mmWhy(cmp))}</p>`;
+  } else {
+    const col = v => (v === 'better' ? 'var(--accent)' : v === 'worse' ? 'var(--danger)' : 'var(--text3)');
+    const chip = (txt, c) => `<span style="padding:5px 10px;border-radius:14px;background:var(--s2);border:1px solid var(--border2);font-size:12px;font-weight:800;color:${c}">${txt}</span>`;
+    body = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px">${chip(`▲ ${cmp.better} ${cmp.better === 1 ? 'melhorou' : 'melhoraram'}`, 'var(--accent)')}${chip(`▼ ${cmp.worse} ${cmp.worse === 1 ? 'piorou' : 'pioraram'}`, 'var(--danger)')}${chip(`= ${cmp.same} ${cmp.same === 1 ? 'igual' : 'iguais'}`, 'var(--text3)')}</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--border2);font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px"><span style="flex:1">Número</span><span style="width:54px;text-align:right">${esc(fmtMonth(cmp.monthA).slice(0, 3))}</span><span style="width:54px;text-align:right">${esc(fmtMonth(cmp.monthB).slice(0, 3))}</span><span style="width:84px;text-align:right">Variação</span></div>
+      ${cmp.rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border2)"><span style="flex:1;font-size:13px;font-weight:600">${esc(r.label)}</span><span style="width:54px;text-align:right;font-size:13px;color:var(--text3)">${esc(r.fa)}</span><span style="width:54px;text-align:right;font-size:14px;font-weight:700">${esc(r.fb)}</span><span style="width:84px;text-align:right;font-size:12px;font-weight:800;color:${col(r.verdict)}">${r.verdict === 'better' ? '▲ ' : r.verdict === 'worse' ? '▼ ' : ''}${esc(r.dText)}</span></div>`).join('')}
+      <p style="padding:8px 12px;font-size:11px;color:var(--text3);line-height:1.5;border-top:1px solid var(--border2)">▲ melhorou · ▼ piorou · = igual. Em derrotas, votos de Bola Murcha e gols sofridos, menos é melhor (por isso "▲ −1" nas derrotas é uma melhora).</p>
+      ${share('openMjComparativo', '📤 Compartilhar o comparativo')}`;
+  }
+  return `<div class="card" style="margin-top:0">
+    <div class="card-hdr"><span class="card-lbl">📅 Meu mês · ${esc(monthLabel(sel))}</span>${pm.closed ? '' : '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#4DB8FF22;color:#4DB8FF">PARCIAL</span>'}</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px">
+      ${arrow(i > 0 ? nav[i - 1] : '', '◀', 'Mês anterior')}
+      <span style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--text2)">${fmtMonth(sel)} · ${pm.nChamps} campeonatos</span>
+      ${arrow(i < nav.length - 1 ? nav[i + 1] : '', '▶', 'Próximo mês')}
+    </div>
+    <div style="display:flex;gap:8px;padding:0 12px 10px">${seg('mes', 'Meu mês')}${seg('comparar', 'Comparar com o mês anterior')}</div>
+    ${body}
+  </div>`;
+}
+// Gera a imagem (Story 9:16 e Feed 4:5) do Meu mês ou do comparativo do mês escolhido: só no próprio perfil (st._mmShare vem da aba, nunca na simulação do admin).
+function openMjMeuMes() {
+  const base = st._mmShare;
+  if (!base) return;
+  const month = mmSelected(base.name), pm = mhPlayerMonth(base.name, month);
+  if (!pm) { toast('Você não tem números neste mês.'); return; }
+  return openMjShare('meumes', mjMeuMesData({ name: base.name, league: base.league, photo: base.photo, monthName: monthLabel(month), partial: !pm.closed, tiles: mmTiles(pm), badges: pm.won.filter(w => !w.negative) }));
+}
+function openMjComparativo() {
+  const base = st._mmShare;
+  if (!base) return;
+  const cmp = mhCompare(base.name, mmSelected(base.name));
+  if (!cmp.ok) { toast('Ainda não dá para comparar este mês.'); return; }
+  return openMjShare('comparativo', mjComparativoData({ name: base.name, league: base.league, photo: base.photo, monthA: monthLabel(cmp.monthA), monthB: monthLabel(cmp.monthB), rows: cmp.rows }));
 }
 
 function mBadgeInfo() {

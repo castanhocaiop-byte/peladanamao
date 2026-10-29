@@ -555,8 +555,8 @@ const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s
     const sem = ocultas();
     const metade = cat.filter(b => b.visible && /showHalfTitles/.test(String(b.visible))).map(b => b.id);
     const novas = [...sem].filter(id => !com.has(id)).sort();
-    const DO_MES = ['mes_rei_art_final', 'mes_rei_finais']; // as duas conquistas do mês (item 42) ligadas às finais
-    check('liga sem final: as conquistas que somem são EXATAMENTE as 11 da final + as de ½ título (4) + as 2 do mês ligadas às finais, e mais nenhuma', JSON.stringify(novas) === JSON.stringify([...FINAL_IDS, ...metade, ...DO_MES].sort()) && metade.length === 4, { novas, metade });
+    const DO_MES = ['mes_rei_art_final', 'mes_rei_finais', 'mes_pipoca']; // as três conquistas do mês (item 42) ligadas às finais
+    check('liga sem final: as conquistas que somem são EXATAMENTE as 11 da final + as de ½ título (4) + as 3 do mês ligadas às finais, e mais nenhuma', JSON.stringify(novas) === JSON.stringify([...FINAL_IDS, ...metade, ...DO_MES].sort()) && metade.length === 4, { novas, metade });
     check('as 11 conquistas da final existem no catálogo e cada uma tem regra de visibilidade (nenhuma esquecida)', FINAL_IDS.every(id => cat.some(b => b.id === id && typeof b.visible === 'function')), FINAL_IDS.filter(id => !cat.some(b => b.id === id && b.visible)));
     E.st.appCfg.hasFinais = true;
     check('liga com final (como sempre): as 11 estão visíveis (a de votação, com a votação ligada)', FINAL_IDS.every(id => cat.find(b => b.id === id).visible()), FINAL_IDS.filter(id => !cat.find(b => b.id === id).visible()));
