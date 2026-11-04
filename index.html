@@ -6338,7 +6338,7 @@ function renderChamp(champ, editable=false) {
               <span style="display:inline-flex;margin-right:2px">${playerAvatar(n, 20)}</span>
               ${rbHtml}
               <span style="font-size:13px;font-weight:500;color:var(--text2);flex:1">${esc(n)}</span>
-              ${canRemove?`<button onclick="event.stopPropagation();removeFromRoster('${champ.id}','${tid}','${n.replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:12px;padding:0 2px;line-height:1" title="Remover">✕</button>`:''}
+              ${canRemove?`<button onclick="event.stopPropagation();removeFromRoster('${champ.id}','${tid}','${esc(n.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:12px;padding:0 2px;line-height:1" title="Remover">✕</button>`:''}
             </div>`;}).join('')}
           </div>`;
           }).join('');
@@ -12609,14 +12609,20 @@ function renderGoalPickers() {
   const homeMap=m.homeGoalMap||{};
   const awayMap=m.awayGoalMap||{};
   const allActive=st.players.filter(p=>!p.somenteChurrasco).map(p=>p.name);
-  const jEsc=s=>s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  // "+ Emprestado": só quem está nos OUTROS times do campeonato (nem no time da vez, nem no adversário), em ordem alfabética. Campeonato sem elenco nenhum registrado: todos os cadastrados
+  // (não há outro jeito de apontar quem jogou). Quem não está em time nenhum (chegou depois do sorteio) entra no elenco pelo card Elencos.
+  const hasRosters=Object.values(rosters).some(r=>(r||[]).length);
+  const lendable=(hasRosters
+    ? [...new Set(Object.entries(rosters).filter(([t])=>t!==m.home&&t!==m.away).flatMap(([,r])=>r||[]))]
+    : allActive).sort((a,b)=>a.localeCompare(b,'pt'));
+  const jEsc=s=>esc(s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")); // vai dentro de onclick="...": escapa para o JS (barra e apóstrofo) e para o atributo HTML (aspas, & e <)
   const btnS=`width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:17px;font-weight:300;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;font-family:inherit`;
 
   const renderSide=(roster,map,partic,color,label,side,score,oppositeRoster)=>{
     const empWithGoals=Object.keys(map).filter(n=>!roster.includes(n));
     const empParticNoGoal=Object.keys(partic||{}).filter(n=>!map[n]&&!roster.includes(n));
     const empShown=new Set([...empWithGoals,...empParticNoGoal]);
-    const others=[...oppositeRoster,...allActive.filter(n=>!roster.includes(n)&&!oppositeRoster.includes(n))].filter(n=>!empShown.has(n));
+    const others=lendable.filter(n=>!roster.includes(n)&&!oppositeRoster.includes(n)&&!empShown.has(n));
     const total=Object.values(map).reduce((s,v)=>s+v,0);
     const gap=score-total;
 
