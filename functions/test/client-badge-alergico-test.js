@@ -21,7 +21,7 @@ function slice(from, to) {
   return html.slice(a, b);
 }
 const streakCode = slice('function goallessStreak(chron, name) {', 'function getPlayerRarestBadge(');
-const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()');
+const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()') + '\n' + slice('// Quantos jogos de um campeonato o jogador fez "emprestado"', 'function champPlayerGames(champ, name) {'); // a conta das conquistas + a conta de "emprestado" que ela usa (champBorrowedCount)
 
 // ── a linha do catálogo, executada de verdade (só o objeto: o `check` não depende de mais nada) ──
 const entryLine = (html.match(/^ {2}\{ id:'alergico_gol'.*\},$/m) || [])[0];

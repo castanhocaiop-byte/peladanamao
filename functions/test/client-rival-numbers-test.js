@@ -26,7 +26,7 @@ const eligCode = slice('function badgeEligibleCount(b) {', 'function goallessStr
 const keyCode = slice('const playerKey = name =>', '\n\n');
 const escCode = slice('const esc = s =>', 'function toast(');
 const streakCode = slice('function goallessStreak(chron, name) {', 'function getPlayerRarestBadge(');
-const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()');
+const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()') + '\n' + slice('// Quantos jogos de um campeonato o jogador fez "emprestado"', 'function champPlayerGames(champ, name) {'); // a conta das conquistas + a conta de "emprestado" que ela usa (champBorrowedCount)
 
 // ── contexto de desenho falso: guarda o que foi desenhado e mede texto como "0,5 × tamanho da fonte por letra" ──
 function fakeCtx() {

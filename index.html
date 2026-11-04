@@ -6332,6 +6332,7 @@ function renderChamp(champ, editable=false) {
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
                 <span style="font-size:11px;font-weight:800;color:${tc.c};letter-spacing:.5px;text-transform:uppercase">${tc.l}</span>
                 ${teamStars?`<span style="font-size:11px;color:var(--gold);font-weight:600">${starsText(teamStars)}★</span>`:''}
+                ${canRemove?`<button onclick="event.stopPropagation();openAddRoster('${champ.id}','${tid}')" title="Adicionar jogador a este time" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:50%;width:20px;height:20px;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:0;font-family:inherit">+</button>`:''}
               </div>
             ${roster.map(n=>{const rb=getPlayerRarestBadge(n);const rbHtml=rb?(rb.icon?`<span style="display:inline-flex;align-items:center;width:14px;height:14px;flex-shrink:0" title="${esc(rb.label)}">${rb.icon}</span>`:`<span style="font-size:12px;line-height:1;flex-shrink:0" title="${esc(rb.label)}">${rb.emoji}</span>`):'';return`<div style="display:flex;align-items:center;gap:4px;padding:2px 0">
               <span style="display:inline-flex;margin-right:2px">${playerAvatar(n, 20)}</span>
@@ -6343,6 +6344,7 @@ function renderChamp(champ, editable=false) {
           }).join('');
         })()}
       </div>
+      ${canRemove?`<div style="padding:10px 14px;border-top:1px solid var(--border2)"><button onclick="openAddRoster('${champ.id}')" style="padding:7px 14px;border-radius:20px;border:1px solid var(--accent);background:#00d67f18;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ Adicionar jogador ao elenco</button><div style="font-size:11px;color:var(--text3);margin-top:5px">Para quem chegou depois do sorteio.</div></div>`:''}
     </details>`;
   }
 
@@ -8153,13 +8155,7 @@ function vMeuJogador() {
       for (const m of teamMs2) { const isFin=m.phase==='final'; const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]); for(const g of gs) if(g.player===myName) gCount++; }
       if (gCount / teamMs2.length > 1.0) hasMachineChamp = true;
     }
-    let borrowed = 0;
-    for (const m of (champ.matches||[])) {
-      if (!m.played) continue;
-      if ((m.participants||[]).some(p => p.player===myName)) { borrowed++; continue; }
-      const isFin=m.phase==='final'; const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);
-      if (gs.some(g => g.player===myName) && myTeam2 && m.home!==myTeam2 && m.away!==myTeam2) borrowed++;
-    }
+    const borrowed = champBorrowedCount(champ, myName, myTeam2);
     if (borrowed > maxBorrowedMatches) maxBorrowedMatches = borrowed;
   }
   let hasArtLastPlace = false;
@@ -9311,7 +9307,7 @@ function render() {
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
   if(isAdmin()&&(st.view==='players'||st.view==='history')) loadPushInfo(); // 🔔 do Elenco e lista de quem falta votar: busca (no máximo a cada 5 min) quantos aparelhos cada conta tem
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mRenamePlayer()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mRenamePlayer()+mAddRoster()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -9770,7 +9766,7 @@ function computePlayerBadgeStats(name) {
   let maxGoalsSingleGame=0,hatTrickFinalWin=false,hatTrickFinalLoss=false;
   for(const champ of done){let champGoals=0,myChampTeam=null;if(champ.teamRosters)for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){myChampTeam=t;break;}}for(const m of(champ.matches||[])){if(!m.played)continue;const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);const mc={};for(const g of gs){mc[g.player]=(mc[g.player]||0)+1;if(g.player===name)champGoals++;}const myGIM=mc[name]||0;if(myGIM>=3)hatTricks++;if(myGIM>maxGoalsSingleGame)maxGoalsSingleGame=myGIM;if(isFin&&myGIM>=3){const wasChH=(champ.champion_players||[]).some(p=>p.name.trim()===name);if(wasChH)hatTrickFinalWin=true;else hatTrickFinalLoss=true;}}if(champGoals>maxGoalsSingleChamp)maxGoalsSingleChamp=champGoals;const wasChamp=(champ.champion_players||[]).some(p=>p.name.trim()===name);if(wasChamp&&myChampTeam){const hadL=(champ.matches||[]).some(m=>m.played&&((m.home===myChampTeam&&m.hs<m.as)||(m.away===myChampTeam&&m.as<m.hs)));if(!hadL)hasUndefeatedTitle=true;}if(wasChamp&&isGK){const fin=(champ.matches||[]).find(m=>m.phase==='final'&&m.played);if(fin&&fin.hs===fin.as)penaltyChamp=true;}if(isGK&&myChampTeam){const tms=(champ.matches||[]).filter(m=>m.played&&(m.home===myChampTeam||m.away===myChampTeam));if(tms.length>0){const cs=tms.filter(m=>m.home===myChampTeam?(m.as||0)===0:(m.hs||0)===0).length;if(cs/tms.length>=0.7)hasCleanSheetChamp=true;}}}
   let hasMachineChamp=false,maxBorrowedMatches=0;
-  for(const champ of done){if(!champ.teamRosters)continue;let myTeam2=null;for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){myTeam2=t;break;}}const tms2=myTeam2?(champ.matches||[]).filter(m=>m.played&&(m.home===myTeam2||m.away===myTeam2)):[];if(!isGK&&myTeam2&&tms2.length>0){let gc=0;for(const m of tms2){const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs)if(g.player===name)gc++;}if(gc/tms2.length>1.0)hasMachineChamp=true;}let bor=0;for(const m of(champ.matches||[])){if(!m.played)continue;if((m.participants||[]).some(p=>p.player===name)){bor++;continue;}const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);if(gs.some(g=>g.player===name)&&myTeam2&&m.home!==myTeam2&&m.away!==myTeam2)bor++;}if(bor>maxBorrowedMatches)maxBorrowedMatches=bor;}
+  for(const champ of done){if(!champ.teamRosters)continue;let myTeam2=null;for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){myTeam2=t;break;}}const tms2=myTeam2?(champ.matches||[]).filter(m=>m.played&&(m.home===myTeam2||m.away===myTeam2)):[];if(!isGK&&myTeam2&&tms2.length>0){let gc=0;for(const m of tms2){const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs)if(g.player===name)gc++;}if(gc/tms2.length>1.0)hasMachineChamp=true;}const bor=champBorrowedCount(champ,name,myTeam2);if(bor>maxBorrowedMatches)maxBorrowedMatches=bor;}
   let hasArtLastPlace=false;
   for(const champ of done){if(!champ.teamRosters)continue;let mt3=null;for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){mt3=t;break;}}if(!mt3)continue;const regMs=(champ.matches||[]).filter(m=>m.played&&m.phase==='regular');if(!regMs.length)continue;const pts={};for(const[t]of Object.entries(champ.teamRosters))pts[t]=0;for(const m of regMs){if(m.hs>m.as){pts[m.home]=(pts[m.home]||0)+3;}else if(m.as>m.hs){pts[m.away]=(pts[m.away]||0)+3;}else{pts[m.home]=(pts[m.home]||0)+1;pts[m.away]=(pts[m.away]||0)+1;}}const minPts=Math.min(...Object.values(pts));if(!Object.entries(pts).filter(([,p])=>p===minPts).map(([t])=>t).includes(mt3))continue;const gm={};for(const m of(champ.matches||[])){if(!m.played)continue;const isFin=m.phase==='final';const gs=(isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);for(const g of gs)gm[g.player]=(gm[g.player]||0)+1;}const myG=gm[name]||0;if(!myG)continue;if(myG>=Math.max(...Object.values(gm))){hasArtLastPlace=true;break;}}
   let hasViceStreak3=false;{let vs=0;for(const c of doneChron){const fin=(c.matches||[]).find(m=>m.phase==='final'&&m.played);if(!fin){vs=0;continue;}const wt=fin.hs>fin.as?fin.home:fin.as>fin.hs?fin.away:null;const lt=wt?(fin.home===wt?fin.away:fin.home):null;if(!lt){vs=0;continue;}if((c.teamRosters?.[lt]||[]).includes(name)){vs++;if(vs>=3){hasViceStreak3=true;break;}}else vs=0;}}
@@ -9969,6 +9965,21 @@ function computeNewBadgesInChamp(champId) {
     if (gained.length) result[name] = gained;
   }
   return result;
+}
+
+// Quantos jogos de um campeonato o jogador fez "emprestado" (fora do time do elenco dele): os jogos em que consta como participante, sem gol, de um time que NÃO é o dele
+// (`myTeam`: o time dele no elenco, ou null se ele não está em elenco nenhum) e os jogos de outros times em que fez gol. Quem foi marcado como emprestado no PRÓPRIO time e
+// depois entrou no elenco dele (item 43) deixa de contar como emprestado nesses jogos.
+function champBorrowedCount(champ, name, myTeam) {
+  let n = 0;
+  for (const m of (champ.matches||[])) {
+    if (!m.played) continue;
+    const ownSide = p => !!myTeam && ((p.team==='home' && m.home===myTeam) || (p.team==='away' && m.away===myTeam));
+    if ((m.participants||[]).some(p => p.player===name && !ownSide(p))) { n++; continue; }
+    const isFin = m.phase==='final', gs = (isFin&&m.finalGoals?.length)?m.finalGoals:(m.goals||[]);
+    if (gs.some(g => g.player===name) && myTeam && m.home!==myTeam && m.away!==myTeam) n++;
+  }
+  return n;
 }
 
 function champPlayerGames(champ, name) {
@@ -12373,6 +12384,138 @@ async function removeFromRoster(champId, teamId, playerName) {
   newRosters[teamId]=(newRosters[teamId]||[]).filter(n=>n!==playerName);
   try { await ldoc(`championships/${champId}`).update({teamRosters:newRosters}); toast('Removido do elenco','ok'); }
   catch(e) { toast('Erro: '+(e?.message||e)); }
+}
+
+/* ── Jogador que chegou depois do sorteio (item 43) ─────────────────────────────────────────────────────────────────────────────
+   O elenco de cada time é montado no sorteio. Quem chega depois (não confirmou presença ou veio atrasado) entra pelo admin, no card "👥 Elencos" do campeonato (em andamento
+   ou já concluído): passa a valer como elenco do time no campeonato INTEIRO, como todo o elenco (os jogos que o time já tinha feito antes de ele chegar também contam; quem só
+   jogou alguns jogos continua como "emprestado" nesses). Só o admin. Grava só aquele time (arrayUnion: não sobrescreve o resto do elenco nem mexe nos jogos). O convidado
+   (sem cadastro) entra como no sorteio: só o nome, só neste campeonato. Quem já tinha sido marcado como "emprestado" no próprio time deixa de contar como emprestado nesses
+   jogos (champBorrowedCount). Nada disso vai ao servidor além da gravação do elenco, que o app já fazia ao tirar alguém do time. */
+const ROSTER_NAME_MAX = 40;
+const rosterNorm = s => playerKey(String(s || ''));
+const champRosterNames = champ => Object.values(champ?.teamRosters || {}).flat();
+// Os jogadores cadastrados que podem entrar: fora de todos os times do campeonato e que jogam (os "só churrasco" não); os ativos primeiro. `query` filtra por trecho do nome (sem acento nem maiúscula).
+function rosterCandidates(champ, query = '') {
+  const inRoster = new Set(champRosterNames(champ).map(rosterNorm));
+  const q = rosterNorm(query);
+  return (st.players || [])
+    .filter(p => p.name && !p.somenteChurrasco && !inRoster.has(rosterNorm(p.name)) && (!q || rosterNorm(p.name).includes(q)))
+    .map(p => ({ name: p.name, active: p.active !== false, goleiro: !!p.goleiro }))
+    .sort((a, b) => (a.active === b.active ? a.name.localeCompare(b.name, 'pt') : (a.active ? -1 : 1)));
+}
+// Confere se dá para pôr `rawName` no time `teamId` do campeonato: { ok, name, guest } ou { ok: false, why, team? }. Quem já tem cadastro entra com a grafia do cadastro.
+function rosterAddCheck(champ, teamId, rawName) {
+  if (!champ?.teamRosters || !Object.keys(champ.teamRosters).length) return { ok: false, why: 'sem-elenco' };
+  if (!/^[A-Za-z0-9_-]+$/.test(String(teamId || '')) || !(champ.teams || []).includes(teamId)) return { ok: false, why: 'sem-time' };
+  const typed = String(rawName || '').replace(/\s+/g, ' ').trim(), key = rosterNorm(typed);
+  if (!typed || !key) return { ok: false, why: 'sem-nome' };
+  if (typed.length > ROSTER_NAME_MAX) return { ok: false, why: 'nome-grande' };
+  for (const [t, r] of Object.entries(champ.teamRosters)) if ((r || []).some(n => rosterNorm(n) === key)) return { ok: false, why: 'ja-esta', team: t };
+  const registered = (st.players || []).find(p => p.name && rosterNorm(p.name) === key);
+  return { ok: true, name: registered ? registered.name : typed, guest: !registered };
+}
+const ROSTER_WHY = { 'sem-elenco': 'Este campeonato não tem elenco registrado.', 'sem-time': 'Escolha o time.', 'sem-nome': 'Escolha o jogador.', 'nome-grande': `O nome pode ter no máximo ${ROSTER_NAME_MAX} letras.` };
+const rosterModalChamp = () => st.champs.find(c => c.id === st.modal?.champId);
+const rosterTeamGames = (champ, teamId) => (champ?.matches || []).filter(x => x.played && (x.home === teamId || x.away === teamId)).length;
+
+function openAddRoster(champId, teamId = '') {
+  if (!isAdmin()) return;
+  const champ = st.champs.find(c => c.id === champId);
+  if (!champ?.teamRosters || !Object.keys(champ.teamRosters).length) return;
+  st.modal = { type: 'addRoster', champId, teamId: (champ.teams || []).includes(teamId) ? teamId : '', name: '', guest: false, query: '', cands: rosterCandidates(champ).map(p => p.name) };
+  render();
+}
+// As três partes do modal que mudam quando se escolhe algo (a lista, os times e o rodapé): atualizadas no lugar, sem redesenhar o modal (a busca não perde o foco nem a lista a rolagem).
+function refreshAddRoster() {
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  set('ar-list', rosterListHtml()); set('ar-teams', rosterTeamsHtml()); set('ar-foot', rosterFootHtml());
+}
+function rosterSearch(value) {
+  const m = st.modal; if (m?.type !== 'addRoster') return;
+  m.query = String(value || '');
+  if (m.guest && rosterNorm(m.name) !== rosterNorm(m.query)) { m.name = ''; m.guest = false; } // o convidado escolhido era o texto antigo
+  refreshAddRoster();
+}
+function pickRosterIdx(i) {
+  const m = st.modal; if (m?.type !== 'addRoster' || !m.cands?.[i]) return;
+  m.name = m.cands[i]; m.guest = false; refreshAddRoster();
+}
+function pickRosterGuest() {
+  const m = st.modal; if (m?.type !== 'addRoster') return;
+  const typed = String(m.query || '').replace(/\s+/g, ' ').trim();
+  if (!typed) return;
+  m.name = typed; m.guest = true; refreshAddRoster();
+}
+function pickRosterTeam(teamId) {
+  const m = st.modal; if (m?.type !== 'addRoster') return;
+  m.teamId = teamId; refreshAddRoster();
+}
+async function confirmAddRoster() {
+  const m = st.modal; if (m?.type !== 'addRoster' || m.busy) return;
+  if (!isAdmin() || !DB) return;
+  const champ = rosterModalChamp();
+  const chk = rosterAddCheck(champ, m.teamId, m.name);
+  if (!chk.ok) { toast(chk.why === 'ja-esta' ? `${m.name} já está no elenco do time ${(T[chk.team] || { l: chk.team }).l}.` : ROSTER_WHY[chk.why]); return; }
+  m.busy = true;
+  try {
+    await ldoc(`championships/${champ.id}`).update({ [`teamRosters.${m.teamId}`]: firebase.firestore.FieldValue.arrayUnion(chk.name) });
+    st.modal = null; render();
+    toast(`${chk.name} entrou no elenco do time ${(T[m.teamId] || { l: m.teamId }).l}.`, 'ok');
+  } catch (e) { m.busy = false; toast('Erro: ' + (e?.message || e)); }
+}
+// A lista de quem pode entrar (com a busca) e, se o texto digitado não é de ninguém cadastrado, a opção de convidado. Guarda os nomes mostrados em m.cands (o toque escolhe pelo número).
+function rosterListHtml() {
+  const m = st.modal, champ = rosterModalChamp();
+  const list = rosterCandidates(champ, m.query), typed = String(m.query || '').replace(/\s+/g, ' ').trim(), key = rosterNorm(typed);
+  m.cands = list.map(p => p.name);
+  const taken = !!key && champRosterNames(champ).some(n => rosterNorm(n) === key);
+  const known = (st.players || []).find(p => p.name && key && rosterNorm(p.name) === key);
+  const rowS = sel => `width:100%;display:flex;align-items:center;gap:8px;padding:9px 10px;border:none;border-bottom:1px solid var(--border2);background:${sel ? '#00d67f18' : 'none'};color:var(--text);font-size:14px;text-align:left;cursor:pointer;font-family:inherit`;
+  const check = `<span style="color:var(--accent);font-weight:800">✓</span>`;
+  let h = list.map((p, i) => {
+    const sel = !m.guest && m.name === p.name;
+    return `<button onclick="pickRosterIdx(${i})" style="${rowS(sel)}">${playerAvatar(p.name, 22)}<span style="flex:1;font-weight:${sel ? 700 : 500}">${esc(p.name)}${p.goleiro ? ' 🧤' : ''}</span>${p.active ? '' : '<span style="font-size:10px;font-weight:700;color:var(--text3)">inativo</span>'}${sel ? check : ''}</button>`;
+  }).join('');
+  if (typed && !known && !taken) {
+    const sel = m.guest && rosterNorm(m.name) === key;
+    h += `<button onclick="pickRosterGuest()" style="${rowS(sel)}"><span style="font-size:16px;width:22px;text-align:center">➕</span><span style="flex:1;font-weight:600">Convidado: “${esc(typed)}” <span style="font-size:11px;font-weight:500;color:var(--text3)">(sem cadastro)</span></span>${sel ? check : ''}</button>`;
+  }
+  if (!h) h = `<p style="padding:12px;font-size:13px;color:var(--text3);line-height:1.5">${taken ? 'Esse jogador já está em um time deste campeonato.' : known?.somenteChurrasco ? 'Esse jogador está como "só churrasco" no cadastro: ele não joga.' : 'Ninguém para escolher: todos os jogadores já estão em um time.'}</p>`;
+  return h;
+}
+function rosterTeamsHtml() {
+  const m = st.modal, champ = rosterModalChamp();
+  return (champ?.teams || []).map(tid => {
+    const t = T[tid] || { l: tid, c: '#8B949E' }, sel = m.teamId === tid, n = (champ.teamRosters?.[tid] || []).length;
+    return `<button onclick="pickRosterTeam('${tid}')" style="padding:8px 12px;border-radius:20px;border:1.5px solid ${sel ? t.c : 'var(--border)'};background:${sel ? t.c + '22' : 'none'};color:${sel ? t.c : 'var(--text2)'};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${esc(t.l)} <span style="font-weight:500;opacity:.7">${n}</span></button>`;
+  }).join('');
+}
+// O rodapé: o aviso de que o time já jogou (esses jogos também contam para quem entra), a nota do convidado e o botão.
+function rosterFootHtml() {
+  const m = st.modal, champ = rosterModalChamp(), t = T[m.teamId] || { l: m.teamId, c: 'var(--accent)' };
+  const ready = !!(m.name && m.teamId), played = ready ? rosterTeamGames(champ, m.teamId) : 0;
+  const warn = played ? `<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:#FF8A3C14;border:1px solid #FF8A3C40;font-size:12px;line-height:1.5;color:var(--text2)">⚠️ O time ${esc(t.l)} já jogou <strong>${played} partida${played > 1 ? 's' : ''}</strong>. Como o elenco vale o campeonato inteiro, ${played > 1 ? 'elas também contam' : 'ela também conta'} para ${esc(m.name)}. Se ele só jogou alguns jogos, deixe-o como emprestado nesses jogos.</div>` : '';
+  const guest = ready && m.guest ? `<p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.5">Convidado: não tem cadastro e fica só neste campeonato.</p>` : '';
+  return `${warn}${guest}<button onclick="confirmAddRoster()" ${ready ? '' : 'disabled'} style="width:100%;padding:12px;border-radius:10px;border:none;background:${ready ? 'var(--accent)' : 'var(--s2)'};color:${ready ? '#000' : 'var(--text3)'};font-size:14px;font-weight:700;cursor:${ready ? 'pointer' : 'default'};font-family:inherit">${ready ? `Adicionar ${esc(m.name)} ao time ${esc(t.l)}` : 'Escolha o jogador e o time'}</button>`;
+}
+function mAddRoster() {
+  const m = st.modal;
+  if (!m || m.type !== 'addRoster') return '';
+  const inp = `width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:15px`;
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">➕ Adicionar ao elenco</div>
+      <p style="font-size:12px;color:var(--text3);line-height:1.5;margin:0 0 12px">Para quem chegou depois do sorteio. Ele passa a contar como jogador do time neste campeonato.</p>
+      <input type="text" placeholder="Buscar jogador ou digitar o nome de um convidado" value="${esc(m.query || '')}" oninput="rosterSearch(this.value)" style="${inp}" autocomplete="off">
+      <div id="ar-list" style="margin-top:8px;max-height:210px;overflow-y:auto;border:1px solid var(--border2);border-radius:10px">${rosterListHtml()}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text3);margin:14px 0 6px">Em qual time?</div>
+      <div id="ar-teams" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${rosterTeamsHtml()}</div>
+      <div id="ar-foot">${rosterFootHtml()}</div>
+      <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:10px;border:none;background:none;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;font-family:inherit">Cancelar</button>
+    </div>
+  </div>`;
 }
 
 function editMatchGoals(champId, matchId) {

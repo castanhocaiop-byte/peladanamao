@@ -24,7 +24,7 @@ const eligCode = slice('function badgeEligibleCount(b) {', 'function goallessStr
 const keyCode = slice('const playerKey = name =>', '\n\n');
 const escCode = slice('const esc = s =>', 'function toast(');
 const streakCode = slice('function goallessStreak(chron, name) {', 'function getPlayerRarestBadge(');
-const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()');
+const statsCode = slice('function computePlayerBadgeStats(name) {', 'function getBadgeCache()') + '\n' + slice('// Quantos jogos de um campeonato o jogador fez "emprestado"', 'function champPlayerGames(champ, name) {'); // a conta das conquistas + a conta de "emprestado" que ela usa (champBorrowedCount)
 const h2hCode = slice('function h2hAgainstAll(champs, name) {', '// Quem mais ganhou de `name`'); // h2hAgainstAll + h2hFlags: o código REAL do frente a frente
 const pubCode = slice('function rivalPublicStats(name) {', 'const rivalAward =');          // o cadastro público do rival, no formato das contas das conquistas
 
