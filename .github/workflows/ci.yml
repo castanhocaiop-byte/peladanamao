@@ -275,6 +275,10 @@ jobs:
         working-directory: functions
         run: node test/client-knockout-reseed-test.js
 
+      - name: Testes do app (quem perdeu pênalti na final com os jogadores emprestados - elenco, emprestados já marcados e lista + Emprestado, o lado de cada um, Baggio e Salvo pelos companheiros pelo time que ele defendeu, ranking e manual)
+        working-directory: functions
+        run: node test/client-penalty-misses-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.

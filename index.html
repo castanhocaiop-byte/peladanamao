@@ -8289,8 +8289,7 @@ function vMeuJogador() {
   for (const champ of doneAll) {
     const fin = (champ.matches||[]).find(m => m.phase==='final' && m.played && m.penaltyWinner && (m.penaltyMissedBy||[]).includes(myName));
     if (!fin) continue;
-    let pTeam = null;
-    if (champ.teamRosters) { for (const [t,r] of Object.entries(champ.teamRosters)) { if (r.includes(myName)) { pTeam=t; break; } } }
+    const pTeam = penaltyMissTeam(champ, fin, myName);   // o time que ele defendeu na final (o emprestado vale pelo lado em que bateu)
     if (!pTeam) continue;
     if (pTeam === fin.penaltyWinner) hasSalvoCompanheiros++;
     else hasBaggio++;
@@ -9838,7 +9837,7 @@ function computePlayerBadgeStats(name) {
   const colorsPlayed=new Set(),colorsWon=new Set();
   for(const champ of doneAll){if(!champ.teamRosters)continue;for(const[color,roster]of Object.entries(champ.teamRosters)){if(!roster.includes(name))continue;colorsPlayed.add(color);const cpW=(champ.champion_players||[]).find(p=>p.name.trim()===name);if(cpW&&(cpW.weight||1)>=1)colorsWon.add(color);}}
   let hasViouSaf=false;{const chron=[...doneAll].reverse();for(let i=0;i<chron.length-1;i++){const cA=chron[i],cB=chron[i+1];if(!cA.teamRosters)continue;let tA=null;for(const[t,r]of Object.entries(cA.teamRosters)){if(r.includes(name)){tA=t;break;}}if(!tA)continue;const rmA=(cA.matches||[]).filter(m=>m.played&&m.phase==='regular');if(!rmA.length)continue;const pA={};for(const[t]of Object.entries(cA.teamRosters))pA[t]=0;for(const m of rmA){if(m.hs>m.as){pA[m.home]=(pA[m.home]||0)+3;}else if(m.as>m.hs){pA[m.away]=(pA[m.away]||0)+3;}else{pA[m.home]=(pA[m.home]||0)+1;pA[m.away]=(pA[m.away]||0)+1;}}const minA=Math.min(...Object.values(pA));if(!Object.entries(pA).filter(([,p])=>p===minA).map(([t])=>t).includes(tA))continue;const cpB=(cB.champion_players||[]).find(p=>p.name.trim()===name);if(cpB&&(cpB.weight||1)>=1){hasViouSaf=true;break;}}}
-  let hasBaggio=0,hasSalvoCompanheiros=0;for(const champ of doneAll){const fin=(champ.matches||[]).find(m=>m.phase==='final'&&m.played&&m.penaltyWinner&&(m.penaltyMissedBy||[]).includes(name));if(!fin)continue;let pTeam=null;if(champ.teamRosters){for(const[t,r]of Object.entries(champ.teamRosters)){if(r.includes(name)){pTeam=t;break;}}}if(!pTeam)continue;if(pTeam===fin.penaltyWinner)hasSalvoCompanheiros++;else hasBaggio++;}
+  let hasBaggio=0,hasSalvoCompanheiros=0;for(const champ of doneAll){const fin=(champ.matches||[]).find(m=>m.phase==='final'&&m.played&&m.penaltyWinner&&(m.penaltyMissedBy||[]).includes(name));if(!fin)continue;const pTeam=penaltyMissTeam(champ,fin,name);if(!pTeam)continue;if(pTeam===fin.penaltyWinner)hasSalvoCompanheiros++;else hasBaggio++;}
   const curMonth=new Date().toISOString().slice(0,7);
   const curPags=st.finMens?.[curMonth]?.pagamentos||{};
   const isSomenteChurrasco=!!playerObj?.somenteChurrasco;
@@ -10723,8 +10722,7 @@ function computePenaltyMisses() {
     for (const player of fin.penaltyMissedBy) {
       if (!counts[player]) counts[player] = {total:0, lost:0, won:0};
       counts[player].total++;
-      let pTeam = null;
-      if (champ.teamRosters) { for (const [t,r] of Object.entries(champ.teamRosters)) { if (r.includes(player)) { pTeam=t; break; } } }
+      const pTeam = penaltyMissTeam(champ, fin, player);   // o time que ele defendeu na final (o emprestado vale pelo lado em que bateu)
       if (pTeam === fin.penaltyWinner) counts[player].won++;
       else counts[player].lost++;
     }
@@ -12847,21 +12845,56 @@ async function setPenaltyWinner(team) {
     await ldoc(`championships/${champId}`).update(upd);
     if(m.champId) toast('Vencedor nos pênaltis salvo!','ok');
     st.modal={type:'penaltyMisses',matchId:m.matchId,champId:m.champId||null,
-              home:m.home,away:m.away,penaltyWinner:team,misses:[]};
+              home:m.home,away:m.away,penaltyWinner:team,misses:[],sides:{}};
     render();
   } catch(e){ toast('Erro: '+(e?.message||e)); }
 }
 
+/* ── Quem perdeu pênalti na final, com os EMPRESTADOS ───────────────────────────────────────────────────────────────────────────────
+   Depois do vencedor nos pênaltis o admin marca quem errou. Cada lado mostra: o elenco do time; os EMPRESTADOS já marcados na final para aquele lado (gol ou "✓ Jogo", quem não é do
+   elenco do time), com a tag "emp."; e a lista "+ Emprestado" com os jogadores dos OUTROS times do campeonato, em ordem alfabética (como na tela de gols). Quem é marcado pela lista
+   passa a aparecer entre os emprestados já marcados. Cada marca guarda o LADO em que o jogador bateu (penaltyMissedSides: [{player, side}]): para a conquista (Baggio ou Salvo pelos
+   companheiros) e para o ranking, o time do jogador é o que ele DEFENDEU na final, não o do elenco dele. Registro antigo, sem o lado, continua valendo pelo elenco. */
+function penaltyMissTeam(champ, fin, name) {
+  const s = (fin.penaltyMissedSides||[]).find(x=>x.player===name);
+  if (s && (s.side==='home' || s.side==='away')) return fin[s.side];
+  for (const [t,r] of Object.entries(champ.teamRosters||{})) if ((r||[]).includes(name)) return t;
+  return null;
+}
+// O que cada lado da janela oferece: { roster, emp, lend } (elenco, emprestados já marcados na final, jogadores dos outros times para a lista "+ Emprestado").
+function penaltyPickers(champ, m) {
+  const rosters = champ?.teamRosters || {};
+  const fin = (champ?.matches||[]).find(x=>x.id===m.matchId) || {};
+  const marked = [...(fin.goals||[]), ...(fin.finalGoals||[]), ...(fin.participants||[])];
+  const alpha = (a,b)=>a.localeCompare(b,'pt');
+  const others = [...new Set(Object.entries(rosters).filter(([t])=>t!==m.home&&t!==m.away).flatMap(([,r])=>r||[]))];
+  const side = (team, key, opp) => {
+    const roster = rosters[team]||[];
+    const oppRoster = rosters[opp]||[];
+    const emp = [...new Set(marked.filter(g=>g.team===key && g.player && !roster.includes(g.player)).map(g=>g.player))].sort(alpha);
+    const lend = others.filter(n=>!roster.includes(n) && !emp.includes(n) && !oppRoster.includes(n)).sort(alpha);
+    return { roster, emp, lend };
+  };
+  return { home: side(m.home,'home',m.away), away: side(m.away,'away',m.home) };
+}
 function mPenaltyMisses() {
   const m=st.modal; if(m?.type!=='penaltyMisses') return '';
   const champ=m.champId?st.champs.find(c=>c.id===m.champId):activeChamp();
-  const misses=m.misses||[];
+  const misses=m.misses||[], sides=m.sides||{};
   const ht=T[m.home]||{l:m.home,c:'#8B949E'};
   const at=T[m.away]||{l:m.away,c:'#8B949E'};
-  const pH=(champ?.teamRosters?.[m.home]||[]);
-  const pA=(champ?.teamRosters?.[m.away]||[]);
-  const btn=(p,tc)=>{const sel=misses.includes(p);return `<button onclick="togglePenaltyMiss('${p.replace(/'/g,"\\'")}') " style="padding:5px 10px;border-radius:7px;border:1.5px solid ${sel?tc:'var(--border)'};background:${sel?tc+'33':'transparent'};color:${sel?tc:'var(--text2)'};font-size:12px;font-weight:${sel?700:500};cursor:pointer">${p}</button>`;};
-  const team=(ps,ti)=>ps.length?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:${ti.c};margin-bottom:6px;letter-spacing:.3px">${ti.l}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${ps.map(p=>btn(p,ti.c)).join('')}</div></div>`:'';
+  const pk=penaltyPickers(champ,m);
+  const pH=pk.home.roster, pA=pk.away.roster;
+  const jEsc=s=>esc(s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+  const btn=(p,tc,key,emp)=>{const sel=misses.includes(p)&&sides[p]===key;return `<button onclick="togglePenaltyMiss('${jEsc(p)}','${key}')" style="padding:5px 10px;border-radius:7px;border:1.5px solid ${sel?tc:'var(--border)'};background:${sel?tc+'33':'transparent'};color:${sel?tc:'var(--text2)'};font-size:12px;font-weight:${sel?700:500};cursor:pointer">${esc(p)}${emp?' <span style="font-size:10px;font-weight:700;opacity:.8">emp.</span>':''}</button>`;};
+  const team=(key,ti)=>{
+    const {roster,emp,lend}=pk[key];
+    const picked=misses.filter(p=>sides[p]===key&&!roster.includes(p)&&!emp.includes(p));   // marcados pela lista "+ Emprestado"
+    const empAll=[...emp,...picked];
+    const left=lend.filter(n=>!misses.includes(n));
+    if(!roster.length&&!empAll.length&&!left.length) return '';
+    return `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:${ti.c};margin-bottom:6px;letter-spacing:.3px">${ti.l}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${roster.map(p=>btn(p,ti.c,key,false)).join('')}${empAll.map(p=>btn(p,ti.c,key,true)).join('')}</div>${left.length?`<details style="margin-top:6px"><summary style="font-size:12px;color:${ti.c};font-weight:600;cursor:pointer;list-style:none;padding:4px 0">+ Emprestado</summary><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;max-height:160px;overflow-y:auto">${left.map(n=>btn(n,ti.c,key,true)).join('')}</div></details>`:''}</div>`;
+  };
   return `<div class="overlay">
     <div class="sheet" onclick="event.stopPropagation()" style="max-width:400px">
       <div class="sheet-handle"></div>
@@ -12871,7 +12904,7 @@ function mPenaltyMisses() {
           <div style="font-size:15px;font-weight:700;margin-bottom:4px">Quem perdeu pênalti?</div>
           <div style="font-size:13px;color:var(--text2)">Opcional — selecione quem errou na disputa</div>
         </div>
-        ${team(pH,ht)}${team(pA,at)}
+        ${team('home',ht)}${team('away',at)}
         ${!pH.length&&!pA.length?'<p style="color:var(--text2);font-size:13px;text-align:center;margin-bottom:12px">Nenhum elenco registrado</p>':''}
         <button onclick="submitPenaltyMisses()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer">${misses.length?'Confirmar':'Pular'}</button>
       </div>
@@ -12879,12 +12912,14 @@ function mPenaltyMisses() {
   </div>`;
 }
 
-function togglePenaltyMiss(player) {
+function togglePenaltyMiss(player, side) {
   if(!st.modal||st.modal.type!=='penaltyMisses') return;
   const misses=[...(st.modal.misses||[])];
+  const sides={...(st.modal.sides||{})};
   const idx=misses.indexOf(player);
-  if(idx>=0) misses.splice(idx,1); else misses.push(player);
-  st.modal={...st.modal,misses};
+  if(idx>=0) { misses.splice(idx,1); delete sides[player]; }
+  else { misses.push(player); sides[player]=side; }
+  st.modal={...st.modal,misses,sides};
   render();
 }
 
@@ -12894,7 +12929,7 @@ async function submitPenaltyMisses() {
   try {
     if(m.misses?.length>0) {
       const champ=st.champs.find(c=>c.id===champId); if(!champ) return;
-      const matches=champ.matches.map(x=>x.id===m.matchId?{...x,penaltyMissedBy:m.misses}:{...x});
+      const matches=champ.matches.map(x=>x.id===m.matchId?{...x,penaltyMissedBy:m.misses,penaltyMissedSides:m.misses.filter(p=>(m.sides||{})[p]).map(p=>({player:p,side:m.sides[p]}))}:{...x});
       await ldoc(`championships/${champId}`).update({matches});
     }
     if(m.champId){
