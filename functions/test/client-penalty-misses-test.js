@@ -127,9 +127,9 @@ const por = (bs, side, filtro) => bs.filter(b => b.side === side && filtro(b)).m
     const E = makeEnv({ champs: [CH({ final: MARCADOS })], modal: mdl() });
     const h = E.api.mPenaltyMisses();
     const bs = botoes(h);
-    check('lado de casa: elenco (Beto, Carlos), depois os emprestados já marcados (Bia, Zeca) e, na lista "+ Emprestado", Ana', por(bs, 'home', () => true).join() === 'Beto,Carlos,Bia,Zeca,Ana' && por(bs, 'home', b => b.emp).join() === 'Bia,Zeca,Ana' && por(bs, 'home', b => b.inDetails).join() === 'Ana', bs);
+    check('lado de casa: elenco (Beto, Carlos), depois os emprestados já marcados (Bia, Zeca) e, na lista "+ Emprestado", Ana', por(bs, 'home', () => true).join() === 'Beto,Carlos,Bia,Zeca,Ana' && por(bs, 'home', b => b.emp).join() === 'Bia,Zeca' && por(bs, 'home', b => b.inDetails).join() === 'Ana', bs);
     check('lado de fora: elenco (Dudu, Eli), emprestada já marcada (Ana) e, na lista, Bia e Zeca', por(bs, 'away', () => true).join() === 'Dudu,Eli,Ana,Bia,Zeca' && por(bs, 'away', b => b.inDetails).join() === 'Bia,Zeca', bs);
-    check('o elenco não leva a tag "emp."; os emprestados levam', por(bs, 'home', b => !b.emp).join() === 'Beto,Carlos' && bs.filter(b => b.emp).every(b => /emp\.$/.test(b.label)), bs.map(b => b.label));
+    check('a tag "emp." vai só nos emprestados já marcados na final (Bia, Zeca do mandante; Ana do visitante): o elenco e a lista "+ Emprestado" (cujo título já diz isso) ficam sem a tag', por(bs, 'home', b => !b.emp).join() === 'Beto,Carlos,Ana' && por(bs, 'away', b => b.emp).join() === 'Ana' && por(bs, 'away', b => !b.emp).join() === 'Dudu,Eli,Bia,Zeca' && bs.filter(b => b.emp).every(b => /emp\.$/.test(b.label)) && bs.filter(b => !b.emp).every(b => !/emp\./.test(b.label)), bs.map(b => b.label));
     check('cada lado tem a sua lista "+ Emprestado" (duas) e o aviso de "nenhum elenco" não aparece', (h.match(/<details/g) || []).length === 2 && (h.match(/\+ Emprestado/g) || []).length === 2 && !h.includes('Nenhum elenco registrado'));
     check('nada vem marcado de saída e o botão diz "Pular" (passo opcional)', bs.every(b => !b.selected) && h.includes('>Pular<') && !h.includes('>Confirmar<'));
     check('o título da janela e o texto de passo opcional continuam', h.includes('Quem perdeu pênalti?') && h.includes('Opcional'));

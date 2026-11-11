@@ -12893,7 +12893,7 @@ function mPenaltyMisses() {
     const empAll=[...emp,...picked];
     const left=lend.filter(n=>!misses.includes(n));
     if(!roster.length&&!empAll.length&&!left.length) return '';
-    return `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:${ti.c};margin-bottom:6px;letter-spacing:.3px">${ti.l}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${roster.map(p=>btn(p,ti.c,key,false)).join('')}${empAll.map(p=>btn(p,ti.c,key,true)).join('')}</div>${left.length?`<details style="margin-top:6px"><summary style="font-size:12px;color:${ti.c};font-weight:600;cursor:pointer;list-style:none;padding:4px 0">+ Emprestado</summary><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;max-height:160px;overflow-y:auto">${left.map(n=>btn(n,ti.c,key,true)).join('')}</div></details>`:''}</div>`;
+    return `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:${ti.c};margin-bottom:6px;letter-spacing:.3px">${ti.l}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${roster.map(p=>btn(p,ti.c,key,false)).join('')}${empAll.map(p=>btn(p,ti.c,key,true)).join('')}</div>${left.length?`<details style="margin-top:6px"><summary style="font-size:12px;color:${ti.c};font-weight:600;cursor:pointer;list-style:none;padding:4px 0">+ Emprestado</summary><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;max-height:160px;overflow-y:auto">${left.map(n=>btn(n,ti.c,key,false)).join('')}</div></details>`:''}</div>`;
   };
   return `<div class="overlay">
     <div class="sheet" onclick="event.stopPropagation()" style="max-width:400px">
