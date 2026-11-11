@@ -1309,6 +1309,59 @@ function champion(matches) {
   return f.hs>f.as?f.home:f.away;
 }
 
+/* Mata-mata de um campeonato COM final (só 4 e 5 times; o "vira" e o "sem final" não têm):
+     4 times (todos contra todos): final = 1º x 2º da tabela e, se foi criada junto, a disputa de 3º lugar = 3º x 4º;
+     5 times (fase de grupos + semis): semifinais = 1º x 4º e 2º x 3º da tabela; final = os vencedores das semifinais.
+   Esses confrontos são GRAVADOS no campeonato quando nascem (submitScore, endRegular, endRegularWith3rd), enquanto a tabela se recalcula na hora. Quando o admin CORRIGE um
+   resultado depois, a tabela muda sozinha, mas os confrontos gravados ficavam como nasceram. Esta função os refaz a partir dos resultados de agora, só os que AINDA NÃO FORAM
+   JOGADOS, e nunca reescreve um jogo disputado (aconteceu): se um confronto já jogado não bate mais com a tabela, ele vai em `stale` para o app avisar o admin. As duas
+   semifinais só se refazem juntas e só se nenhuma foi jogada (refazer uma só poderia pôr o mesmo time nas duas). Não mexe na lista recebida.
+   Devolve { matches, changed, stale }: matches = a lista (cópia nova só se algo mudou), changed = confrontos refeitos, stale = confrontos já jogados que a tabela de agora
+   pede diferentes; cada item é { id, label, home, away } com home e away como a tabela pede. */
+function reseedKnockout(champ, matches) {
+  const out = { matches, changed: [], stale: [] };
+  if (champ.noFinal || (champ.format!==4 && champ.format!==5)) return out;
+  const tab = standings(champ.teams, matches).map(r=>r.team);
+  const sfs = matches.filter(m=>m.phase==='semifinal');
+  const fin = matches.find(m=>m.phase==='final');
+  const third = matches.find(m=>m.phase==='third');
+  const want = {};  // id do jogo → [mandante, visitante] como a tabela de agora pede
+  const label = {};
+  if (champ.format===5) {
+    if (sfs.length===2 && tab.length>=4) {
+      want[sfs[0].id] = [tab[0], tab[3]]; label[sfs[0].id] = 'Semi 1';
+      want[sfs[1].id] = [tab[1], tab[2]]; label[sfs[1].id] = 'Semi 2';
+    }
+    if (fin && sfs.length===2 && sfs.every(m=>m.played)) {
+      const w = m => m.hs>m.as ? m.home : m.away;   // as semifinais não empatam; a mesma conta de submitScore
+      want[fin.id] = [w(sfs[0]), w(sfs[1])]; label[fin.id] = 'Final';
+    }
+  } else if (tab.length>=2) {
+    if (fin) { want[fin.id] = [tab[0], tab[1]]; label[fin.id] = 'Final'; }
+    if (third && tab.length>=4) { want[third.id] = [tab[2], tab[3]]; label[third.id] = '3º lugar'; }
+  }
+  const sfLocked = sfs.some(m=>m.played);
+  const upd = {};
+  for (const m of matches) {
+    const w = want[m.id];
+    if (!w || (m.home===w[0] && m.away===w[1])) continue;
+    const item = { id:m.id, label:label[m.id], home:w[0], away:w[1] };
+    if (m.played || (m.phase==='semifinal' && sfLocked)) out.stale.push(item);
+    else { upd[m.id] = item; out.changed.push(item); }
+  }
+  if (out.changed.length) out.matches = matches.map(m => upd[m.id] ? {...m, home:upd[m.id].home, away:upd[m.id].away} : m);
+  return out;
+}
+// O aviso ao admin depois de corrigir um resultado: o que foi refeito e/ou o que já tinha sido jogado e ficou como estava. Um texto só (os avisos ficam um em cima do outro).
+function knockoutNotice(rs) {
+  const nm = t => (T[t]?.l || t);
+  const txt = list => list.map(i=>`${i.label}: ${nm(i.home)} × ${nm(i.away)}`).join(' · ');
+  const parts = [];
+  if (rs.changed.length) parts.push(`Confrontos refeitos pela nova tabela — ${txt(rs.changed)}.`);
+  if (rs.stale.length) parts.push(`A tabela mudou, mas jogo já disputado não é alterado e ficou como estava. Pela nova tabela seria — ${txt(rs.stale)}.`);
+  return parts.join(' ');
+}
+
 /* ── db / auth (Firebase) ───────────────────────────────────── */
 let DB = null;
 let AUTH = null;
@@ -5130,7 +5183,7 @@ async function submitScore(matchId, hs, as_, goals=[], champIdOverride=null, par
     const fmt = champ.format;
     const wasPlayed = champ.matches.find(m=>m.id===matchId)?.played || false;
     const pPatch = participants.length ? {participants} : {};
-    const matches = champ.matches.map(m => m.id===matchId ? {...m,hs,as:as_,played:true,goals,...pPatch} : {...m});
+    let matches = champ.matches.map(m => m.id===matchId ? {...m,hs,as:as_,played:true,goals,...pPatch} : {...m});
     const mi = matches.findIndex(m=>m.id===matchId);
 
     if (!wasPlayed) {
@@ -5165,8 +5218,17 @@ async function submitScore(matchId, hs, as_, goals=[], champIdOverride=null, par
       }
     }
 
+    // Resultado CORRIGIDO (o jogo já tinha sido disputado): a tabela muda sozinha, mas os confrontos do mata-mata já criados (semifinais, final, 3º lugar) ficariam como nasceram.
+    // Refaz os que ainda não foram jogados com a tabela de agora; o que já foi jogado não é alterado e o admin é avisado (reseedKnockout).
+    let ko = null;
+    if (wasPlayed && (matches[mi].phase==='regular' || matches[mi].phase==='semifinal')) {
+      ko = reseedKnockout(champ, matches);
+      matches = ko.matches;
+    }
+
     await ref.update({matches});
     st.modal = null;
+    if (ko && (ko.changed.length || ko.stale.length)) toast(knockoutNotice(ko), ko.stale.length ? 'err' : 'ok', 9000);
 
     if (matches[mi].phase==='final') {
       if (hs===as_) {
@@ -7288,12 +7350,12 @@ function mChamp() {
 
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
-function toast(msg, type='err') {
+function toast(msg, type='err', ms=3200) {
   const el = document.createElement('div');
   el.className = 'toast ' + type;
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+  setTimeout(() => el.remove(), ms);
 }
 
 /* ── auth UI ─────────────────────────────────────────────────── */

@@ -271,6 +271,10 @@ jobs:
         working-directory: functions
         run: node test/client-loan-list-test.js
 
+      - name: Testes do app (corrigir um resultado depois que o mata-mata já foi montado - semifinais e final refeitas pela tabela nova, jogo já disputado nunca é reescrito, aviso ao admin e manual)
+        working-directory: functions
+        run: node test/client-knockout-reseed-test.js
+
   # Regras do Firestore (firestore.rules) e Cloud Functions de verdade, nos emuladores do Firebase:
   # o que cada tipo de conta consegue ler e gravar direto no banco, e o que cada função faz com
   # tokens de login. Nada toca o Firebase real (projeto demo-aceoma). Ver functions/test/run-emulators.js.
