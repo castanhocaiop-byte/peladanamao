@@ -5128,8 +5128,9 @@ function waMensalidadeLink(whatsapp, playerName, valor, mes) {
 }
 
 /* ── Cobrar no grupo (Financeiro) ─────────────────────────────────────────────────────────────────────────────────────────────────
-   O admin monta, com um toque, UMA mensagem para o grupo do WhatsApp com os jogadores que ainda não pagaram o mês aberto no Financeiro. Quem deve é calculado pelas mesmas
-   regras da lista de contribuições e do botão 💬 de cada jogador (pixDue: só jogador ativo, mensalidade de quem não é "só churrasco", churrasco cobrado à parte). A mensagem leva o
+   O admin monta, com um toque, UMA mensagem para o grupo do WhatsApp com os jogadores que ainda não pagaram a MENSALIDADE do mês aberto no Financeiro. O churrasco NÃO entra (é
+   facultativo, decisão do dono em 17/11/2026) e quem é "só churrasco" não paga mensalidade, então também não aparece. Quem deve é calculado pelas mesmas regras da lista de
+   contribuições e do botão 💬 de cada jogador (pixDue: só jogador ativo, mensalidade em aberto). A mensagem leva o
    nome da liga, o valor, se vence ou está em atraso (a mesma regra da cobrança individual), a chave PIX e o convite para pagar pelo app, e cada nome vai escrito com "@" (o
    WhatsApp não deixa um link marcar a pessoa de verdade: isso só se faz escolhendo o contato dentro dele). Só nomes: nenhum número de telefone. O texto abre numa janela,
    editável, com "Copiar" e "WhatsApp" (o WhatsApp abre para escolher o grupo, como no resumo do campeonato). Só o admin. */
@@ -5137,22 +5138,16 @@ function cobrancaGrupoMsg(mes) {
   const cfg = st.finCfg || {};
   const limpa = s => String(s).replace(/\*/g, '').replace(/\s+/g, ' ').trim();   // o * é o negrito do WhatsApp: um asterisco num nome quebraria a formatação
   const devem = (st.players || []).filter(p => p.active !== false).sort((a, b) => a.name.localeCompare(b.name, 'pt'))
-    .map(p => ({ nome: limpa(p.name), itens: pixDue(p.name, mes).itens })).filter(x => x.itens.length);
+    .map(p => ({ nome: limpa(p.name), item: pixDue(p.name, mes).itens.find(i => i.tipo === 'mensalidade') })).filter(x => x.item);
   if (!devem.length) return '';
   const brl = v => `R$ ${(+v).toFixed(2).replace('.', ',')}`;
   const mesLabel = new Date(`${mes}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  const linhas = [`⚽ *${limpa(pixLeagueName()) || 'Pelada na Mão'}* — pendências de ${mesLabel}`];
-  const mens = devem.filter(x => x.itens.some(i => i.tipo === 'mensalidade'));
-  if (mens.length) {
-    const vencDia = cfg.vencimentoDia ?? 10;
-    const [ym, mm] = mes.split('-').map(Number);
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const quando = hoje >= new Date(ym, mm - 1, vencDia) ? '*em atraso*' : `vence em *${String(vencDia).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${ym}*`;
-    linhas.push('', `💵 *Mensalidade* · ${brl(mens[0].itens.find(i => i.tipo === 'mensalidade').valor)} · ${quando}`, ...mens.map(x => `• @${x.nome}`));
-  }
-  const porValor = new Map();   // o churrasco de quem é "só churrasco" pode ter outro valor: um bloco por valor
-  for (const x of devem) { const i = x.itens.find(i => i.tipo === 'churrasco'); if (i) porValor.set(i.valor, [...(porValor.get(i.valor) || []), x.nome]); }
-  for (const [v, nomes] of [...porValor.entries()].sort((a, b) => b[0] - a[0])) linhas.push('', `🍖 *Churrasco* · ${brl(v)}`, ...nomes.map(n => `• @${n}`));
+  const vencDia = cfg.vencimentoDia ?? 10;
+  const [ym, mm] = mes.split('-').map(Number);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const quando = hoje >= new Date(ym, mm - 1, vencDia) ? '*em atraso*' : `vence em *${String(vencDia).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${ym}*`;
+  const linhas = [`⚽ *${limpa(pixLeagueName()) || 'Pelada na Mão'}* — pendências de ${mesLabel}`,
+    '', `💵 *Mensalidade* · ${brl(devem[0].item.valor)} · ${quando}`, ...devem.map(x => `• @${x.nome}`)];
   const chavePix = (cfg.chavePix || '').trim();
   if (chavePix) linhas.push('', `🔑 Chave PIX: ${chavePix}`);
   if (pixSetup()) linhas.push('', `💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: ${location.origin}`);

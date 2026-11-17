@@ -1,4 +1,5 @@
-// "Cobrar no grupo" no Financeiro (index.html + manual.html + ci.yml). Pedido do dono em 17/11/2026: criar uma mensagem com os jogadores que ainda não pagaram e mandar no grupo
+// "Cobrar no grupo" no Financeiro (index.html + manual.html + ci.yml). Só a MENSALIDADE: o churrasco é facultativo e não entra na mensagem (decisão do dono, 17/11/2026).
+// Pedido do dono em 17/11/2026: criar uma mensagem com os jogadores que ainda não pagaram e mandar no grupo
 // do WhatsApp (hoje só existe a cobrança individual, o botão 💬 de cada jogador, e a notificação aos inadimplentes). O botão "💬 Cobrar no grupo" (só admin) monta UMA mensagem com os
 // nomes de quem deve o mês aberto no Financeiro, escritos com "@", o valor, se vence ou está em atraso, a chave PIX e o convite para pagar pelo app; abre numa janela editável com
 // "Copiar" e "WhatsApp". O WhatsApp não deixa um link marcar a pessoa de verdade: o "@" é texto. Este teste extrai o código real do index.html e o executa num ambiente simulado.
@@ -107,7 +108,7 @@ const individual = (E, mes, nome = 'Bruno') => new URL(E.api.waMensalidadeLink('
     check('o "em atraso" e a data de vencimento do grupo são os mesmos da cobrança individual em 8 combinações de mês e dia (inclusive dia 0, dia 31, sem dia e o vencimento que cai HOJE)', igual, detalhe);
   }
 
-  // ══ 2. CHURRASCO COBRADO À PARTE E MENSALIDADE ZERADA ═════════════════════════════════════════════
+  // ══ 2. O CHURRASCO NÃO ENTRA (É FACULTATIVO) E A MENSALIDADE ZERADA ═════════════════════════════════
   {
     const E = makeEnv({
       appCfg: { hasChurrasco: true, churrascoSeparado: true }, cfg: { valorChurrasco: 25, valorSomenteChurrasco: 20 },
@@ -115,15 +116,19 @@ const individual = (E, mes, nome = 'Bruno') => new URL(E.api.waMensalidadeLink('
       pagamentos: { Ana: { mensalidade: true, churrasco: true }, Carla: { churrasco: true }, Eva: { churrasco: true }, 'Fábio': { mensalidade: true } },
     });
     const msg = E.api.cobrancaGrupoMsg('2020-01');
-    check('com churrasco à parte: um bloco de mensalidade (Bruno e Carla) e um bloco de churrasco por valor (R$ 25,00: Bruno e Fábio; R$ 20,00 de quem é só churrasco: Aline e Dudu), do maior valor para o menor mesmo quando o de menor valor vem primeiro na ordem alfabética', msg.split('\n\n').slice(1, 4).join('|') === '💵 *Mensalidade* · R$ 30,00 · *em atraso*\n• @Bruno\n• @Carla|🍖 *Churrasco* · R$ 25,00\n• @Bruno\n• @Fábio|🍖 *Churrasco* · R$ 20,00\n• @Aline\n• @Dudu', msg);
-    check('quem pagou o churrasco não entra no bloco do churrasco (Carla e Eva) e quem pagou a mensalidade não entra no da mensalidade (Fábio e Ana)', !/🍖 \*Churrasco\* · R\$ 25,00\n(• @\S+\n?)*• @Carla/.test(msg) && !msg.includes('@Eva') && !/Mensalidade[^🍖]*@Fábio/.test(msg), msg);
+    const esperado = ['⚽ *Liga Aceoma* — pendências de janeiro de 2020', '', '💵 *Mensalidade* · R$ 30,00 · *em atraso*', '• @Bruno', '• @Carla', '', '🔑 Chave PIX: pelada@exemplo.com.br', '',
+      '💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: https://peladanamao.com.br'].join('\n');
+    check('com churrasco cobrado à parte e pendente (R$ 25,00 e R$ 20,00 de quem é só churrasco): a mensagem só tem a MENSALIDADE (Bruno e Carla), sem bloco de churrasco', msg === esperado, msg);
+    check('o churrasco é facultativo e não entra: nenhuma palavra "Churrasco", nenhum 🍖 e nenhum valor de churrasco (R$ 25,00 ou R$ 20,00) na mensagem', !/Churrasco|churrasco|🍖|25,00|20,00/.test(msg), msg);
+    check('quem só deve o churrasco não é listado: Fábio (mensalidade paga, churrasco pendente) e Aline e Dudu (só churrasco, pendentes)', !/Fábio|Aline|Dudu/.test(msg), msg);
     const soChurr = makeEnv({ appCfg: { hasChurrasco: true, churrascoSeparado: true }, cfg: { valorChurrasco: 25 }, players: [{ name: 'Ana' }, { name: 'Bruno' }], pagamentos: { Ana: { mensalidade: true, churrasco: true }, Bruno: { mensalidade: true } } });
-    const m2 = soChurr.api.cobrancaGrupoMsg('2020-01');
-    check('todos pagaram a mensalidade e falta só o churrasco: a mensagem só tem o bloco do churrasco', !m2.includes('Mensalidade') && m2.includes('🍖 *Churrasco* · R$ 25,00\n• @Bruno'), m2);
+    check('todos pagaram a mensalidade e falta só o churrasco: não há mensagem (o churrasco não se cobra no grupo)', soChurr.api.cobrancaGrupoMsg('2020-01') === '');
+    soChurr.api.openCobrancaGrupo();
+    check('...e o botão avisa "Todos já pagaram janeiro de 2020 🎉" em verde, sem abrir a janela', soChurr.st.modal === null && JSON.stringify(soChurr.calls.toasts) === JSON.stringify([['Todos já pagaram janeiro de 2020 🎉', 'ok']]), soChurr.calls.toasts);
     const semChurr = makeEnv({ appCfg: { hasChurrasco: true, churrascoSeparado: false }, cfg: { valorChurrasco: 25 } });
-    check('churrasco que NÃO é cobrado à parte não vira cobrança (nenhum bloco de churrasco)', !semChurr.api.cobrancaGrupoMsg('2020-01').includes('Churrasco'));
-    const mens0 = makeEnv({ cfg: { valorMensalidade: 0 } });
-    check('liga sem mensalidade (valor zero) e sem churrasco à parte: ninguém deve, nenhuma mensagem', mens0.api.cobrancaGrupoMsg('2020-01') === '');
+    check('churrasco que NÃO é cobrado à parte: a mensagem é a mesma de uma liga sem churrasco', semChurr.api.cobrancaGrupoMsg('2020-01') === makeEnv().api.cobrancaGrupoMsg('2020-01'));
+    const mens0 = makeEnv({ cfg: { valorMensalidade: 0 }, appCfg: { hasChurrasco: true, churrascoSeparado: true } });
+    check('liga sem mensalidade (valor zero): ninguém deve mensalidade, nenhuma mensagem (mesmo com churrasco cobrado à parte)', mens0.api.cobrancaGrupoMsg('2020-01') === '');
   }
 
   // ══ 3. CHAVE PIX, NOME DA LIGA, NINGUÉM DEVENDO ═══════════════════════════════════════════════════
@@ -200,7 +205,8 @@ const individual = (E, mes, nome = 'Bruno') => new URL(E.api.waMensalidadeLink('
     const sec = manual.slice(manual.indexOf('id="cobrar-no-grupo"'), manual.indexOf('id="despesas-recorrentes"'));
     check('manual (seção 12): o subtítulo "Cobrar no grupo" existe, com âncora, ao lado da cobrança individual e da notificação', sec.length > 300 && sec.includes('📣 Cobrar no grupo') && sec.includes('<strong>💬 Cobrar no grupo</strong>') && sec.includes('<strong>🔔 Notificar inadimplentes</strong>'), sec.slice(0, 200));
     check('manual: explica quem entra na lista (as mesmas regras da lista de contribuições), o @, o valor, o vence em ou em atraso, a chave PIX e que nenhum telefone vai na mensagem', sec.includes('mesmas regras da lista de contribuições') && sec.includes('<strong>@</strong>') && sec.includes('<strong>em atraso</strong>') && sec.includes('chave PIX') && sec.includes('Nenhum telefone vai na mensagem'));
-    check('manual: diz que dá para editar o texto, que Copiar e WhatsApp existem e que o WhatsApp abre para escolher o grupo; e que se todos pagaram o app só avisa', sec.includes('editar o texto') && sec.includes('<strong>📋 Copiar</strong>') && sec.includes('<strong>💬 WhatsApp</strong>') && sec.includes('escolher o grupo') && sec.includes('Se todos já pagaram, o app avisa'));
+    check('manual: diz que dá para editar o texto, que Copiar e WhatsApp existem e que o WhatsApp abre para escolher o grupo; e que se todos pagaram o app só avisa', sec.includes('editar o texto') && sec.includes('<strong>📋 Copiar</strong>') && sec.includes('<strong>💬 WhatsApp</strong>') && sec.includes('escolher o grupo') && sec.includes('Se todos já pagaram a mensalidade, o app avisa e não abre a janela'));
+    check('manual: diz que o churrasco NÃO entra na mensagem porque é facultativo (e que quem é Só Churrasco não aparece) e não promete bloco de churrasco', sec.includes('O <strong>churrasco não entra</strong> na mensagem, porque é facultativo') && sec.includes('quem é <em>Só Churrasco</em> não paga mensalidade e não aparece') && !sec.includes('bloco próprio') && !sec.includes('um bloco para cada valor'), sec.slice(0, 900));
     check('manual: avisa que o @ é só texto (o WhatsApp só marca de verdade se a pessoa for escolhida dentro dele) e aponta a notificação como o jeito de avisar cada um', sec.includes('O @ é só texto') && sec.includes('só vale quando você escolhe o contato dentro do WhatsApp') && sec.includes('Para avisar cada pessoa direto no celular dela, use <strong>🔔 Notificar inadimplentes</strong>'));
     check('CI: o teste está nos passos do job test', /node test\/client-group-charge-test\.js/.test(ci));
   }
