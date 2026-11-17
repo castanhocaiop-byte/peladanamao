@@ -5127,6 +5127,84 @@ function waMensalidadeLink(whatsapp, playerName, valor, mes) {
   return `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
 }
 
+/* ── Cobrar no grupo (Financeiro) ─────────────────────────────────────────────────────────────────────────────────────────────────
+   O admin monta, com um toque, UMA mensagem para o grupo do WhatsApp com os jogadores que ainda não pagaram o mês aberto no Financeiro. Quem deve é calculado pelas mesmas
+   regras da lista de contribuições e do botão 💬 de cada jogador (pixDue: só jogador ativo, mensalidade de quem não é "só churrasco", churrasco cobrado à parte). A mensagem leva o
+   nome da liga, o valor, se vence ou está em atraso (a mesma regra da cobrança individual), a chave PIX e o convite para pagar pelo app, e cada nome vai escrito com "@" (o
+   WhatsApp não deixa um link marcar a pessoa de verdade: isso só se faz escolhendo o contato dentro dele). Só nomes: nenhum número de telefone. O texto abre numa janela,
+   editável, com "Copiar" e "WhatsApp" (o WhatsApp abre para escolher o grupo, como no resumo do campeonato). Só o admin. */
+function cobrancaGrupoMsg(mes) {
+  const cfg = st.finCfg || {};
+  const limpa = s => String(s).replace(/\*/g, '').replace(/\s+/g, ' ').trim();   // o * é o negrito do WhatsApp: um asterisco num nome quebraria a formatação
+  const devem = (st.players || []).filter(p => p.active !== false).sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+    .map(p => ({ nome: limpa(p.name), itens: pixDue(p.name, mes).itens })).filter(x => x.itens.length);
+  if (!devem.length) return '';
+  const brl = v => `R$ ${(+v).toFixed(2).replace('.', ',')}`;
+  const mesLabel = new Date(`${mes}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const linhas = [`⚽ *${limpa(pixLeagueName()) || 'Pelada na Mão'}* — pendências de ${mesLabel}`];
+  const mens = devem.filter(x => x.itens.some(i => i.tipo === 'mensalidade'));
+  if (mens.length) {
+    const vencDia = cfg.vencimentoDia ?? 10;
+    const [ym, mm] = mes.split('-').map(Number);
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const quando = hoje >= new Date(ym, mm - 1, vencDia) ? '*em atraso*' : `vence em *${String(vencDia).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${ym}*`;
+    linhas.push('', `💵 *Mensalidade* · ${brl(mens[0].itens.find(i => i.tipo === 'mensalidade').valor)} · ${quando}`, ...mens.map(x => `• @${x.nome}`));
+  }
+  const porValor = new Map();   // o churrasco de quem é "só churrasco" pode ter outro valor: um bloco por valor
+  for (const x of devem) { const i = x.itens.find(i => i.tipo === 'churrasco'); if (i) porValor.set(i.valor, [...(porValor.get(i.valor) || []), x.nome]); }
+  for (const [v, nomes] of [...porValor.entries()].sort((a, b) => b[0] - a[0])) linhas.push('', `🍖 *Churrasco* · ${brl(v)}`, ...nomes.map(n => `• @${n}`));
+  const chavePix = (cfg.chavePix || '').trim();
+  if (chavePix) linhas.push('', `🔑 Chave PIX: ${chavePix}`);
+  if (pixSetup()) linhas.push('', `💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: ${location.origin}`);
+  return linhas.join('\n');
+}
+function openCobrancaGrupo() {
+  if (!isAdmin()) return;
+  const mes = st.finMonth;
+  const text = cobrancaGrupoMsg(mes);
+  if (!text) { toast(`Todos já pagaram ${new Date(`${mes}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} 🎉`, 'ok'); return; }
+  st.modal = { type: 'finCobrancaGrupo', text };
+  render();
+}
+const cobrancaGrupoTexto = () => (st.modal?.type === 'finCobrancaGrupo' ? String(st.modal.text || '') : '').trim();   // o que está na caixa agora (o admin pode ter editado)
+function copyCobrancaGrupo() {
+  const t = cobrancaGrupoTexto(); if (!t) return;
+  navigator.clipboard.writeText(t).then(() => toast('Copiado!', 'ok')).catch(() => toast('Erro ao copiar', 'err'));
+}
+function openWhatsAppCobrancaGrupo() {
+  const t = cobrancaGrupoTexto(); if (!t) return;
+  window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+}
+function mFinCobrancaGrupo() {
+  const m = st.modal; if (m?.type !== 'finCobrancaGrupo') return '';
+  return `<div class="overlay" onclick="closeModal()">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-width:480px">
+      <div class="sheet-handle"></div>
+      <div style="padding:20px 16px 24px">
+        <div style="text-align:center;margin-bottom:14px">
+          <div style="font-size:26px">💬</div>
+          <div style="font-size:15px;font-weight:700;margin-top:4px">Cobrar no grupo</div>
+          <div style="font-size:13px;color:var(--text2)">Mensagem pronta para o grupo. Você pode editar o texto.</div>
+        </div>
+        <textarea id="cg-text" rows="14" oninput="st.modal.text=this.value" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;color:var(--text);line-height:1.55;font-family:inherit;resize:vertical;margin-bottom:8px">${esc(m.text || '')}</textarea>
+        <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:14px">Os nomes vão escritos com @. Para marcar de verdade (a pessoa recebe o aviso), apague o @ do nome e escolha o contato no WhatsApp.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="copyCobrancaGrupo()"
+            style="flex:1;min-width:110px;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+            📋 Copiar
+          </button>
+          <button onclick="openWhatsAppCobrancaGrupo()"
+            style="flex:1;min-width:110px;padding:12px;border-radius:10px;border:none;background:#25D366;color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+            💬 WhatsApp
+          </button>
+          <button onclick="closeModal()" style="flex:0 0 auto;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);font-size:14px;cursor:pointer">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+/* ── fim do Cobrar no grupo ─────────────────────────────────────────────────────────────────── */
+
 async function cancelPresetChamp() {
   const preset = presetChamp();
   if (!preset || !DB || !isAdmin()) return;
@@ -9368,7 +9446,7 @@ function render() {
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
   if(isAdmin()&&(st.view==='players'||st.view==='history')) loadPushInfo(); // 🔔 do Elenco e lista de quem falta votar: busca (no máximo a cada 5 min) quantos aparelhos cada conta tem
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mRenamePlayer()+mAddRoster()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mFinCobrancaGrupo()+mRenamePlayer()+mAddRoster()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -11756,8 +11834,9 @@ function vFinanceiro() {
       <span style="flex:1;text-align:center;font-size:14px;font-weight:700">${monthLabel} · Contribuições</span>
       <button onclick="nextFinMonth()" style="background:none;border:none;cursor:pointer;color:${canNext?'var(--text2)':'var(--border2)'};font-size:22px;padding:4px 10px;line-height:1" ${canNext?'':'disabled'}>›</button>
     </div>
-    ${isAdmin() && mensPayers.length ? `<div style="padding:4px 12px 8px;border-bottom:1px solid var(--border2)">
+    ${isAdmin() && mensPayers.length ? `<div style="padding:4px 12px 8px;border-bottom:1px solid var(--border2);display:flex;gap:6px;flex-wrap:wrap">
       <button onclick="notifyInadimplentes()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:11px;font-weight:600;cursor:pointer">🔔 Notificar inadimplentes</button>
+      <button onclick="openCobrancaGrupo()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--text3);font-size:11px;font-weight:600;cursor:pointer">💬 Cobrar no grupo</button>
     </div>` : ''}
     <div style="display:grid;grid-template-columns:${hasChurrSep?'1fr 1fr':'1fr'};border-bottom:1px solid var(--border2)">
       <div style="padding:8px 14px;${hasChurrSep?'border-right:1px solid var(--border2)':''}">

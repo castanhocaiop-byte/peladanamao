@@ -1391,6 +1391,26 @@ p strong {
 
       <p>O botão 💬 desaparece automaticamente quando a mensalidade é marcada como paga. Jogadores marcados como <em>Só Churrasco</em> não têm botão de cobrança de mensalidade. A linha da chave PIX aparece apenas se a chave estiver configurada, e a última linha (o convite para pagar com PIX no app) só aparece quando a chave é reconhecida e há valor a cobrar. A mensagem usa o nome da sua liga.</p>
 
+      <h3 id="cobrar-no-grupo">📣 Cobrar no grupo</h3>
+      <p>Ao lado de <strong>🔔 Notificar inadimplentes</strong>, na lista de contribuições, o botão <strong>💬 Cobrar no grupo</strong> (exclusivo do admin) monta <strong>uma mensagem só</strong> para o grupo do WhatsApp com os jogadores que ainda não pagaram o <strong>mês aberto</strong> no Financeiro. Quem entra na lista segue as mesmas regras da lista de contribuições e da cobrança individual: só jogador <em>ativo</em>, a mensalidade de quem não é <em>Só Churrasco</em> e o churrasco quando ele é cobrado à parte. Cada nome vai escrito com <strong>@</strong>, junto com o valor, se a mensalidade <strong>vence em</strong> uma data ou está <strong>em atraso</strong> (a mesma regra da cobrança individual), a chave PIX e o convite para pagar com PIX no app. Nenhum telefone vai na mensagem.</p>
+
+      <div class="example">
+        <div class="ex-label">Exemplo (mensalidade em atraso)</div>
+        ⚽ <strong>[nome da liga]</strong> — pendências de <em>[mês]</em><br><br>
+        💵 <strong>Mensalidade</strong> · R$ <em>[valor]</em> · <strong>em atraso</strong><br>
+        • @Bruno<br>
+        • @Carla<br><br>
+        🔑 Chave PIX: <em>[chave]</em><br><br>
+        💸 Prefere o PIX copia e cola, com o valor já preenchido? Toque em "Pagar com PIX" no app: <em>[endereço do app]</em>
+      </div>
+
+      <p>A mensagem abre numa janela onde o admin pode <strong>editar o texto</strong> antes de enviar (tirar alguém que já pagou por fora, por exemplo), com os botões <strong>📋 Copiar</strong> e <strong>💬 WhatsApp</strong>; o WhatsApp abre para <strong>escolher o grupo</strong>. Se o churrasco é cobrado à parte, ele ganha um bloco próprio, e há um bloco para cada valor. Se todos já pagaram, o app avisa e não abre a janela.</p>
+
+      <div class="callout warn">
+        <div class="callout-label warn">O @ é só texto</div>
+        O WhatsApp não deixa um aplicativo marcar alguém de verdade: a marcação que avisa a pessoa só vale quando você escolhe o contato dentro do WhatsApp. Por isso o app escreve <strong>@Nome</strong> como texto, e todos do grupo veem quem está pendente. Para marcar de verdade, apague o @ do nome e escolha o contato. Para avisar cada pessoa direto no celular dela, use <strong>🔔 Notificar inadimplentes</strong>.
+      </div>
+
       <h3 id="despesas-recorrentes">🧾 Despesas, inclusive as fixas e as semanais</h3>
       <p>Em <strong>Financeiro → Despesas → + Nova</strong>, o admin lança uma despesa <strong>Única</strong> (uma data), <strong>Fixa mensal</strong> (todo mês, no dia escolhido) ou <strong>Semanal</strong> (toda semana, no dia da semana escolhido), valendo a partir da data de <em>A partir de</em>. A despesa fixa ou semanal é <strong>um registro só</strong>: o app mostra cada mês (ou cada semana) a partir dele, e o ✓ Paga é marcado data a data.</p>
       <p>A despesa vale a partir do <strong>mês</strong> de <em>A partir de</em>: os meses anteriores a ele <strong>não mostram</strong> a despesa nem a somam. No mês de início aparecem <strong>todas as datas do mês</strong>, mesmo as anteriores ao dia escolhido, para dar para marcar como paga uma data que já passou nesse mês. Para a despesa só começar no mês seguinte, escolha uma data do mês seguinte.</p>
