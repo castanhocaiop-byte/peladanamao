@@ -226,7 +226,7 @@ const msgDe = link => decodeURIComponent(link.split('?text=')[1]);
   const rows = elenco.split('<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:').slice(1);
   const rowDe = n => rows.find(r => r.includes('>' + n + '<')) || '';
   check('Elenco do admin: cada jogador mostra embaixo do nome o rótulo das notificações (Will 🔔, Nicolas 🔕)', rows.length === 11 && /🔔 notificações ativas/.test(rowDe('Will')) && /🔕 sem notificações/.test(rowDe('Nicolas')), rows.length);
-  check('o rótulo fica dentro do bloco do nome (antes das estrelas e dos botões), sem mexer no resto da linha', rowDe('Will').indexOf('🔔 notificações ativas') < rowDe('Will').indexOf('class="star-btn"'), rowDe('Will').slice(0, 300));
+  check('o rótulo fica dentro do bloco do nome (antes das notas e dos botões), sem mexer no resto da linha', rowDe('Will').indexOf('🔔 notificações ativas') < rowDe('Will').indexOf('class="nota-btn'), rowDe('Will').slice(0, 300));
   const semInfo = makeEnv({ elenco: true });
   check('Elenco sem o dado carregado: nenhum rótulo e a linha continua igual', !/🔔|🔕|👤/.test(semInfo.api.vPlayers()));
   const elencoJog = makeEnv({ elenco: true, admin: false, pushInfo: e.st.pushInfo });

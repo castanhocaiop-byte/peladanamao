@@ -45,16 +45,16 @@ const l1 = linhas[0];
 const iAvatar = l1.indexOf('<span style="display:inline-flex;margin-right:6px">');
 const iNome = l1.indexOf('<div style="flex:1 1 120px;min-width:0;overflow-wrap:anywhere">');
 const iGrupo = l1.indexOf('<div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto">');
-const iEstrelas = l1.indexOf('<span style="display:flex;gap:0">');
+const iEstrelas = l1.indexOf('<span style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:3px">');
 const iAtivo = l1.indexOf('Ativo'), iChurr = l1.indexOf('togglePlayerChurrasco'), iGoleiro = l1.indexOf('togglePlayerGoleiro'), iEditar = l1.indexOf('✏️'), iExcluir = l1.indexOf('deleteRegisteredPlayer');
 check('ordem na linha: foto, nome (com espaço garantido de 120 px e podendo encolher), e DEPOIS o grupo de controles', iAvatar >= 0 && iNome > iAvatar && iGrupo > iNome, { iAvatar, iNome, iGrupo });
-check('dentro do grupo de controles, juntos: estrelas, Ativo, 🍖, 🧤, ✏️ e ✕ (descem ou ficam todos juntos, nunca soltos pela linha)', iEstrelas > iGrupo && iAtivo > iEstrelas && iChurr > iAtivo && iGoleiro > iChurr && iEditar > iGoleiro && iExcluir > iEditar, { iGrupo, iEstrelas, iAtivo, iChurr, iGoleiro, iEditar, iExcluir });
+check('dentro do grupo de controles, juntos: as notas, Ativo, 🍖, 🧤, ✏️ e ✕ (descem ou ficam todos juntos, nunca soltos pela linha)', iEstrelas > iGrupo && iAtivo > iEstrelas && iChurr > iAtivo && iGoleiro > iChurr && iEditar > iGoleiro && iExcluir > iEditar, { iGrupo, iEstrelas, iAtivo, iChurr, iGoleiro, iEditar, iExcluir });
 check('o grupo fecha logo depois do ✕ e depois fecha a linha (nenhum botão fica fora do grupo)', /✕<\/button>\s*<\/div>\s*<\/div>/.test(l1), l1.slice(-160));
 check('o grupo vai para a direita (margin-left:auto, justify-content:flex-end) e também pode quebrar por dentro (flex-wrap) em celular bem estreito', /margin-left:auto/.test(l1.slice(iGrupo, iGrupo + 140)) && /justify-content:flex-end/.test(l1.slice(iGrupo, iGrupo + 140)) && /flex-wrap:wrap/.test(l1.slice(iGrupo, iGrupo + 140)));
 const basis = /flex:1 1 (\d+)px;min-width:0/.exec(l1);
 check('o nome tem uma base de largura (flex-basis) de pelo menos 100 px antes de os controles tomarem a linha, e min-width:0 só para poder encolher em tela mínima', !!basis && Number(basis[1]) >= 100, basis && basis[0]);
 check('o nome quebra palavras muito compridas (overflow-wrap) em vez de sair da linha', /overflow-wrap:anywhere/.test(l1.slice(iNome, iNome + 120)));
-check('5 estrelas clicáveis (botões) no grupo, com a mesma regra de antes (clicar na estrela atual tira a nota)', (l1.slice(iEstrelas, iAtivo).match(/class="star-btn"/g) || []).length === 5 && /setPlayerStars\('p0',/.test(l1));
+check('os 10 botões de nota (1 a 10) no grupo, com a mesma regra de antes (clicar na nota atual tira a nota: o p0 tem 1 estrela = nota 2, então o botão 2 manda 0)', (l1.slice(iEstrelas, iAtivo).match(/class="nota-btn/g) || []).length === 10 && /onclick="setPlayerStars\('p0',0\)"[^>]*>2</.test(l1) && /onclick="setPlayerStars\('p0',3\)"[^>]*>6</.test(l1));
 const l5 = linhas[4];
 const blocoNome = l5.slice(l5.indexOf('<div style="flex:1 1 120px'), l5.indexOf('<div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end'));
 check('a linha do goleiro mostra o 🧤 ao lado do nome, dentro do bloco do nome (e não solto no grupo de controles)', /Leandro/.test(blocoNome) && /🧤/.test(blocoNome), blocoNome);
@@ -64,7 +64,7 @@ check('o código antigo (nome com flex:1;min-width:0 e estrelas soltas na linha)
 check('sem churrasco na liga: o botão 🍖 não aparece, o resto do grupo continua igual', !/togglePlayerChurrasco/.test(render({ churrasco: false })) && /togglePlayerGoleiro/.test(render({ churrasco: false })) && abre(render({ churrasco: false })) === fecha(render({ churrasco: false })));
 const jog = render({ admin: false });
 const lj = linhasDe(jog);
-check('jogador comum: o mesmo grupo, só com as 5 estrelas (sem botão nenhum), e a linha cabe num celular (nome com base 120 + estrelas de uns 100 px)', lj.length === 8 && lj.every(x => !/<button/.test(x) && (x.match(/★/g) || []).length === 5), lj.map(x => (x.match(/★/g) || []).length));
+check('jogador comum: o mesmo grupo, só com a nota como texto ("★ 2", sem botão nenhum), e a linha cabe num celular (nome com base 120 + a nota, uns 40 px)', lj.length === 8 && lj.every(x => !/<button/.test(x) && (x.match(/★ \d/g) || []).length === 1), lj.map(x => (x.match(/★ \d/g) || []).length));
 check('jogador comum: tags <div> equilibradas', abre(jog) === fecha(jog), { abre: abre(jog), fecha: fecha(jog) });
 const ina = render({ players: [{ id: 'x1', name: 'Inativo', stars: 3, active: false }] });
 check('jogador inativo: a linha fica esmaecida (opacity 0.45, a ativa fica em 1) e o botão diz Inativo', linhasDe(ina)[0].startsWith('0.45">') && /Inativo/.test(linhasDe(ina)[0]) && linhasDe(adm)[0].startsWith('1">'));
@@ -78,7 +78,7 @@ check('lista vazia: continua dizendo "Nenhum jogador cadastrado" (nada quebra se
 const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/\s+([,.;:)])/g, '$1').replace(/\(\s+/g, '(').trim();
 const i1 = manual.indexOf('id="elenco-celular"');
 const quadro = i1 >= 0 ? plain(manual.slice(i1, i1 + 1800)) : '';
-check('manual: o quadro "Elenco no celular" explica que, em tela estreita, o nome fica na primeira linha e as estrelas e os botões descem juntos para a segunda (e em tela larga ficam na mesma linha)', /Elenco no celular/.test(quadro) && /primeira linha/.test(quadro) && /segunda linha/.test(quadro) && /estrelas/.test(quadro) && /tela larga|computador/.test(quadro), quadro.slice(0, 300));
+check('manual: o quadro "Elenco no celular" explica que, em tela estreita, o nome fica na primeira linha e as estrelas e os botões descem juntos para a segunda (e em tela larga ficam na mesma linha)', /Elenco no celular/.test(quadro) && /primeira linha/.test(quadro) && /segunda linha/.test(quadro) && /notas e os botões descem juntos/.test(quadro) && /tela larga|computador/.test(quadro), quadro.slice(0, 300));
 
 console.log(`\n${fails === 0 ? 'Todos os testes passaram' : fails + ' FALHA(S)'}`);
 if (fails) process.exitCode = 1;
