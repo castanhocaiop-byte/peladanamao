@@ -3,7 +3,9 @@
 // conta os votos e diz o que publicar no cadastro de cada jogador. O index.js cuida do banco (ratePlayers, syncStarVotes).
 //
 // Como fica guardado:
-//   leagues/{liga}/star_votes/{uid} = { voterKey, ratings: { [chave do jogador votado]: 1..5 }, updatedAt }
+//   A nota que as pessoas veem e dão vai de 1 a 10 (pedido do dono em 18/11/2026), mas o que fica guardado continua em ESTRELAS, agora de meio em
+//   meio (0,5 a 5): a nota 7 é 3,5 estrelas (a nota é o dobro). Assim as notas antigas (1 a 5 inteiras) seguem válidas e nada precisou ser convertido.
+//   leagues/{liga}/star_votes/{uid} = { voterKey, ratings: { [chave do jogador votado]: 0,5..5 de meio em meio }, updatedAt }
 //     uma pessoa (conta) = um documento; só o servidor lê e grava, e cada conta lê apenas o PRÓPRIO (as notas são anônimas:
 //     nem o admin da liga consegue ler as dos outros). A chave do documento é o uid, e não a chave do jogador, justamente
 //     para o admin não poder vincular a própria conta ao jogador de outra pessoa e ler as notas dela.
@@ -16,14 +18,15 @@ const MIN_VOTES = 3;      // piso de anonimato: com 1 ou 2 votos quem vê a méd
 const MAX_KEYS = 200;     // jogadores por chamada
 const KEY_RE = /^[\p{L}\p{N}_-]{1,100}$/u; // mesma regra do PLAYER_KEY_RE do index.js
 
-const isStar = n => Number.isInteger(n) && n >= 1 && n <= 5;
+// nota válida: em estrelas, de 0,5 a 5, só de meio em meio (a nota 1 a 10 do app é o dobro). Texto, NaN e 3,3 ficam de fora.
+const isStar = n => typeof n === "number" && Number.isFinite(n) && n >= 0.5 && n <= 5 && Number.isInteger(n * 2);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 // Quantos votos um jogador precisa ter para a média valer no sorteio: metade de quem joga (ativo e fora do "só churrasco"), nunca
 // menos que MIN_VOTES. O app tem a mesma conta (neededVotes no index.html); o teste confere que as duas batem.
 const neededVotes = playingCount => Math.max(MIN_VOTES, Math.ceil((Number(playingCount) || 0) / 2));
 
-// Valida o que a pessoa mandou: { chave do jogador: 1..5 } para dar ou trocar a nota, { chave: null } para tirar a nota.
+// Valida o que a pessoa mandou: { chave do jogador: 0,5..5 de meio em meio } para dar ou trocar a nota, { chave: null } para tirar a nota.
 // Qualquer valor fora disso recusa a chamada inteira. Voto em si mesmo e em jogador que não está no elenco são ignorados (listados em
 // `ignored`); tirar a nota de um jogador que já saiu do elenco é permitido (limpa nota velha).
 function parseRatings(input, { voterKey, registryKeys }) {
@@ -56,8 +59,8 @@ function applyRatings(current, parsed, { voterKey, registryKeys }) {
 }
 
 // Soma e contagem de votos por jogador. `voterDocs` = [{ uid, voterKey, ratings, updatedAt }]. Duas contas ligadas ao mesmo jogador
-// valem UM voto só (fica a mais recente). Voto de quem saiu do elenco, em si mesmo, em jogador que saiu ou com nota fora de 1 a 5
-// não conta.
+// valem UM voto só (fica a mais recente). Voto de quem saiu do elenco, em si mesmo, em jogador que saiu ou com nota inválida (fora
+// de 0,5 a 5 ou que não seja de meio em meio) não conta.
 function tally(voterDocs, registryKeys) {
   const latest = new Map();
   for (const doc of voterDocs) {

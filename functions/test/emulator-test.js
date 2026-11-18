@@ -959,12 +959,16 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     await S('leagues/la/app_config/main', { hasFinais: true, peerStars: true });
     r = await rate(U.pl1.token, { caio: 7 });
     check('estrelas: nota 7 → argumento inválido', r.status === 400 && r.error.status === 'INVALID_ARGUMENT', r.raw);
+    r = await rate(U.pl1.token, { caio: 2.25 });
+    check('estrelas: nota que não é de meio em meio (2,25 estrelas) → argumento inválido, nada gravado (o app manda a nota de 1 a 10 dividida por 2: só meio em meio)', r.status === 400 && r.error.status === 'INVALID_ARGUMENT' && (await vote(U.pl1.uid)) === undefined, r.raw);
+    r = await rate(U.pl1.token, { caio: 0 });
+    check('estrelas: nota 0 → argumento inválido, nada gravado', r.status === 400 && r.error.status === 'INVALID_ARGUMENT' && (await vote(U.pl1.uid)) === undefined, r.raw);
 
-    // votar
-    r = await rate(U.pl1.token, { caio: 5, ana: 4, pl_um: 3 });
+    // votar (ana: 3,5 estrelas = a nota 7 do app)
+    r = await rate(U.pl1.token, { caio: 5, ana: 3.5, pl_um: 3 });
     check('estrelas: jogador vota (a nota em si mesmo é ignorada)', r.status === 200 && r.result.ok === true && r.result.saved === 2 && r.result.total === 2 && r.result.ignored.join() === 'pl_um', r.raw);
     const dv = await vote(U.pl1.uid);
-    check('estrelas: o documento fica no uid da conta, com a chave do jogador e as notas', dv && dv.voterKey === 'pl_um' && dv.ratings.caio === 5 && dv.ratings.ana === 4 && !('pl_um' in dv.ratings), dv);
+    check('estrelas: o documento fica no uid da conta, com a chave do jogador e as notas (a meia estrela 3,5 guardada como veio)', dv && dv.voterKey === 'pl_um' && dv.ratings.caio === 5 && dv.ratings.ana === 3.5 && !('pl_um' in dv.ratings), dv);
     check('estrelas: 1 voto → o cadastro ganha a contagem e NÃO a média', (c => c.starsVotes === 1 && !('starsAvg' in c) && c.name === 'Caio')(await reg('caio')));
 
     // regras: só a dona lê as próprias notas
@@ -1033,9 +1037,9 @@ const CLOUDINARY = 'https://res.cloudinary.com/fwtyio7l/image/upload/v1/teste.jp
     await S('leagues/la/player_registry/adm_jog', { name: 'Adm Jogador', active: true });
     await db.update('owner', 'users/' + U.admA.uid, { 'leagues.la.playerKey': 'adm_jog' });
     await db.update('owner', 'users/' + U.pl2.uid, { 'leagues.la.playerKey': 'ana' });
-    const par = await Promise.all([[U.pl1, 5], [U.pl2, 3], [U.admA, 4]].map(([u, n]) => rate(u.token, { caio: n })));
+    const par = await Promise.all([[U.pl1, 5], [U.pl2, 3.5], [U.admA, 4]].map(([u, n]) => rate(u.token, { caio: n })));
     const cp = await reg('caio');
-    check('estrelas: 3 votos ao mesmo tempo (transação de verdade) → todos contam: 3 votos e média 4', par.every(x => x.status === 200) && cp.starsVotes === 3 && cp.starsAvg === 4, [par.map(x => x.status), cp]);
+    check('estrelas: 3 votos ao mesmo tempo (transação de verdade, um deles de meia estrela: 5, 3,5 e 4) → todos contam: 3 votos e média 4,17 (a nota 8,3 no app)', par.every(x => x.status === 200) && cp.starsVotes === 3 && cp.starsAvg === 4.17, [par.map(x => x.status), cp]);
     const par2 = await Promise.all([[U.pl1, 1], [U.pl2, 1], [U.admA, 1]].map(([u, n]) => rate(u.token, { caio: n })));
     const cp2 = await reg('caio');
     check('estrelas: 3 trocas ao mesmo tempo → a média acompanha todas (1, 1 e 1 → 1)', par2.every(x => x.status === 200) && cp2.starsVotes === 3 && cp2.starsAvg === 1, [par2.map(x => x.status), cp2]);

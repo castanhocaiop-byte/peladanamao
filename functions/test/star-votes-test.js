@@ -201,7 +201,8 @@ const resetStars = () => {
   check('neededVotes: metade de quem joga, nunca menos que 3', [0, 1, 4, 5, 6, 7, 10, 11, 20, 30].map(n => sv.neededVotes(n)).join() === '3,3,3,3,3,4,5,6,10,15', [0, 1, 4, 5, 6, 7, 10, 11, 20, 30].map(n => sv.neededVotes(n)));
   check('neededVotes: valor estranho vira o piso', sv.neededVotes(NaN) === 3 && sv.neededVotes(undefined) === 3 && sv.neededVotes(null) === 3 && sv.neededVotes('abc') === 3 && sv.neededVotes(-8) === 3);
   check('MIN_VOTES é 3 e o limite por chamada é 200', sv.MIN_VOTES === 3 && sv.MAX_KEYS === 200);
-  check('isStar: só inteiros de 1 a 5', [1, 2, 3, 4, 5].every(sv.isStar) && [0, 6, 3.5, -1, '3', null, undefined, NaN, true, [3], {}].every(v => !sv.isStar(v)));
+  check('isStar: as 10 notas, em ESTRELAS de meio em meio (0,5 a 5: a nota 1 a 10 do app é o dobro), e as notas antigas (1 a 5 inteiras) continuam valendo', [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].every(sv.isStar) && [1, 2, 3, 4, 5].every(sv.isStar));
+  check('isStar: recusa 0, o que passa de 5, o que não é de meio em meio, texto, nulo, NaN, infinito, booleano, lista e objeto', [0, -0.5, 5.5, 6, 10, 0.25, 0.75, 3.3, 2.9, 4.99, -1, '3', '3.5', null, undefined, NaN, Infinity, -Infinity, true, [3], {}].every(v => !sv.isStar(v)));
 
   const pr = (input, voterKey = 'ana') => sv.parseRatings(input, { voterKey, registryKeys: keys });
   check('parse: formato errado (nulo, lista, texto, número)', [null, undefined, [], [1], 'x', 5, true].every(v => pr(v).ok === false && pr(v).reason === 'shape'));
@@ -210,7 +211,8 @@ const resetStars = () => {
   check('parse: 200 jogadores passa e 201 é recusado', pr(big(200)).ok === true && pr(big(201)).reason === 'too-many');
   check('parse: chave inválida recusa a chamada inteira', ['a/b', 'a b', 'a.b', '..', 'x'.repeat(101), '', 'a"b', "a'b", 'a\nb'].every(k => pr({ bia: 3, [k]: 4 }).reason === 'key'));
   check('parse: chaves antigas (acento, hífen, maiúscula) são aceitas', pr({ 'João-Silva_2': null }).ok === true && pr({ 'João-Silva_2': null }).remove[0] === 'João-Silva_2');
-  check('parse: nota fora de 1 a 5 recusa a chamada inteira, mesmo com notas boas junto', [0, 6, 3.5, -2, '3', true, [3], { a: 1 }, NaN, Infinity].every(v => pr({ bia: 4, caio: v }).reason === 'value'));
+  check('parse: nota inválida (0, acima de 5, fora de meio em meio, texto…) recusa a chamada inteira, mesmo com notas boas junto', [0, 6, 5.5, 0.25, 3.3, -2, '3', true, [3], { a: 1 }, NaN, Infinity].every(v => pr({ bia: 4, caio: v }).reason === 'value'));
+  check('parse: notas de meio em meio (0,5 e 3,5) passam, junto com as inteiras', (x => x.ok && JSON.stringify(x.set) === '{"bia":3.5,"caio":0.5,"dani":5}')(pr({ bia: 3.5, caio: 0.5, dani: 5 })), pr({ bia: 3.5, caio: 0.5, dani: 5 }));
   let p = pr({ bia: 4, caio: null, dani: 1 });
   check('parse: dar e tirar nota', p.ok && JSON.stringify(p.set) === '{"bia":4,"dani":1}' && p.remove.join() === 'caio' && p.ignored.length === 0, p);
   p = pr({ ana: 5, bia: 2 });
@@ -237,8 +239,10 @@ const resetStars = () => {
   check('tally: voto em si mesmo não conta', !t.has('ana') && t.get('bia').count === 1);
   t = sv.tally([doc('1', 'fantasma', { bia: 4 }), doc('2', 'ana', { fantasma: 4, bia: 3 })], keys);
   check('tally: voto de quem saiu do elenco e voto em quem saiu não contam', t.get('bia').count === 1 && t.get('bia').sum === 3 && !t.has('fantasma'));
-  t = sv.tally([doc('1', 'ana', { bia: 9, caio: '4', dani: 0, eli: 2.5 })], new Set([...keys, 'eli']));
-  check('tally: nota fora de 1 a 5 no documento não conta', t.size === 0);
+  t = sv.tally([doc('1', 'ana', { bia: 9, caio: '4', dani: 0, eli: 2.3 })], new Set([...keys, 'eli']));
+  check('tally: nota inválida no documento (9, texto, 0, 2,3) não conta', t.size === 0);
+  t = sv.tally([doc('1', 'ana', { bia: 3.5 }), doc('2', 'caio', { bia: 4.5 }), doc('3', 'dani', { bia: 0.5 })], keys);
+  check('tally: notas de meio em meio contam e a soma é exata (3,5 + 4,5 + 0,5 = 8,5 em 3 votos)', t.get('bia').sum === 8.5 && t.get('bia').count === 3, [...t]);
   t = sv.tally([doc('a', 'ana', { bia: 5 }, '2026-01-02'), doc('b', 'ana', { bia: 1 }, '2026-01-03')], keys);
   check('tally: duas contas no mesmo jogador valem UM voto: fica a mais recente', t.get('bia').count === 1 && t.get('bia').sum === 1);
   t = sv.tally([doc('a', 'ana', { bia: 5 }, '2026-01-03'), doc('b', 'ana', { bia: 1 }, '2026-01-03')], keys);
@@ -297,10 +301,11 @@ const resetStars = () => {
 
   const before = snapshot();
   for (const [label, ratings, msg] of [
-    ['nulo', null, /inválidas/], ['lista', [3], /inválidas/], ['vazio', {}, /Nenhuma nota/], ['nota 6', { bia: 6 }, /1 a 5/], ['nota 0', { bia: 0 }, /1 a 5/],
-    ['nota quebrada', { bia: 2.5 }, /1 a 5/], ['nota texto', { bia: '3' }, /1 a 5/], ['nota booleana', { bia: true }, /1 a 5/], ['nota objeto', { bia: { a: 1 } }, /1 a 5/],
+    ['nulo', null, /inválidas/], ['lista', [3], /inválidas/], ['vazio', {}, /Nenhuma nota/], ['nota 6', { bia: 6 }, /1 a 10/], ['nota 0', { bia: 0 }, /1 a 10/],
+    ['nota 5,5', { bia: 5.5 }, /1 a 10/], ['nota quebrada', { bia: 2.3 }, /1 a 10/], ['nota 0,25', { bia: 0.25 }, /1 a 10/],
+    ['nota texto', { bia: '3' }, /1 a 10/], ['nota booleana', { bia: true }, /1 a 10/], ['nota objeto', { bia: { a: 1 } }, /1 a 10/],
     ['chave com barra', { 'a/b': 3 }, /Jogador inválido/], ['chave de caminho', { 'users/x': 3 }, /Jogador inválido/], ['notas demais', Object.fromEntries(Array.from({ length: 201 }, (_, i) => ['k' + i, 3])), /demais/],
-    ['boa + ruim juntas', { bia: 4, caio: 9 }, /1 a 5/],
+    ['boa + ruim juntas', { bia: 4, caio: 9 }, /1 a 10/],
   ]) {
     let err = null; try { await rate('u_ana', ratings); } catch (e) { err = e; }
     check(`rate: ${label} → invalid-argument com mensagem clara`, err && err.code === 'invalid-argument' && msg.test(err.message), err && [err.code, err.message]);
@@ -324,6 +329,9 @@ const resetStars = () => {
   check('rate: a nota que ana recebeu (1 voto) e a de bia (1 voto) só têm contagem', regOf('ana').starsVotes === 1 && !('starsAvg' in regOf('ana')) && regOf('bia').starsVotes === 1, [regOf('ana'), regOf('bia')]);
   await rate('u_ana', { caio: 1 });
   check('rate: trocar a nota recalcula (1, 3, 4 → 2,67) e mantém as outras notas dela', regOf('caio').starsAvg === 2.67 && VOTE('u_ana').ratings.bia === 4 && VOTE('u_ana').ratings.caio === 1, [regOf('caio'), VOTE('u_ana')]);
+  // as notas de 1 a 10 do app chegam como estrelas de meio em meio (a nota 7 é 3,5): o servidor guarda e tira a média na mesma unidade
+  await rate('u_ana', { caio: 3.5 }); await rate('u_bia', { caio: 4.5 }); await rate('u_dani', { caio: 0.5 });
+  check('rate: notas de meio em meio (3,5, 4,5 e 0,5) são guardadas como vieram e a média sai na mesma unidade (8,5 ÷ 3 = 2,83)', VOTE('u_ana').ratings.caio === 3.5 && VOTE('u_bia').ratings.caio === 4.5 && VOTE('u_dani').ratings.caio === 0.5 && regOf('caio').starsAvg === 2.83 && regOf('caio').starsVotes === 3, [regOf('caio'), VOTE('u_ana')]);
   let r2 = await rate('u_ana', { caio: null });
   check('rate: tirar a nota recalcula; com 2 votos a média SOME do cadastro (o campo é apagado)', r2.removed === 1 && r2.total === 1 && regOf('caio').starsVotes === 2 && !('starsAvg' in regOf('caio')) && VOTE('u_ana').ratings.caio === undefined, [r2, regOf('caio')]);
   await rate('u_ana', { bia: null });
@@ -530,7 +538,7 @@ const resetStars = () => {
   check('chamada: um único envio, só para os aparelhos de quem PODE avaliar: membros (admin ou jogador) ligados a um jogador do elenco, sem repetir aparelho, sem quem chamou, sem pendente, sem recusado, sem outra liga, sem conta sem jogador e sem jogador que saiu do elenco',
     pushes.length === 1 && JSON.stringify([...pushes[0].tokens].sort()) === JSON.stringify(['tok-ana-1', 'tok-ana-2', 'tok-bia', 'tok-dani']), pushes.map(p => p.tokens));
   const p0 = pushes[0];
-  check('chamada: o aviso diz o que é, o nome da liga e que as notas são anônimas; leva a liga e a tela; uma etiqueta por liga (repetir substitui, não empilha)', p0.notification.title === '⭐ Avalie o elenco — Liga L' && /1 a 5 estrelas/.test(p0.notification.body) && /anônimas/.test(p0.notification.body) && /média do grupo/.test(p0.notification.body) && p0.data.leagueId === 'L' && p0.data.view === 'eu' && p0.data.tag === 'estrelas-L' && p0.webpush.notification.tag === 'estrelas-L', p0);
+  check('chamada: o aviso diz o que é, o nome da liga e que as notas são anônimas; leva a liga e a tela; uma etiqueta por liga (repetir substitui, não empilha)', p0.notification.title === '⭐ Avalie o elenco — Liga L' && /nota de 1 a 10/.test(p0.notification.body) && /anônimas/.test(p0.notification.body) && /média do grupo/.test(p0.notification.body) && p0.data.leagueId === 'L' && p0.data.view === 'eu' && p0.data.tag === 'estrelas-L' && p0.webpush.notification.tag === 'estrelas-L', p0);
   check('chamada: grava no app_config/main o momento e QUEM chamou (o banner do app lê isso) e não apaga o resto da configuração', /^\d{4}-\d\d-\d\dT/.test(cfgL().starsCallAt) && Date.parse(cfgL().starsCallAt) >= t0 - 1000 && cfgL().starsCallBy === 'u_adm' && cfgL().peerStars === true && cfgL().hasFinais === true, cfgL());
   check('chamada: guarda o momento do aviso no controle do servidor (rate_limits), que só o servidor lê', cool() && Math.abs(cool().at - t0) < 5000, cool());
   check('chamada: não mexe em outra liga', !store.has('leagues/B/app_config/main') && !pushes.some(p => p.tokens.includes('tok-fora') || p.tokens.includes('tok-admB')));

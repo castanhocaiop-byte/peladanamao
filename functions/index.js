@@ -876,7 +876,8 @@ exports.saveEarnedBadges = onCall(CALLABLE, async request => {
 
 // ── Estrelas pela média do grupo (item 35) ───────────────────────────────────
 //
-// Quando o admin liga "Estrelas pela média do grupo", cada jogador dá de 1 a 5 estrelas aos outros e a média passa a valer no
+// Quando o admin liga "Estrelas pela média do grupo", cada jogador dá uma nota de 1 a 10 aos outros (guardada em estrelas, de meio em meio:
+// a nota 7 é 3,5; ver star-votes.js) e a média passa a valer no
 // sorteio. As notas são ANÔNIMAS: ficam em leagues/{liga}/star_votes/{uid}, que nenhuma conta lê além da dona (ver
 // firestore.rules), e só aparece a média, publicada no cadastro do jogador (starsVotes e starsAvg). A conta toda está em
 // star-votes.js; aqui fica a parte que mexe no banco.
@@ -931,10 +932,10 @@ const STAR_REASONS = {
   empty: "Nenhuma nota enviada.",
   "too-many": "Notas demais de uma vez.",
   key: "Jogador inválido.",
-  value: "Cada nota deve ser de 1 a 5 estrelas.",
+  value: "Cada nota deve ser de 1 a 10.",
 };
 
-// Dar, trocar ou tirar as notas de quem chama. { liga, ratings: { [chave do jogador]: 1..5 | null } } (só o que mudou).
+// Dar, trocar ou tirar as notas de quem chama. { liga, ratings: { [chave do jogador]: 0,5..5 de meio em meio | null } } (só o que mudou; o app manda a nota 1 a 10 dividida por 2).
 exports.ratePlayers = onCall(CALLABLE, async request => {
   const auth = requireAuth(request);
   await checkRateLimit(auth.uid, "ratePlayers", 30);
@@ -1024,7 +1025,7 @@ exports.notifyStarRatings = onCall(CALLABLE, async request => {
   const tokens = [...new Set(withPush.flatMap(d => d.data().fcmTokens || []))];
   const leagueName = league.data()?.name || "Pelada na Mão";
   try {
-    await sendToTokens(tokens, { title: `⭐ Avalie o elenco — ${leagueName}`, body: "Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio." },
+    await sendToTokens(tokens, { title: `⭐ Avalie o elenco — ${leagueName}`, body: "Dê uma nota de 1 a 10 aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio." },
       { leagueId: liga, view: "eu" }, `estrelas-${liga}`);
   } catch (e) {
     logger.error("notifyStarRatings: o envio do aviso falhou", { liga, code: e?.code });

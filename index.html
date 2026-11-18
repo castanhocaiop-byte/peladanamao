@@ -418,7 +418,9 @@ nav {
 
 details[open] .det-arrow { transform: rotate(180deg); }
 .det-arrow { transition: transform .2s; display:inline-block; }
-.star-btn { background:none;border:none;cursor:pointer;font-size:17px;padding:0 1px;line-height:1;transition:color .1s; }
+.nota-btn { min-width:24px;height:28px;padding:0 3px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;font-weight:700;line-height:1;cursor:pointer;font-family:inherit;transition:background .1s,color .1s,border-color .1s; }
+.nota-btn.on { background:#F0A5001F;border-color:var(--gold);color:var(--gold); }
+@media (max-width:340px) { .nota-btn { min-width:22px;padding:0 2px; } } /* celular bem estreito (320 px): as 10 notas cabem numa linha só, sem o "10" sozinho embaixo */
 .draw-team-card { background:var(--s1);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:8px; }
 .draw-team-name { font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px; }
 .draw-player-chip { display:inline-flex;align-items:center;gap:4px;background:var(--s2);border-radius:20px;padding:3px 9px;font-size:12px;font-weight:600;margin:2px; }
@@ -775,7 +777,7 @@ html.lp-show #app { display: none; }
       <p class="lp-sub">Chega de planilha, de lista perdida no grupo e de discussão sobre quem foi campeão.</p>
       <div class="lp-grid lp-grid-4">
         <article class="lp-card"><div class="lp-ico">📋</div><h3>Convocação</h3><p>Abra a lista de presença, mande o link e veja quem vai. A galera recebe aviso no celular.</p></article>
-        <article class="lp-card"><div class="lp-ico">⚖️</div><h3>Sorteio de times</h3><p>Equilibrado pelas estrelas de cada jogador, aleatório ou manual. Os goleiros ficam bem distribuídos.</p></article>
+        <article class="lp-card"><div class="lp-ico">⚖️</div><h3>Sorteio de times</h3><p>Equilibrado pela nota (de 1 a 10) de cada jogador, aleatório ou manual. Os goleiros ficam bem distribuídos.</p></article>
         <article class="lp-card"><div class="lp-ico">⚽</div><h3>Placar e campeonatos</h3><p>Jogos, final e quem fez cada gol. Tudo fica guardado no histórico.</p></article>
         <article class="lp-card"><div class="lp-ico">🏆</div><h3>Ranking e artilharia</h3><p>Títulos (com meio título), gols, médias e sequências: a memória da sua pelada.</p></article>
         <article class="lp-card"><div class="lp-ico">🎖️</div><h3>Conquistas</h3><p>Dezenas de conquistas para a resenha, como Invicto, Bicampeão e Veterano.</p></article>
@@ -5703,19 +5705,26 @@ function starsInfo(p) {
   return { value: admin, source: 'admin', votes, needed };
 }
 function starsOf(p) { return starsInfo(p).value; }
-// "4" ou "3,7": uma casa só quando a nota não é inteira
-function starsText(n) { const v = Math.round((Number(n) || 0) * 10) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ','); }
-// as estrelas da lista: ★★★★ (arredondado) e, quando a nota não é inteira, o número ao lado; "—" sem nota
-function starsDisplay(n) { const v = Number(n) || 0; return v ? '★'.repeat(Math.max(1, Math.min(5, Math.round(v)))) + (Number.isInteger(v) ? '' : ' ' + starsText(v)) : '—'; }
+/* A NOTA que a pessoa vê e dá vai de 1 a 10 (pedido do dono em 18/11/2026: com 1 a 5 muitos jogadores de nível diferente ficavam com a mesma avaliação). O que fica GRAVADO
+   (a estrela do admin, starsAvg e as notas do grupo) continua em ESTRELAS, agora de meio em meio (0,5 a 5): a nota é o DOBRO das estrelas (nota 7 = 3,5 estrelas). Assim as notas que já
+   existiam (1 a 5 estrelas inteiras) viram as notas 2, 4, 6, 8 e 10 sem converter nada no banco, e o servidor, o sorteio (pesos em centésimos de estrela) e as médias seguem
+   na mesma unidade. */
+const NOTA_MAX = 10;
+// a nota inteira que acende nos botões (a média do grupo arredonda)
+function notaOf(stars) { return Math.round((Number(stars) || 0) * 2); }
+// a nota que a pessoa vê, a partir das estrelas guardadas: "7" ou "7,3" (uma casa só quando não é inteira); a soma de um time sai na mesma unidade ("35")
+function starsText(n) { const v = Math.round((Number(n) || 0) * 20) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ','); }
+// a nota nas listas: "★ 7" (ou "★ 7,3" quando não é inteira); "—" sem nota
+function starsDisplay(n) { const v = Number(n) || 0; return v ? '★ ' + starsText(v) : '—'; }
 // a frase miúda embaixo do nome no Elenco (só com a opção ligada)
 function starsCaption(p) {
   if (!peerStarsOn()) return '';
   const i = starsInfo(p), votos = n => `${n} voto${n === 1 ? '' : 's'}`;
-  if (i.source === 'pinned') return '📌 estrela fixada pelo admin';
+  if (i.source === 'pinned') return '📌 nota fixada pelo admin';
   if (i.source === 'avg') return `média do grupo ${starsText(i.value)} · ${votos(i.votes)}`;
   return i.votes > 0 ? `${votos(i.votes)} de ${i.needed} para a média do grupo valer` : '';
 }
-// peso de um jogador no sorteio: centésimos de estrela, em INTEIRO (as somas ficam exatas, sem erro de ponto flutuante); sem nota vale 3
+// peso de um jogador no sorteio: centésimos de estrela, em INTEIRO (as somas ficam exatas, sem erro de ponto flutuante); sem nota vale 3 estrelas (nota 6)
 function drawWeight(p) { return Math.round((starsOf(p) || 3) * 100); }
 
 async function setPlayerStars(id, stars) {
@@ -5726,7 +5735,7 @@ async function setPlayerStars(id, stars) {
   // com a média do grupo valendo, mexer na estrela do admin só muda algo se ele FIXAR a estrela deste jogador
   if (p && starsInfo(p).source === 'avg') {
     if (!stars) return;
-    if (!confirm(`Fixar a estrela de ${p.name} em ${stars}? A média do grupo (${starsText(starsInfo(p).value)}) deixa de valer para ele. Para voltar à média, toque no 📌.`)) return;
+    if (!confirm(`Fixar a nota de ${p.name} em ${starsText(stars)}? A média do grupo (${starsText(starsInfo(p).value)}) deixa de valer para ele. Para voltar à média, toque no 📌.`)) return;
     update.starsPinned = true;
   }
   try {
@@ -5736,7 +5745,7 @@ async function setPlayerStars(id, stars) {
 
 async function toggleStarsPinned(id, current) {
   if (!DB) return;
-  if (!isAdmin()) { toast('Apenas administradores podem fixar a estrela.'); return; }
+  if (!isAdmin()) { toast('Apenas administradores podem fixar a nota.'); return; }
   try {
     await ldoc(`player_registry/${id}`).update({starsPinned: !current});
   } catch(e) { toast('Erro: ' + (e?.message||e)); }
@@ -5778,7 +5787,7 @@ function renderStarsCallBanner() {
     <span style="font-size:22px">⭐</span>
     <div style="flex:1 1 180px;min-width:0">
       <div style="font-size:13px;font-weight:700">O admin pediu para você avaliar o elenco</div>
-      <div style="font-size:11px;color:var(--text3)">Dê de 1 a 5 estrelas aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio.</div>
+      <div style="font-size:11px;color:var(--text3)">Dê uma nota de 1 a 10 aos outros jogadores. As notas são anônimas e a média do grupo vale no sorteio.</div>
     </div>
     <div style="display:flex;gap:8px">
       <button onclick="openRateStars()" style="padding:8px 14px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Avaliar agora</button>
@@ -5808,7 +5817,7 @@ async function callStarRaters() {
   }
 }
 
-/* ── Avaliar o elenco: cada jogador dá de 1 a 5 estrelas aos outros ──────────────────────────────────────────────────────────── */
+/* ── Avaliar o elenco: cada jogador dá uma nota de 1 a 10 aos outros ──────────────────────────────────────────────────────────── */
 function ratingTargets() {
   const me = myVotePlayer();
   if (!me) return [];
@@ -5824,7 +5833,7 @@ async function openRateStars() {
   try {
     const snap = await DB.doc(`leagues/${st.leagueId}/star_votes/${st.authUser.uid}`).get();
     const r = snap.exists ? snap.data()?.ratings : null;
-    if (r && typeof r === 'object') for (const row of rows) { const n = r[row.id]; if (Number.isInteger(n) && n >= 1 && n <= 5) saved[row.id] = n; }
+    if (r && typeof r === 'object') for (const row of rows) { const n = r[row.id]; if (Number.isFinite(n) && Number.isInteger(n * 2) && n >= 0.5 && n <= 5) saved[row.id] = n; } // estrelas de meio em meio: a nota 1 a 10 é o dobro
   } catch(e) { /* sem as notas de antes a pessoa ainda pode avaliar */ }
   const m = st.modal;
   if (!m || m.type !== 'rateStars') return; // fechou a janela enquanto carregava
@@ -5837,7 +5846,7 @@ function rateStarSet(idx, n) {
   if (!m || m.type !== 'rateStars' || m.loading || m.busy) return;
   const row = m.rows[idx];
   if (!row) return;
-  if (m.draft[row.id] === n) delete m.draft[row.id]; else m.draft[row.id] = n; // tocar de novo na mesma estrela tira a nota
+  if (m.draft[row.id] === n) delete m.draft[row.id]; else m.draft[row.id] = n; // tocar de novo na mesma nota tira a nota (n em ESTRELAS de meio em meio: a nota 7 chega aqui como 3,5)
   const top = getModalScrollTop();
   render();
   setModalScrollTop(top);
@@ -5871,13 +5880,12 @@ function mRateStars() {
   if (!m || m.type !== 'rateStars') return '';
   const done = m.rows.filter(r => m.draft[r.id]).length;
   const rows = m.rows.map((r, i) => {
-    const n = m.draft[r.id] || 0;
-    const btns = [1,2,3,4,5].map(k => `<button onclick="rateStarSet(${i},${k})" title="${k} estrela${k>1?'s':''}" aria-label="${k} estrela${k>1?'s':''} para ${esc(r.name)}"
-      style="background:none;border:none;padding:2px 3px;font-size:24px;line-height:1;cursor:pointer;color:${n>=k?'var(--gold)':'var(--border)'}">★</button>`).join('');
+    const n = m.draft[r.id] || 0; // em estrelas (de meio em meio): a nota k acende quando n >= k/2
+    const btns = Array.from({ length: NOTA_MAX }, (_, j) => j + 1).map(k => `<button class="nota-btn${n>=k/2?' on':''}" onclick="rateStarSet(${i},${k/2})" title="Nota ${k}" aria-label="Nota ${k} para ${esc(r.name)}">${k}</button>`).join('');
     return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:8px 0;border-top:1px solid var(--border2)">
       ${playerAvatar(r.name, 30)}
       <span style="flex:1 1 110px;min-width:0;overflow-wrap:anywhere;font-size:14px;font-weight:600">${esc(r.name)}${r.goleiro?' <span style="font-size:11px;color:#4FC3F7">🧤</span>':''}</span>
-      <span style="display:flex;margin-left:auto">${btns}</span>
+      <span style="display:flex;flex-wrap:wrap;gap:3px;margin-left:auto">${btns}</span>
     </div>`;
   }).join('');
   const body = m.loading
@@ -5888,7 +5896,7 @@ function mRateStars() {
     <div class="sheet" onclick="event.stopPropagation()" style="max-height:88dvh;display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px)+16px)">
       <div class="sheet-handle"></div>
       <div style="font-size:17px;font-weight:800;margin-bottom:2px">⭐ Avaliar o elenco</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">Dê de 1 a 5 estrelas ao nível de cada jogador. <strong style="color:var(--text2)">As notas são anônimas</strong>: ninguém vê quem deu qual nota, só a média do grupo. Você pode mudar quando quiser e pular quem não conhece.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">Dê uma nota de 1 a 10 ao nível de cada jogador. <strong style="color:var(--text2)">As notas são anônimas</strong>: ninguém vê quem deu qual nota, só a média do grupo. Você pode mudar quando quiser e pular quem não conhece.</div>
       <div style="overflow-y:auto;flex:1">${body}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:10px">${m.loading ? '' : `Você avaliou ${done} de ${m.rows.length}.`}</div>
       <div style="display:flex;gap:8px;margin-top:12px">
@@ -6791,19 +6799,19 @@ function vCreate() {
   </div>`;
 }
 
+// A nota do jogador no Elenco: o admin vê os botões 1 a 10 (acesos até a nota, como as estrelas acendiam) e toca para dar a nota; os outros veem "★ 7". O que o botão
+// grava é em ESTRELAS de meio em meio (a nota 7 grava 3,5): ver NOTA_MAX.
 function renderStars(p) {
   const info = starsInfo(p);
-  const s = Math.round(info.value) || 0; // as estrelas acesas (a média do grupo, quando vale, arredonda)
+  const s = notaOf(info.value); // a nota acesa (a média do grupo, quando vale, arredonda)
   if (!isAdmin()) {
-    return [1,2,3,4,5].map(i =>
-      `<span style="font-size:17px;padding:0 1px;color:${s>=i?'var(--gold)':'var(--border)'}">★</span>`
-    ).join('');
+    return s ? `<span style="font-size:13px;font-weight:700;padding:0 2px;color:var(--gold)">${esc(starsDisplay(info.value))}</span>`
+             : `<span style="font-size:13px;padding:0 2px;color:var(--text3)">—</span>`;
   }
-  // com a média do grupo valendo, tocar numa estrela FIXA a estrela do jogador naquele número (não há "zerar": o 📌 desfaz)
+  // com a média do grupo valendo, tocar numa nota FIXA a nota do jogador naquele número (não há "zerar": o 📌 desfaz)
   const base = info.source === 'avg' ? -1 : s;
-  return [1,2,3,4,5].map(i =>
-    `<button class="star-btn" onclick="setPlayerStars('${p.id}',${i===base?0:i})" title="${i} estrela${i>1?'s':''}"
-      style="color:${s>=i?'var(--gold)':'var(--border)'}">★</button>`
+  return Array.from({ length: NOTA_MAX }, (_, i) => i + 1).map(k =>
+    `<button class="nota-btn${s>=k?' on':''}" onclick="setPlayerStars('${p.id}',${k===base?0:k/2})" title="Nota ${k}" aria-label="Nota ${k}">${k}</button>`
   ).join('');
 }
 
@@ -6962,8 +6970,8 @@ function vPlayers() {
     const isChurr = !!p.somenteChurrasco;
     const isGoal  = !!p.goleiro;
     // O nome vem primeiro e nunca passa por baixo das estrelas e dos botões: a linha quebra (flex-wrap) e o grupo de controles desce para uma
-    // 2ª linha quando não cabe ao lado do nome. Num celular o admin tem 5 estrelas + 5 botões (uns 300 px); com tudo numa linha só o nome
-    // encolhia até zero e o texto saía por cima das estrelas.
+    // 2ª linha quando não cabe ao lado do nome. Num celular o admin tem os 10 botões de nota + 5 botões (uns 500 px, que quebram em duas linhas); com tudo numa linha só o nome
+    // encolhia até zero e o texto saía por cima dos botões.
     return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 14px;border-top:1px solid var(--border2);opacity:${isActive?1:.45}">
       <span style="display:inline-flex;margin-right:6px">${playerAvatar(p.name, 34)}</span>
       <div style="flex:1 1 120px;min-width:0;overflow-wrap:anywhere">
@@ -6973,9 +6981,9 @@ function vPlayers() {
         ${starsCaption(p)?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${esc(starsCaption(p))}</div>`:''}
       </div>
       <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-left:auto">
-      <span style="display:flex;gap:0">${renderStars(p)}</span>
+      <span style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:3px">${renderStars(p)}</span>
       ${isAdmin()?`
-      ${peerStarsOn()?`<button onclick="toggleStarsPinned('${p.id}',${p.starsPinned===true})" title="${p.starsPinned===true?'Estrela fixada pelo admin: toque para voltar a usar a média do grupo':'Fixar a estrela do admin: ignora a média do grupo'}"
+      ${peerStarsOn()?`<button onclick="toggleStarsPinned('${p.id}',${p.starsPinned===true})" title="${p.starsPinned===true?'Nota fixada pelo admin: toque para voltar a usar a média do grupo':'Fixar a nota do admin: ignora a média do grupo'}"
         style="padding:3px 9px;border-radius:20px;border:1px solid ${p.starsPinned===true?'var(--gold)':'var(--border)'};
                background:${p.starsPinned===true?'#F0A50018':'none'};color:${p.starsPinned===true?'var(--gold)':'var(--text3)'};
                font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📌</button>`:''}
@@ -7012,7 +7020,7 @@ function vPlayers() {
       <span style="font-size:11px;color:var(--text3)">${active.length} ativos${inactive.length?` · ${inactive.length} inativos`:''}</span>
     </div>
     ${peerStarsOn()?`<div class="card-body" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px">
-      <div style="flex:1 1 200px;min-width:0;font-size:12px;color:var(--text3);line-height:1.5">⭐ A estrela de cada jogador vem da <strong style="color:var(--text2)">média das notas do grupo</strong>. As notas são anônimas: só a média aparece.</div>
+      <div style="flex:1 1 200px;min-width:0;font-size:12px;color:var(--text3);line-height:1.5">⭐ A nota de cada jogador (de 1 a 10) vem da <strong style="color:var(--text2)">média das notas do grupo</strong>. As notas são anônimas: só a média aparece.</div>
       ${myVotePlayer()?`<button class="btn btn-primary btn-sm btn-inline" onclick="openRateStars()" style="margin:0;white-space:nowrap">Avaliar o elenco</button>`:''}
       ${isAdmin()?`<button class="btn btn-sm btn-inline" onclick="callStarRaters()" ${st._starsCalling?'disabled':''} style="margin:0;white-space:nowrap;border:1px solid var(--accent);background:none;color:var(--accent)">${st._starsCalling?'Chamando…':'📣 Chamar o grupo'}</button>`:''}
     </div>`:''}
@@ -8647,9 +8655,9 @@ function vMeuJogador() {
         <span style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--gold)">${val}</span></div>`;
       return `<div class="card" style="margin-top:0">
         <div class="card-hdr"><span class="card-lbl">Média dos Meus Times</span></div>
-        ${rowT('Estrelas médias do time', starsText(avgTeamStars)+'★', `${teamHistory.length} campeonato${teamHistory.length>1?'s':''} com elenco registrado`)}
+        ${rowT('Soma das notas do time (média)', starsText(avgTeamStars)+'★', `${teamHistory.length} campeonato${teamHistory.length>1?'s':''} com elenco registrado`)}
         ${teamWinPct!==null?rowT('Taxa de título (por time)', teamWinPct+'%', `${teamWins.length} de ${teamHistory.length} campeonatos`):''}
-        ${avgChampTeamStars!==null?rowT('Estrelas médias — times campeões', starsText(avgChampTeamStars)+'★', `média nos ${teamWins.length} título${teamWins.length>1?'s':''}`):''}
+        ${avgChampTeamStars!==null?rowT('Soma das notas — times campeões (média)', starsText(avgChampTeamStars)+'★', `média nos ${teamWins.length} título${teamWins.length>1?'s':''}`):''}
       </div>`;
     })() : ''}
     ${st.mjPreviewKey ? '' : anonymizeNameLink() + deleteAccountLink()}
@@ -8694,7 +8702,7 @@ function mMjTeamDetail() {
       <div style="font-size:12px;color:var(--text3);margin-bottom:4px">${fdt(d.date)}</div>
       <div style="font-size:13px;font-weight:700;color:${resultCfg.color};margin-bottom:12px">${resultCfg.label}</div>
       <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);margin-bottom:4px">
-        <span style="font-size:13px;color:var(--text2)">⭐ <strong>${starsText(d.teamStars)}</strong> estrelas</span>
+        <span style="font-size:13px;color:var(--text2)">⭐ nota do time <strong>${starsText(d.teamStars)}</strong></span>
         <span style="font-size:13px;color:var(--text2)">🏆 <strong>${d.rosterTitles}</strong> títulos no elenco</span>
         <span style="font-size:13px;color:var(--text2)">👥 <strong>${(d.roster||[]).length}</strong> jogadores</span>
       </div>
@@ -9223,7 +9231,7 @@ function mAdminPanel() {
           </div>
           <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:7px">⭐ Estrelas pela média do grupo</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada jogador dá de 1 a 5 estrelas aos outros e o sorteio equilibrado passa a usar a média das notas. As notas são anônimas: só a média aparece. A média vale para cada jogador quando metade do elenco que joga (no mínimo 3 pessoas) já avaliou; antes disso vale a estrela que você deu. No Elenco, o 📌 fixa a estrela de um jogador e ignora os votos dele, e o 📣 Chamar o grupo avisa os jogadores para avaliarem (uma vez a cada 6 horas).</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada jogador dá uma nota de 1 a 10 aos outros e o sorteio equilibrado passa a usar a média das notas. As notas são anônimas: só a média aparece. A média vale para cada jogador quando metade do elenco que joga (no mínimo 3 pessoas) já avaliou; antes disso vale a nota que você deu. No Elenco, o 📌 fixa a nota de um jogador e ignora os votos dele, e o 📣 Chamar o grupo avisa os jogadores para avaliarem (uma vez a cada 6 horas).</div>
             <div style="display:flex;gap:8px">
               <button onclick="saveAppCfg({peerStars:true})" style="${tog(!!cfg.peerStars)}">Ligada</button>
               <button onclick="saveAppCfg({peerStars:false})" style="${tog(!cfg.peerStars)}">Desligada</button>
@@ -11006,7 +11014,7 @@ function vStats() {
 
     const list = Object.entries(acc)
       .filter(([,v])=>v.n>=1)
-      .map(([name,v])=>({name, avgT:+(v.tSum/v.n).toFixed(2), avgS:+(v.sSum/v.n).toFixed(1), n:v.n}));
+      .map(([name,v])=>({name, avgT:+(v.tSum/v.n).toFixed(2), avgS:+(v.sSum/v.n).toFixed(2), n:v.n}));   // em estrelas (a tela mostra a nota, o dobro: starsText)
 
     const byT = [...list].sort((a,b)=>b.avgT-a.avgT);
     const byS = [...list].sort((a,b)=>b.avgS-a.avgS);
@@ -11062,7 +11070,7 @@ function vStats() {
     };
 
     return block('🍀 Sortudos & Azarados — Títulos do Elenco', byT, 'títulos', p=>p.avgT.toFixed(1)) +
-           block('⭐ Sortudos & Azarados — Estrelas do Elenco', byS, '★', p=>p.avgS.toFixed(1));
+           block('⭐ Sortudos & Azarados — Notas do Elenco', byS, '★', p=>starsText(p.avgS));
   })()}
 
   <div class="card">
