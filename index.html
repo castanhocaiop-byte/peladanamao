@@ -579,7 +579,7 @@ details[open] .det-arrow { transform: rotate(180deg); }
   padding: 8px 0; border-bottom: 1px solid var(--border2);
 }
 .player-input {
-  flex: 1; background: var(--s2); border: 1px solid var(--border);
+  flex: 1; min-width: 0; background: var(--s2); border: 1px solid var(--border);
   border-radius: var(--r-sm); padding: 10px 12px;
   color: var(--text); font-family: inherit; font-size: 14px;
   outline: none; transition: border-color .15s;
@@ -594,6 +594,8 @@ details[open] .det-arrow { transform: rotate(180deg); }
 }
 .wbtn.on { background: var(--accent); border-color: var(--accent); color: #000; }
 .add-player-btn { background: none; color: var(--text2); border: 1px dashed var(--border); margin-top: 10px; }
+.p-del { background: none; border: none; color: var(--text3); font-size: 16px; line-height: 1; padding: 8px 6px; cursor: pointer; font-family: inherit; }
+.p-del:hover { color: var(--danger); }
 
 /* ── empty / loading ───────────────────────────────────────── */
 .empty { text-align: center; padding: 60px 24px; }
@@ -5376,6 +5378,7 @@ async function saveChampion() {
   document.querySelectorAll('#plist .player-input').forEach((inp,i) => {
     if (st.modal.players[i]) st.modal.players[i].name = inp.value;
   });
+  if (st.modal.edit) return saveChampionEdit(); // "✏️ Editar campeões": campeonato já finalizado (item 49)
 
   const snap = JSON.parse(JSON.stringify(st.modal));
 
@@ -5497,6 +5500,138 @@ function defPlayers() {
 
 const playerKey = name => name.trim().toLowerCase().normalize('NFD')
   .replace(/[̀-ͯ]/g,'').replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'').slice(0,80);
+
+/* ── Editar os campeões de um campeonato JÁ finalizado (item 49) ───────────────────────────────────────────────────────────────────────────────────
+   Os jogadores campeões são registrados uma vez, na janela "Registrar Jogadores Campeões" (saveChampion), e a lista fica em DOIS lugares: no campeonato (champion_players) e, para
+   cada campeão, em player_titles/{chave}.entries (o Ranking de títulos). Depois de finalizado não havia como corrigir (esquecer um jogador, pôr alguém errado, trocar 1 por ½). Agora
+   o admin toca em "✏️ Editar campeões" no quadro do campeão (Histórico), muda a lista (tirar, pôr, 1 ou ½) e confirma: o app grava a lista nova E acerta os títulos de quem entrou, saiu
+   ou mudou de peso, tudo numa TRANSAÇÃO (ou grava tudo ou nada). Só o admin (as regras já limitam player_titles ao admin). O time campeão e o placar NÃO mudam aqui. Campeonato do
+   plano gratuito (freeMode) não tem título no Ranking: só a lista muda. Se outra pessoa mexeu na lista enquanto a janela estava aberta, nada é gravado e o admin é avisado. */
+const CHAMP_NAME_MAX = 40;
+const champW = w => (Number(w) === 0.5 ? 0.5 : 1); // peso de um campeão: título inteiro (1) ou meio título (0,5); registro antigo sem peso vale 1
+// Uma "assinatura" da lista gravada (nome e peso de cada um, sem depender da ordem): serve para saber se alguém mexeu nela enquanto a janela estava aberta.
+const championListSig = list => (list || []).filter(p => p && String(p.name || '').trim()).map(p => `${playerKey(String(p.name))}:${champW(p.weight)}:${String(p.name).trim()}`).sort().join('|');
+// A lista da janela, conferida: { ok, list: [{name, weight}] } ou { ok: false, why, name }. Linha em branco é ignorada; quem já tem cadastro leva a grafia do cadastro.
+function championEditCheck(rows) {
+  const list = [], seen = new Set();
+  for (const r of (rows || [])) {
+    const typed = String(r?.name || '').replace(/\s+/g, ' ').trim();
+    if (!typed) continue;
+    const key = playerKey(typed);
+    if (!key) return { ok: false, why: 'nome-invalido', name: typed };
+    if (typed.length > CHAMP_NAME_MAX) return { ok: false, why: 'nome-grande', name: typed };
+    if (seen.has(key)) return { ok: false, why: 'repetido', name: typed };
+    seen.add(key);
+    const registered = (st.players || []).find(p => p.name && playerKey(p.name) === key);
+    list.push({ name: registered ? registered.name : typed, weight: champW(r.weight) });
+  }
+  return list.length ? { ok: true, list } : { ok: false, why: 'vazio' };
+}
+const championEditWhy = c => (c.why === 'vazio' ? 'Deixe ao menos um jogador campeão.'
+  : c.why === 'repetido' ? `${c.name} aparece duas vezes na lista.`
+  : c.why === 'nome-grande' ? `O nome pode ter no máximo ${CHAMP_NAME_MAX} letras: ${c.name}`
+  : `"${c.name}" não é um nome válido.`);
+// O que mudou entre a lista gravada e a nova (pela chave do nome, sem acento nem maiúscula): quem entra, quem sai, quem muda de peso e quem só teve o nome corrigido.
+function championEditDiff(oldList, newList) {
+  const keyed = l => new Map((l || []).filter(p => p && String(p.name || '').trim()).map(p => [playerKey(String(p.name)), { name: String(p.name).trim(), weight: champW(p.weight) }]));
+  const was = keyed(oldList), now = keyed(newList);
+  const added = [], removed = [], weight = [], renamed = [];
+  for (const [k, p] of now) {
+    const o = was.get(k);
+    if (!o) { added.push(p); continue; }
+    if (o.weight !== p.weight) weight.push({ name: p.name, from: o.weight, to: p.weight });
+    if (o.name !== p.name) renamed.push({ from: o.name, to: p.name });
+  }
+  for (const [k, o] of was) if (!now.has(k)) removed.push(o);
+  return { added, removed, weight, renamed, any: !!(added.length || removed.length || weight.length || renamed.length) };
+}
+// O texto da pergunta antes de gravar: o que muda, quem não tem cadastro no elenco (provável erro de digitação) e o que acontece com o Ranking.
+function championEditConfirmText(champ, diff, unknown = []) {
+  const names = l => l.map(p => p.name).join(', ');
+  const half = diff.weight.filter(x => x.to === 0.5), full = diff.weight.filter(x => x.to === 1);
+  const L = [`Salvar as mudanças nos campeões de ${fdt(champ.date)} (${(T[champ.champion] || { l: champ.champion }).l})?`, ''];
+  if (diff.added.length) L.push(`Entram: ${names(diff.added)}`);
+  if (diff.removed.length) L.push(`Saem: ${names(diff.removed)}`);
+  if (half.length) L.push(`Passam a ½ título: ${names(half)}`);
+  if (full.length) L.push(`Passam a título inteiro: ${names(full)}`);
+  if (diff.renamed.length) L.push(`Nome corrigido: ${diff.renamed.map(r => `${r.from} → ${r.to}`).join(', ')}`);
+  if (unknown.length) L.push('', `⚠️ Sem cadastro no elenco: ${unknown.join(', ')}`);
+  L.push('', champ.freeMode ? 'Este campeonato é do plano gratuito: só a lista muda, ele ainda não conta no Ranking.' : 'Os títulos de cada um no Ranking mudam junto.');
+  return L.join('\n');
+}
+// O documento de títulos de um jogador (player_titles/{chave}) depois da edição: tira a entrada DESTE campeonato (a que tem o champId; no registro antigo, sem champId, a que bate em data,
+// time e peso) e põe a nova, com o peso novo. `doc` = os dados atuais (ou null se o documento não existe); `oldP` = como ele estava na lista (ou nada, se entra agora); `newP` = como fica
+// (ou nada, se sai). Devolve { op: 'none' | 'delete' | 'set' | 'update', data? }; sem nenhuma entrada sobrando o documento é apagado, como em deleteChampionship.
+function championTitleChange(champ, doc, oldP, newP) {
+  const entries = (doc?.entries || []).map(e => ({ ...e }));
+  if (oldP) {
+    let i = entries.findIndex(e => e.champId === champ.id);
+    if (i < 0) i = entries.findIndex(e => !e.champId && e.date === champ.date && e.team === champ.champion && champW(e.weight) === champW(oldP.weight));
+    if (i >= 0) entries.splice(i, 1);
+  }
+  if (newP) entries.push({ date: champ.date, weight: champW(newP.weight), team: champ.champion, champId: champ.id });
+  if (!entries.length) return doc ? { op: 'delete' } : { op: 'none' };
+  const titles = entries.reduce((s, e) => s + champW(e.weight), 0);
+  const last_date = entries.reduce((d, e) => (e.date > d ? e.date : d), '');
+  return { op: doc ? 'update' : 'set', data: { name: newP ? newP.name : (doc?.name || oldP?.name || ''), titles, last_date, entries } };
+}
+// O botão do quadro do campeão (Histórico): só o admin e só com o campeonato finalizado.
+function championEditButton(champ) {
+  if (!isAdmin() || champ?.status !== 'completed' || !champ.champion) return '';
+  return `<button class="btn btn-ghost btn-sm btn-inline" style="margin:14px auto 0" onclick="openChampionEdit('${champ.id}')">✏️ Editar campeões</button>`;
+}
+function openChampionEdit(id) {
+  if (!isAdmin()) { toast('Apenas administradores podem editar os campeões.'); return; }
+  const c = st.champs.find(x => x.id === id);
+  if (!c || c.status !== 'completed' || !c.champion) return;
+  const players = (c.champion_players || []).filter(p => p && String(p.name || '').trim()).map(p => ({ name: String(p.name).trim(), weight: champW(p.weight) }));
+  st.modal = { type: 'champion', edit: true, champId: id, champion: c.champion, players: players.length ? players : defPlayers(), sig: championListSig(c.champion_players) };
+  render();
+}
+async function saveChampionEdit() {
+  const m = st.modal;
+  if (!DB || m?.type !== 'champion' || !m.edit) return;
+  if (!isAdmin()) { toast('Apenas administradores podem editar os campeões.'); return; }
+  const champ = st.champs.find(c => c.id === m.champId);
+  if (!champ || champ.status !== 'completed' || !champ.champion) { toast('Este campeonato não está finalizado.'); return; }
+  const chk = championEditCheck(m.players);
+  if (!chk.ok) { toast(championEditWhy(chk)); return; }
+  const diff = championEditDiff(champ.champion_players, chk.list);
+  if (!diff.any) { toast('Nenhuma mudança para salvar.'); return; }
+  const known = new Set((st.players || []).map(p => playerKey(p.name || '')));
+  const unknown = [...diff.added.map(p => p.name), ...diff.renamed.map(r => r.to)].filter(n => !known.has(playerKey(n)));
+  if (!confirm(championEditConfirmText(champ, diff, unknown))) return;
+  st.modal = { type: 'saving' };
+  render();
+  try {
+    await DB.runTransaction(async tx => {
+      const ref = ldoc(`championships/${champ.id}`);
+      const snap = await tx.get(ref);
+      const cur = snap.exists ? snap.data() : null;
+      if (!cur || cur.status !== 'completed') throw new Error('Este campeonato não está mais finalizado.');
+      if (championListSig(cur.champion_players) !== m.sig) throw new Error('A lista de campeões foi mudada por outra pessoa enquanto você editava. Abra de novo e refaça.');
+      const keyed = l => new Map((l || []).filter(p => p && String(p.name || '').trim()).map(p => [playerKey(String(p.name)), { name: String(p.name).trim(), weight: champW(p.weight) }]));
+      const was = keyed(cur.champion_players), now = keyed(chk.list);
+      const touched = [...new Set([...diff.added, ...diff.removed, ...diff.weight].map(x => playerKey(x.name)).concat(diff.renamed.map(r => playerKey(r.to))))];
+      const titles = [];
+      if (!cur.freeMode) for (const k of touched) titles.push([k, await tx.get(ldoc(`player_titles/${k}`))]); // todas as leituras ANTES das gravações
+      tx.update(ref, { champion_players: chk.list });
+      for (const [k, s] of titles) {
+        const ch = championTitleChange({ id: champ.id, date: cur.date, champion: cur.champion }, s.exists ? s.data() : null, was.get(k), now.get(k));
+        const dref = ldoc(`player_titles/${k}`);
+        if (ch.op === 'delete') tx.delete(dref); else if (ch.op === 'set') tx.set(dref, ch.data); else if (ch.op === 'update') tx.update(dref, ch.data);
+      }
+    });
+    st.modal = null;
+    render();
+    toast('Campeões atualizados!', 'ok');
+  } catch (e) {
+    st.modal = m; // a janela volta como estava, para tentar de novo
+    render();
+    toast('Erro ao salvar os campeões: ' + (e?.message || e));
+  }
+}
+/* ── fim de Editar os campeões ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 async function addRegisteredPlayer(name) {
   if (!DB || !name.trim()) return;
@@ -6394,6 +6529,7 @@ function renderChamp(champ, editable=false) {
         ${champion_players.map(p=>`<span class="p-tag${p.weight<1?' half':''}">${p.name}${p.weight<1?` <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:11px;height:11px;vertical-align:middle;margin-left:1px"><path d="M12 3L6 3Q4 3 4 8Q4 13 8 15L11 16.5L11 19L8 19L8 21L12 21Z" fill="#FFD700"/><path d="M12 3L18 3Q20 3 20 8Q20 13 16 15L13 16.5L13 19L16 19L16 21L12 21" fill="none" stroke="#FFD700" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`:''}</span>`).join('')}
       </div>`:''}
       ${artHtml}
+      ${championEditButton(champ)}
     </div>`;
   }
 
@@ -7400,14 +7536,17 @@ function mChamp() {
   if(m?.type!=='champion') return '';
   const ct=T[m.champion]||{l:m.champion,c:'#F0A500'};
   const players=m.players||defPlayers();
+  const edit=!!m.edit;                                              // "✏️ Editar campeões" (item 49): o campeonato já está finalizado
+  const ec=edit?st.champs.find(c=>c.id===m.champId):null;
   return `<div class="overlay">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
       <div class="champ-modal-hdr">
-        <div style="font-size:40px">🏆</div>
+        <div style="font-size:40px">${edit?'✏️':'🏆'}</div>
         <div class="champ-modal-name" style="color:${ct.c}">${ct.l}</div>
-        <div class="champ-modal-sub">Registre os jogadores do time campeão</div>
+        <div class="champ-modal-sub">${edit?`Editar os jogadores campeões${ec?.date?` · ${fdt(ec.date)}`:''}`:'Registre os jogadores do time campeão'}</div>
       </div>
+      ${edit?`<div style="font-size:12px;color:var(--text3);line-height:1.5;margin:0 2px 10px">${ec?.freeMode?'Campeonato do plano gratuito: a lista muda, mas ele ainda não conta no Ranking.':'Tire, ponha e troque 1 por ½. Os títulos de cada um no Ranking mudam junto. O time campeão e o placar não mudam aqui.'}</div>`:''}
       <datalist id="playerlist">
         ${st.players.filter(p=>p.active!==false).map(p=>`<option value="${esc(p.name)}">`).join('')}
       </datalist>
@@ -7420,11 +7559,15 @@ function mChamp() {
             <button class="wbtn${p.weight===1?' on':''}" onclick="upP(${i},'weight',1)">1</button>
             <button class="wbtn${p.weight===0.5?' on':''}" onclick="upP(${i},'weight',0.5)">½</button>
           </div>
+          ${edit?`<button class="p-del" onclick="removeP(${i})" title="Tirar da lista" aria-label="Tirar ${esc(p.name||'jogador '+(i+1))} da lista">✕</button>`:''}
         </div>`).join('')}
       </div>
       <button class="btn btn-ghost add-player-btn" onclick="addP()">+ Jogador</button>
-      <button class="btn btn-gold" onclick="saveChampion()">Salvar e Concluir</button>
-      <button class="btn btn-ghost" style="opacity:.5;margin-top:4px" onclick="closeModal()">Fechar (salvar depois)</button>
+      ${edit
+        ? `<button class="btn btn-gold" onclick="saveChampion()">Salvar alterações</button>
+      <button class="btn btn-ghost" style="opacity:.5;margin-top:4px" onclick="closeModal()">Cancelar</button>`
+        : `<button class="btn btn-gold" onclick="saveChampion()">Salvar e Concluir</button>
+      <button class="btn btn-ghost" style="opacity:.5;margin-top:4px" onclick="closeModal()">Fechar (salvar depois)</button>`}
     </div>
   </div>`;
 }
@@ -14148,6 +14291,15 @@ function upP(i,field,val) {
 function addP() {
   if(!st.modal?.players) return;
   st.modal.players.push({name:'',weight:1});
+  const r=document.getElementById('modal-root');
+  if(r) r.innerHTML=mScore()+mChamp();
+}
+
+// Tirar um jogador da lista (só na janela "Editar campeões"). A lista que ficar vazia é recusada ao salvar.
+function removeP(i) {
+  const m=st.modal;
+  if(!m?.edit||!m.players||!m.players[i]) return;
+  m.players.splice(i,1);
   const r=document.getElementById('modal-root');
   if(r) r.innerHTML=mScore()+mChamp();
 }

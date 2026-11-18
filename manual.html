@@ -640,6 +640,16 @@ p strong {
       <h3>Ranking geral</h3>
       <p>O ranking de títulos usa o total acumulado (somando os pesos) de todos os campeonatos, sem restrição de data.</p>
 
+      <h3 id="editar-campeoes">Corrigir os campeões depois de finalizado</h3>
+      <p>Esqueceu um jogador, pôs alguém errado ou precisa trocar 1 título por ½ (ou o contrário)? <strong>Só o admin</strong> corrige, no <strong>Histórico</strong>: toque no campeonato e, no quadro do campeão, em <strong>✏️ Editar campeões</strong>. Na janela, cada campeão aparece com o nome e o <strong>1</strong> ou o <strong>½</strong>: dá para trocar o nome, trocar 1 por ½ (e o contrário), tirar um jogador no <strong>✕</strong> e pôr outro em <strong>+ Jogador</strong> (o campo sugere os jogadores do elenco). Ao tocar em <strong>Salvar alterações</strong> o app mostra o que vai mudar (quem entra, quem sai, quem passa a ½ ou a título inteiro) e pede a confirmação; nome sem cadastro no elenco vem com um aviso, porque pode ser erro de digitação (a pessoa entra mesmo assim, se for um convidado).</p>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">O Ranking de títulos muda junto.</strong> Quem sai perde aquele título, quem entra ganha e quem troca 1 por ½ tem o total acertado. As conquistas e os números que dependem dos títulos são recalculados sozinhos com a lista nova.</li>
+        <li><strong style="color: var(--text)">O time campeão e o placar não mudam aqui.</strong> O time vem do resultado da final; para mudar o vencedor de uma final empatada nos pênaltis, edite a final pelo ✎ do Histórico (seção 06).</li>
+        <li><strong style="color: var(--text)">Plano gratuito.</strong> O campeonato feito no plano gratuito ainda não conta no Ranking: a lista muda, o Ranking não.</li>
+        <li><strong style="color: var(--text)">Duas pessoas ao mesmo tempo.</strong> Se outra pessoa mudar a lista enquanto a janela está aberta, nada é gravado e o app avisa para abrir de novo.</li>
+      </ul>
+      <p>Antes desta opção (novembro de 2026) não havia como corrigir a lista depois de finalizar o campeonato. <span class="tag">Técnico</span> O app grava, numa só transação, o campo <code>champion_players</code> do campeonato e as entradas de <code>player_titles/{chave}</code> de quem entrou, saiu ou mudou de peso (cada entrada tem o <code>champId</code> do campeonato; os registros antigos, sem <code>champId</code>, são achados pela data, pelo time e pelo peso): ou grava tudo, ou nada. Um jogador que fica sem nenhum título tem o documento apagado, como ao excluir um campeonato.</p>
+
       <h3 id="liga-sem-final">Liga sem final (pontos corridos)</h3>
       <p>A liga escolhe se os campeonatos têm final: na pergunta <strong>"Seus campeonatos têm final?"</strong> ao criar a liga, ou depois em <strong>Painel Admin → Formato dos campeonatos</strong> (<strong>🏆 Com final</strong> ou <strong>⚽ Sem final</strong>). Na liga <strong>sem final</strong> o campeonato vira <strong>pontos corridos</strong>: não existe final, semifinal nem disputa de 3º lugar, e o <strong>campeão é o time que somou mais pontos durante todo o campeonato</strong> (vitória vale 3 pontos, empate 1).</p>
 

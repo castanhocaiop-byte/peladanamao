@@ -42,6 +42,7 @@ const CODE = [
   slice('async function submitScore(', 'async function addThirdPlaceRetro('),    // submitScore + endRegular
   slice('function confirmEnd()', 'function upP('),                               // confirmEnd + openChampModal
   slice('// Sem final: empate total no topo da tabela', 'async function setPenaltyWinner('), // mChampTie + pickChampionTie
+  slice('function championEditButton(champ) {', 'function openChampionEdit(id) {'),   // o "✏️ Editar campeões" que o quadro do campeão (renderChamp) desenha para o admin (item 49)
   slice('function standingsTable(', '/* ── views ───'),                          // standingsTable + renderChamp
   slice('function analyzeClassification(', 'function setStatsFilter('),
   slice('function getPlayerRarestBadge(', 'function computeVices('),
