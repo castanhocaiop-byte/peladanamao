@@ -117,6 +117,14 @@ const apertado = lastPA => m => {
   if (k === 'amarelo|azul') return m.home === 'azul' ? [1, 0] : [0, 1];     // o azul ganha os dois do amarelo
   return m.leg === 1 ? [1, 0] : lastPA;                                      // preto x amarelo: o preto ganha a ida; a volta (home amarelo) é o placar dado
 };
+// o mesmo para o grupo B (vermelho 9 pts e +2, verde 7 pts); `lastVR` = o placar roxo (mandante) x verde da volta, que decide quem lidera o B
+const apertadoB = lastVR => m => {
+  if (m.group === 'A') return byRank(m);
+  const k = pairKey(m);
+  if (k === 'verde|vermelho') return [1, 0];
+  if (k === 'roxo|vermelho') return m.home === 'vermelho' ? [1, 0] : [0, 1];
+  return m.leg === 1 ? [1, 0] : lastVR;
+};
 const TIE_A = [0, 1];  // volta preto 1x0: azul e preto empatam em tudo (9 pts, +2, 3 gols) -> o admin escolhe
 const PRETO_LIDERA = [0, 3];
 const SEM_TIE = [0, 0];
@@ -210,6 +218,10 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const dois = champ6(E.api, { score: () => [0, 0] });
     check('os dois grupos empatados: duas escolhas pendentes (A primeiro, depois B)', E.api.groupTiesOpen(dois).map(o => o.group).join() === 'A,B', E.api.groupTiesOpen(dois));
     check('groupTiesOpen só olha empate depois do último jogo dos grupos (antes, é só tabela parcial)', E.api.groupTiesOpen(champ6(E.api, { played: 11, score: () => [0, 0] })).length === 0);
+    check('validGroups também recusa grupo A com 3 e grupo B com 4 (o time repetido faz 7 nomes) e grupo A com 2 e grupo B com 4', !A.validGroups({ A: G.A, B: [...G.B, 'azul'] }, T6) && !A.validGroups({ A: ['azul', 'preto'], B: ['amarelo', ...G.B] }, T6) && A.validGroups({ A: [...G.A].reverse(), B: [...G.B].reverse() }, T6));
+    check('groupStageDone: sem nenhum jogo na lista, ainda não terminou; e campeonato SEM grupos nunca "termina os grupos" (mesmo com todos os jogos disputados)', E.api.groupStageDone({ groups: G, matches: [] }) === false && E.api.groupStageDone({ matches: champ6(E.api).matches }) === false && E.api.groupStageDone({ groups: null, matches: champ6(E.api).matches }) === false);
+    const soB = { ...champ6(E.api), matches: champ6(E.api).matches.filter(m => m.group === 'B') };
+    check('groupTiesOpen: um grupo sem nenhum jogo (dado estranho) não pede escolha de ninguém; só o grupo com jogos é tratado', E.api.groupTiesOpen(soB).length === 0 && E.api.groupLeaders(soB).leaders.A === null && E.api.groupLeaders(soB).leaders.B === 'vermelho' && E.api.groupLeaders(soB).ready === false);
     check('campeonato sem grupos: groupLeaders, groupTiesOpen e groupFinalMatch não fazem nada', (() => { const l = A.groupLeaders({ matches: [] }); return l.ready === false && Object.keys(l.leaders).length === 0 && A.groupTiesOpen({ matches: [] }).length === 0 && A.groupFinalMatch({ matches: [] }) === null; })());
   }
 
@@ -275,6 +287,16 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const html1 = E.api.mGroupTie();
     check('a janela mostra "Empate no topo do Grupo A", os dois times como botões e "Decidir depois"', /Empate no topo do Grupo A/.test(html1) && /pickGroupLeader\('azul'\)/.test(html1) && /pickGroupLeader\('preto'\)/.test(html1) && !/pickGroupLeader\('amarelo'\)/.test(html1) && /Decidir depois/.test(html1) && /Quem é o líder do grupo e vai à final/.test(html1) && /2 times com os mesmos pontos/.test(html1), plain(html1));
     check('fora da janela do empate, a janela não aparece', (() => { const m = E.st.modal; E.st.modal = { type: 'saving' }; const r = E.api.mGroupTie(); E.st.modal = m; return r === ''; })());
+    check('a janela do empate do Grupo B diz "Grupo B" e oferece os times do B (não os do A)', (() => { const m = E.st.modal; E.st.modal = { type: 'groupTie', champId: 'c1', group: 'B', teams: ['vermelho', 'verde'] }; const r = E.api.mGroupTie(); E.st.modal = m; return /Empate no topo do Grupo B/.test(r) && !/Grupo A/.test(r) && /pickGroupLeader\('vermelho'\)/.test(r) && /pickGroupLeader\('verde'\)/.test(r) && !/pickGroupLeader\('azul'\)/.test(r); })());
+    check('o botão de cada time da janela escolhe aquele time (cada botão chama pickGroupLeader com o próprio time, na ordem da lista)', (() => { const m = E.st.modal; const r = E.api.mGroupTie(); return [...r.matchAll(/<button onclick="pickGroupLeader\('([^']+)'\)"[^>]*>([^<]+)<\/button>/g)].map(x => x[1] + '=' + x[2]).join() === 'azul=Azul,preto=Preto'; })());
+    {
+      // a janela de OUTRO tipo (com uma lista de times) não aceita a escolha do líder
+      const n0 = E.log.updates.length, modalAntes = E.st.modal;
+      E.st.modal = { type: 'champTie', teams: ['azul', 'preto'], champId: 'c1', group: 'A' };
+      await E.api.pickGroupLeader('azul');
+      check('mesmo que outra janela tenha uma lista de times, só a janela do empate dos grupos aceita a escolha do líder (pelo tipo da janela)', E.log.updates.length === n0 && E.st.modal.type === 'champTie', E.st.modal);
+      E.st.modal = modalAntes;
+    }
     const n0 = E.log.updates.length;
     await E.api.pickGroupLeader('amarelo');
     check('escolher um time que não é dos empatados não faz nada (nada é gravado, a janela fica)', E.log.updates.length === n0 && E.st.modal && E.st.modal.type === 'groupTie');
@@ -404,6 +426,66 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const ms = lastUpdate(E).obj.matches;
     check('corrigir um resultado que não muda os líderes: a final continua igual e nenhum aviso aparece', finalOf(ms).home === 'azul' && finalOf(ms).away === 'vermelho' && E.log.toasts.length === 0, E.log.toasts);
   }
+  {
+    // empate no topo do A (sem escolha ainda) e a correção de um resultado do grupo B muda o líder do B: a final acompanha o B e mantém o azul do lado do A
+    const ambos = (la, lb) => m => (m.group === 'A' ? apertado(la)(m) : apertadoB(lb)(m));
+    const E = envFresh();
+    await play(E, ambos(SEM_TIE, SEM_TIE));
+    check('(cenário) os dois grupos apertados, sem empate: a final nasce azul x vermelho', finalOf(E.st.champs[0].matches).home === 'azul' && finalOf(E.st.champs[0].matches).away === 'vermelho');
+    const mA = preAmarelo(E.st.champs[0].matches);
+    await E.api.submitScore(mA.id, 0, 1, [], null, []);
+    await tick();
+    E.st.modal = null;
+    check('(cenário) a correção do grupo A cria o empate no topo (azul e preto): a final continua azul x vermelho', finalOf(E.st.champs[0].matches).home === 'azul' && finalOf(E.st.champs[0].matches).away === 'vermelho' && E.api.groupTiesOpen(E.st.champs[0]).length === 1);
+    const mB = E.st.champs[0].matches.find(m => m.phase === 'regular' && m.group === 'B' && pairKey(m) === 'roxo|verde' && m.leg === 2);
+    await E.api.submitScore(mB.id, 0, 3, [], null, []);
+    const ms = lastUpdate(E).obj.matches;
+    check('corrigir o jogo do grupo B (o verde passa a liderar) com o topo do A ainda empatado: a final troca só o lado do B (azul, que está na final e é um dos empatados, fica) = AZUL x VERDE', finalOf(ms).home === 'azul' && finalOf(ms).away === 'verde', finalOf(ms));
+    check('...com o aviso do que foi refeito: "Final: Azul × Verde"', E.log.toasts.some(t => /Final: Azul × Verde/.test(t.m)), E.log.toasts);
+    check('...e a janela do empate do A abre de novo (a escolha continua pendente)', E.st.modal && E.st.modal.type === 'groupTie' && E.st.modal.group === 'A', E.st.modal);
+  }
+  {
+    // final JÁ JOGADA e uma correção que cria um empate no topo: não adianta chamar o admin para escolher (a final já foi jogada)
+    const E = envFresh();
+    await play(E, apertado(SEM_TIE));
+    const fin = finalOf(E.st.champs[0].matches);
+    await E.api.submitScore(fin.id, 1, 0, [], null, []);
+    await tick();
+    E.st.modal = null;
+    const m = preAmarelo(E.st.champs[0].matches);
+    await E.api.submitScore(m.id, 0, 1, [], null, []);
+    check('final já jogada e a correção cria um empate no topo do A: a janela de escolha NÃO abre (não haveria o que decidir)', E.st.modal === null || E.st.modal.type !== 'groupTie', E.st.modal);
+  }
+  {
+    // o 3º lugar também acompanha a correção, com o rótulo certo no aviso
+    const E = envFresh();
+    await play(E, byRank);
+    await E.api.addThirdPlaceRetro('c1');
+    await tick();
+    E.st.modal = null;
+    const m = preAmarelo(E.st.champs[0].matches);
+    await E.api.submitScore(m.id, 9, 0, [], null, []);
+    check('o aviso da correção cita o 3º lugar refeito: "3º lugar: Amarelo × Verde"', E.log.toasts.some(t => /3º lugar: Amarelo × Verde/.test(t.m)), E.log.toasts);
+  }
+  {
+    // topo do A empatado entre preto e amarelo (o azul, que está na final, ficou em 3º): sem escolha do admin, o app não troca a final nem o 3º lugar por um palpite
+    const E = makeEnv();
+    const topoSemAzul = m => {
+      if (m.group === 'B') return byRank(m);
+      if (pairKey(m) === 'amarelo|preto') return [1, 1];
+      return m.home === 'azul' ? [0, 1] : [1, 0];
+    };
+    const c = champ6(E.api, { score: topoSemAzul });
+    const ms = [...c.matches, { id: 'final', home: 'azul', away: 'vermelho', hs: null, as: null, phase: 'final', played: false }, { id: 'third', home: 'preto', away: 'verde', hs: null, as: null, phase: 'third', played: false }];
+    const gl = E.api.groupLeaders({ ...c, matches: ms });
+    check('(cenário) o topo do A está empatado entre preto e amarelo e o azul ficou fora', gl.tied.A.join() === 'preto,amarelo' && gl.leaders.A === null && gl.seconds.A === null, gl);
+    const r = E.api.reseedKnockout({ ...c, matches: ms }, ms);
+    check('reseedKnockout com o topo do grupo empatado e sem escolha: nem a final (o azul não é um dos empatados) nem o 3º lugar são trocados por um palpite', r.matches === ms && r.changed.length === 0 && r.stale.length === 0, r);
+    const r2 = E.api.reseedKnockout({ ...c, groupLeaders: { A: 'preto' }, matches: ms }, ms);
+    check('...com a escolha do admin (preto) a final vira PRETO x vermelho e o 3º lugar AMARELO (o outro empatado) x verde', r2.changed.length === 2 && r2.matches.find(m => m.phase === 'final').home === 'preto' && r2.matches.find(m => m.phase === 'final').away === 'vermelho' && r2.matches.find(m => m.phase === 'third').home === 'amarelo' && r2.matches.find(m => m.phase === 'third').away === 'verde', r2.changed);
+    const r3 = E.api.reseedKnockout({ ...c, groupLeaders: { A: 'amarelo' }, matches: ms }, ms);
+    check('...com a escolha do amarelo a final vira AMARELO x vermelho e o 3º lugar continua PRETO x verde (o preto já era o outro empatado)', r3.changed.length === 1 && r3.matches.find(m => m.phase === 'final').home === 'amarelo' && r3.matches.find(m => m.phase === 'third').home === 'preto', r3.changed);
+  }
 
   // ══ 7. DISPUTA DE 3º LUGAR, ENCERRAR ANTES DA HORA E SEM FINAL ══════════════════════════════════
   {
@@ -421,6 +503,21 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     await E.api.submitScore(m.id, 9, 0, [], null, []);
     const ms2 = lastUpdate(E).obj.matches;
     check('o 3º lugar ainda não jogado se refaz quando a correção muda o 2º colocado do grupo (amarelo passa o preto)', ms2.find(x => x.phase === 'third').home === 'amarelo' && ms2.find(x => x.phase === 'third').away === 'verde', ms2.find(x => x.phase === 'third'));
+  }
+  {
+    // o 3º lugar é entre os 2ºs DOS GRUPOS, e não entre o 3º e o 4º da tabela geral: aqui o 2º do B (verde, 6 pts) está à frente do 2º do A (preto, 4 pts) na geral
+    const E = envFresh();
+    const assimetrico = m => {
+      if (m.group === 'B') return byRank(m);
+      if (pairKey(m) === 'amarelo|preto') return m.leg === 1 ? [1, 0] : [0, 0];
+      return m.home === 'azul' ? [2, 0] : [0, 2];
+    };
+    await play(E, assimetrico);
+    const geral = E.api.standings(E.st.champs[0].teams, E.st.champs[0].matches).map(r => r.team);
+    check('(cenário) na tabela geral o 3º é o verde e o 4º é o preto, mas os 2ºs dos grupos são preto (A) e verde (B)', geral[2] === 'verde' && geral[3] === 'preto' && E.api.groupLeaders(E.st.champs[0]).seconds.A === 'preto' && E.api.groupLeaders(E.st.champs[0]).seconds.B === 'verde', geral);
+    await E.api.addThirdPlaceRetro('c1');
+    const third = lastUpdate(E).obj.matches.find(m => m.phase === 'third');
+    check('o 3º lugar é 2º do A (preto, mandante) x 2º do B (verde), e não 3º x 4º da tabela geral (verde x preto)', third.home === 'preto' && third.away === 'verde', third);
   }
   {
     const E = envFresh();
@@ -482,9 +579,37 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const hn = E2.api.renderChamp(champ6(E2.api, { score: apertado(TIE_A) }), true);
     check('quem não é admin vê o aviso sem botão: "O admin da liga define quem vai à final."', /Empate total no topo/.test(hn) && !/openGroupTie/.test(hn) && /O admin da liga define quem vai à final\./.test(hn));
     check('admin vendo a tela só de leitura (histórico): o aviso aparece sem botão', !/openGroupTie/.test(E.api.renderChamp(tie, false)) && /Empate total/.test(E.api.renderChamp(tie, false)));
+    const tieB = champ6(E.api, { score: apertadoB([0, 1]) });
+    const htb = E.api.renderChamp(tieB, true);
+    check('empate no topo do grupo B (verde e vermelho): o aviso é do Grupo B (Vermelho, Verde) e o link abre o grupo B', E.api.groupTiesOpen(tieB).length === 1 && E.api.groupTiesOpen(tieB)[0].group === 'B' && /Empate total no topo do <strong>Grupo B<\/strong> \(Vermelho, Verde\)/.test(htb) && /openGroupTie\('B'\)/.test(htb) && !/openGroupTie\('A'\)/.test(htb), plain(htb).slice(0, 500));
     check('campeonato já concluído (campeão registrado) não mostra o aviso de empate', !/Empate total/.test(E.api.renderChamp({ ...tie, status: 'completed', champion: 'azul' }, true)));
     const comEscolha = { ...tie, groupLeaders: { A: 'preto' } };
     check('escolha já feita: o aviso some', !/Empate total/.test(E.api.renderChamp(comEscolha, true)));
+    {
+      // o líder escolhido pelo admin sobe para a 1ª linha da tabela do grupo, e a nota avisa
+      const rowsOf = h => [...h.matchAll(/<tr class="[^"]*">\s*<td class="td-pos"><span class="pos-num"[^>]*>(\d)°<\/span><\/td>\s*<td><span class="dot-sm"[^>]*><\/span><span[^>]*>([^<]+)<\/span>/g)].map(m => m[1] + m[2]);
+      const hA = E.api.renderChamp(comEscolha, true);
+      const iA = hA.indexOf('Grupo A</span>'), iB = hA.indexOf('Grupo B</span>');
+      const tabA = hA.slice(iA, iB), tabB = hA.slice(iB, hA.indexOf('</table>', iB) + 8);
+      check('com o preto escolhido no empate com o azul, a tabela do Grupo A mostra Preto em 1º, Azul em 2º e Amarelo em 3º, com a nota "Líder (escolha do admin) → Final"', rowsOf(tabA).join() === '1Preto,2Azul,3Amarelo' && /Líder \(escolha do admin\) → Final/.test(tabA), { rows: rowsOf(tabA), note: plain(tabA).slice(0, 120) });
+      check('...e a tabela do Grupo B (sem empate) fica como estava, com a nota de sempre', rowsOf(tabB).join() === '1Vermelho,2Verde,3Roxo' && /Líder → Final/.test(tabB) && !/escolha do admin/.test(tabB), { rows: rowsOf(tabB) });
+      const hSem = E.api.renderChamp(tie, true);
+      check('sem escolha ainda, a tabela segue a ordem do cálculo (Azul, Preto, Amarelo) e a nota é a de sempre', rowsOf(hSem.slice(hSem.indexOf('Grupo A</span>'), hSem.indexOf('Grupo B</span>'))).join() === '1Azul,2Preto,3Amarelo' && !/escolha do admin/.test(hSem));
+      const tres3 = champ6(E.api, { score: m => (m.group === 'A' ? [0, 0] : byRank(m)), extra: { groupLeaders: { A: 'amarelo' } } });
+      const h3 = E.api.renderChamp(tres3, true);
+      check('empate dos 3 times do grupo e o amarelo escolhido: o amarelo vai para a 1ª linha e os outros dois seguem na ordem da tabela (Azul, Preto)', rowsOf(h3.slice(h3.indexOf('Grupo A</span>'), h3.indexOf('Grupo B</span>'))).join() === '1Amarelo,2Azul,3Preto', rowsOf(h3.slice(h3.indexOf('Grupo A</span>'), h3.indexOf('Grupo B</span>'))));
+      const tieBpick = champ6(E.api, { score: apertadoB([0, 1]), extra: { groupLeaders: { B: 'verde' } } });
+      const hB = E.api.renderChamp(tieBpick, true);
+      const tabA2 = hB.slice(hB.indexOf('Grupo A</span>'), hB.indexOf('Grupo B</span>')), tabB2 = hB.slice(hB.indexOf('Grupo B</span>'), hB.indexOf('</table>', hB.indexOf('Grupo B</span>')) + 8);
+      check('empate no topo do grupo B resolvido pelo admin (verde): a tabela do B mostra Verde em 1º com a nota "(escolha do admin)" e a do A (sem empate) fica como estava', rowsOf(tabB2).join() === '1Verde,2Vermelho,3Roxo' && /Líder \(escolha do admin\) → Final/.test(tabB2) && rowsOf(tabA2).join() === '1Azul,2Preto,3Amarelo' && !/escolha do admin/.test(tabA2), { b: rowsOf(tabB2), a: rowsOf(tabA2) });
+      const semTie = champ6(E.api, { extra: { groupLeaders: { A: 'amarelo' } } });
+      const hs = E.api.renderChamp(semTie, true);
+      check('escolha antiga de um grupo que NÃO está mais empatado é ignorada na tabela: o amarelo não sobe (o azul lidera pelos pontos) e a nota é a de sempre', rowsOf(hs.slice(hs.indexOf('Grupo A</span>'), hs.indexOf('Grupo B</span>'))).join() === '1Azul,2Preto,3Amarelo' && !/escolha do admin/.test(hs));
+      const rowsT = E.api.standingsTable(G.A, tie.matches, 6, false, 'A', 'preto');
+      check('standingsTable com o líder escolhido que já era o 1º da tabela, ou que não está na tabela, não muda a ordem', rowsOf(E.api.standingsTable(G.A, tie.matches, 6, false, 'A', 'azul')).join() === '1Azul,2Preto,3Amarelo' && rowsOf(E.api.standingsTable(G.A, tie.matches, 6, false, 'A', 'verde')).join() === '1Azul,2Preto,3Amarelo' && rowsOf(rowsT).join() === '1Preto,2Azul,3Amarelo');
+      check('a escolha do líder só vale para a tabela de GRUPO: numa tabela geral (4 times) o parâmetro é ignorado (mesma ordem, nota "Top 2 → Final")', (() => { const m4 = E.api.genMatches(T6.slice(0, 4), 4).map((m, i) => (i < 4 ? { ...m, played: true, hs: 1, as: 0, goals: [] } : m)); const sem = E.api.standingsTable(T6.slice(0, 4), m4, 4), com = E.api.standingsTable(T6.slice(0, 4), m4, 4, false, null, 'vermelho'); return sem === com && /Top 2 → Final/.test(com) && !/escolha do admin/.test(com); })());
+      check('a nota "(escolha do admin)" aparece também quando o escolhido já era o 1º da tabela (a escolha foi do admin mesmo assim)', /Líder \(escolha do admin\) → Final/.test(E.api.standingsTable(G.A, tie.matches, 6, false, 'A', 'azul')) && !/escolha do admin/.test(E.api.standingsTable(G.A, tie.matches, 6, false, 'A', 'verde')));
+    }
     check('os dois grupos empatados: dois avisos, um para cada grupo', count(E.api.renderChamp(champ6(E.api, { score: () => [0, 0] }), true), /Empate total/g) === 2);
     // a tabela do grupo
     const t1 = E.api.standingsTable(G.A, c.matches.filter(m => m.group === 'A'), 6, false, 'A');
@@ -532,6 +657,14 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const depois = JSON.stringify(E.st.createGroups);
     check('"🎲 Sortear os grupos de novo" troca os grupos (continuam válidos) e a prévia acompanha', A.validGroups(E.st.createGroups, T6) && depois !== antes && gp.innerHTML.indexOf('>' + E.api.T[E.st.createGroups.A[0]].l + '<') < gp.innerHTML.indexOf('Grupo B') && /rerollGroups\(\)/.test(gp.innerHTML), { antes, depois });
     check('o botão de sortear de novo está na prévia', /Sortear os grupos de novo/.test(gp.innerHTML));
+    check('...e a prévia mostrada é exatamente a dos grupos de agora (não sobra a divisão antiga na tela)', gp.innerHTML === E.api.renderGroupsPreview(E.dom.checked) && E.st.createGroups.A.every(t => gp.innerHTML.indexOf('>' + E.api.T[t].l + '<') < gp.innerHTML.indexOf('Grupo B')) && E.st.createGroups.B.every(t => gp.innerHTML.indexOf('>' + E.api.T[t].l + '<') > gp.innerHTML.indexOf('Grupo B')));
+    {
+      const g0 = JSON.stringify(E.st.createGroups), html0 = gp.innerHTML;
+      E.dom.checked = T6.slice(0, 5);
+      E.api.rerollGroups();
+      check('"Sortear os grupos de novo" só vale com 6 times marcados: com 5, nada muda (nem os grupos guardados, nem a prévia)', JSON.stringify(E.st.createGroups) === g0 && gp.innerHTML === html0);
+      E.dom.checked = T6;
+    }
     E.dom.checked = [...T6.slice(0, 5), 'rosa'];
     E.api.onTkChg();
     check('trocar um dos 6 times por outro: os grupos são sorteados de novo com os times de agora (o time novo aparece, o que saiu não)', A.validGroups(E.st.createGroups, E.dom.checked) && !JSON.stringify(E.st.createGroups).includes('roxo') && JSON.stringify(E.st.createGroups).includes('rosa'), E.st.createGroups);
@@ -614,8 +747,11 @@ const finalOf = ms => (ms || []).find(m => m.phase === 'final');
     const i1 = manual.indexOf('id="seis-times"');
     const sec = i1 < 0 ? '' : ps(manual.slice(i1, manual.indexOf('<h3', i1 + 30)));
     check('manual: subseção "6 times: dois grupos de 3 + final" (id seis-times) na seção 03, antes da "Liga sem final"', i1 > manual.indexOf('id="titulos"') && i1 < manual.indexOf('id="liga-sem-final"'), i1);
-    check('manual: explica os dois grupos de 3 sorteados (com "sortear de novo"), os 12 jogos em 2 turnos, a tabela de cada grupo, o líder de cada grupo na final e o 3º lugar (2º do A x 2º do B)', /dois grupos de 3/i.test(sec) && /sorte/i.test(sec) && /12 jogos/.test(sec) && /2 turnos/.test(sec) && /líder de cada grupo/i.test(sec) && /final/i.test(sec) && /3º lugar/.test(sec) && /2º colocado/i.test(sec), sec.slice(0, 900));
-    check('manual: explica o desempate (pontos, saldo, gols pró) e a escolha do admin quando o topo de um grupo empata em tudo', /saldo de gols/.test(sec) && /gols marcados|gols pró/.test(sec) && /empat/i.test(sec) && /admin/i.test(sec) && /escolh/i.test(sec), sec.slice(-700));
+    check('manual: explica os dois grupos de 3 sorteados (com "sortear de novo"), os 12 jogos em 2 turnos, a tabela de cada grupo, o líder de cada grupo na final e o 3º lugar (2º do A x 2º do B)', /dois grupos de 3/i.test(sec) && /o app sorteia os grupos e mostra o Grupo A e o Grupo B antes de criar/.test(sec) && /Sortear os grupos de novo/.test(sec) && /12 jogos/.test(sec) && /2 turnos/.test(sec) && /líder de cada grupo/i.test(sec) && /final/i.test(sec) && /3º lugar/.test(sec) && /2º colocado/i.test(sec), sec.slice(0, 900));
+    check('manual: explica o desempate (pontos, saldo, gols pró) e a escolha do admin quando o topo de um grupo empata em tudo', /saldo de gols/.test(sec) && /gols marcados|gols pró/.test(sec) && /empatado em tudo/.test(sec) && /Empate no topo do Grupo A/.test(sec) && /para o admin escolher quem é o líder do grupo/.test(sec) && /Definir quem vai à final/.test(sec) && /o líder escolhido sobe para a primeira linha da tabela do grupo/.test(sec) && /Líder \(escolha do admin\) → Final/.test(sec), sec.slice(-700));
+    const j = manual.indexOf('id="corrigir-placar-mata-mata"');
+    const corr = j < 0 ? '' : ps(manual.slice(j, manual.indexOf('</p>', j)));
+    check('manual, seção 06: o aviso de correção de placar também fala dos 6 times (final = líder do A x líder do B, 3º lugar = 2º do A x 2º do B)', /Com 4, 5 ou 6 times/.test(corr) && /com 6 times, a final é o líder do grupo A × o líder do grupo B \(e a disputa de 3º lugar, o 2º do A × o 2º do B\)/.test(corr), corr.slice(0, 600));
     check('manual: diz que o campeonato de 6 times sem final é uma tabela só, de 15 jogos (pontos corridos), e que os Cenários continuam só para 4 e 5 times', /15 jogos/.test(ps(manual)) && /pontos corridos/i.test(sec), sec.slice(0, 400));
     check('CI: o teste dos 6 times roda (passo "Testes do app (6 times …)" executando test/client-six-teams-test.js, sem ": " no nome)', /- name: Testes do app \(6 times[^\n]*\)\n\s+working-directory: functions\n\s+run: node test\/client-six-teams-test\.js/.test(ci) && !/name: Testes do app \(6 times[^\n]*: /.test(ci));
   }

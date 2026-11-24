@@ -1264,7 +1264,7 @@ function genRoundRobinRounds(teams) {
      6 times com final: dois grupos de 3 em 2 turnos; os jogos dos dois grupos se ALTERNAM (rodada = 1 jogo do grupo A e 1 do B), então ninguém joga duas vezes seguidas;
      4 times (ida e volta, 12 jogos): zerar é IMPOSSÍVEL (cada jogo usa metade dos times: o único jogo que não repete ninguém é o outro confronto do mesmo par de times, e só
        existem 3 pares). O mínimo possível é 2 repetições em 11 passagens (a ordem de antes tinha 5): a ida e a volta de cada par de confrontos saem em seguida e só se muda de
-       par duas vezes (a busca escolhe times diferentes para repetir). Os jogos dessa forma levam `leg` 1 (ida) e 2 (volta), mas a ordem é a das rodadas, sem "turnos" separados.
+       par duas vezes (e as duas repetições caem em times diferentes). Os jogos dessa forma levam `leg` 1 (ida) e 2 (volta), mas a ordem é a das rodadas, sem "turnos" separados.
    O 3 times (vira) fica como sempre (quem ganha fica). Campeonato já criado mantém a ordem que tem (os jogos são gravados na criação). */
 const permutationsOf = arr => (arr.length <= 1 ? [arr] : arr.flatMap((x, i) => permutationsOf([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [x, ...p])));
 const gamesShareTeam = (g, h) => g[0] === h[0] || g[0] === h[1] || g[1] === h[0] || g[1] === h[1]; // g e h são [mandante, visitante]
@@ -1275,33 +1275,28 @@ function countBackToBack(games) {
   return n;
 }
 // Escolhe a ordem das "unidades" (cada uma é uma lista de ALTERNATIVAS; cada alternativa é uma sequência de jogos [mandante, visitante]) e a alternativa de cada uma, com o MENOR número
-// de repetições (empatando, o menor número de repetições de um mesmo time). Para na primeira ordem sem nenhuma repetição. Devolve [{ u, ai }] na ordem escolhida.
+// de repetições. Para na primeira ordem sem nenhuma repetição. Devolve [{ u, ai }] na ordem escolhida.
 function bestUnitOrder(units) {
   const n = units.length, used = new Array(n).fill(false);
   const NODE_LIMIT = 400000;
   let best = null, nodes = 0;
-  const score = (rep, per) => rep * 100 + Math.max(0, ...Object.values(per));
-  function dfs(order, last, rep, per) {
+  function dfs(order, last, rep) {
     if (nodes++ > NODE_LIMIT) return;
-    if (best && score(rep, per) >= best.score) return;
-    if (order.length === n) { best = { score: score(rep, per), order: order.map(o => ({ ...o })) }; return; }
+    if (best && rep >= best.rep) return;
+    if (order.length === n) { best = { rep, order: order.map(o => ({ ...o })) }; return; }
     for (let u = 0; u < n; u++) {
       if (used[u]) continue;
       used[u] = true;
       units[u].forEach((alt, ai) => {
         let r = rep, prev = last;
-        const p2 = { ...per };
-        for (const g of alt) {
-          if (prev && gamesShareTeam(prev, g)) { r++; for (const t of g) if (prev.includes(t)) p2[t] = (p2[t] || 0) + 1; }
-          prev = g;
-        }
-        dfs([...order, { u, ai }], prev, r, p2);
+        for (const g of alt) { if (prev && gamesShareTeam(prev, g)) r++; prev = g; }
+        dfs([...order, { u, ai }], prev, r);
       });
       used[u] = false;
-      if (best && best.score === 0) return;
+      if (best && best.rep === 0) return;
     }
   }
-  dfs([], null, 0, {});
+  dfs([], null, 0);
   return best ? best.order : units.map((_, u) => ({ u, ai: 0 })); // sem tempo para achar: a ordem natural
 }
 // 6 times com final: dois grupos de 3 (A e B), todos contra todos em 2 turnos dentro de cada grupo (6 jogos por grupo, 12 no total). Em cada grupo a ordem faz cada time descansar
@@ -1332,7 +1327,7 @@ function genMatches(teams, fmt, opts = {}) {
   if (fmt === 4) {
     // 3 blocos (um par de confrontos que não se cruzam): ida (rodada 2b+1) e volta (rodada 2b+2, mandante e visitante trocados) em seguida
     const rev = r => r.map(([h, a]) => [a, h]);
-    const units = rounds.map(r => { const s = [...r].reverse(); return [[...r, ...rev(r)], [...s, ...rev(s)]]; });
+    const units = rounds.map(r => [[...r, ...rev(r)]]);
     bestUnitOrder(units).forEach(({ u, ai }, b) => {
       units[u][ai].forEach(([h, a], k) => ms.push({ id: `m_${++n}`, home: h, away: a, hs: null, as: null, phase: 'regular', leg: k < 2 ? 1 : 2, round: 2 * b + 1 + (k < 2 ? 0 : 1), played: false }));
     });
@@ -1532,7 +1527,7 @@ function titleRace(teams, matches) {
   const tied = table.filter(s => s.pts === top.pts && sg(s) === sg(top) && s.gp === top.gp).map(s => s.team);
   return { leader: tied.length === 1 ? top.team : null, tied, table };
 }
-// O campeonato sem final já pode coroar o campeão? Quando todos os jogos foram disputados (4 e 5 times) ou quando o admin encerrou (vira, ou encerrar antes da hora).
+// O campeonato sem final já pode coroar o campeão? Quando todos os jogos foram disputados (4, 5 e 6 times) ou quando o admin encerrou (vira, ou encerrar antes da hora).
 function noFinalComplete(champ, matches = champ.matches) {
   if (!champ.noFinal) return false;
   if (champ.regularEnded) return true;
@@ -1558,17 +1553,17 @@ function drawGroups(teams, rnd = Math.random) {
   for (let i = t.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [t[i], t[j]] = [t[j], t[i]]; }
   return { A: t.slice(0, 3), B: t.slice(3, 6) };
 }
-// Os grupos servem para estes 6 times? (dois grupos de 3 com exatamente os 6 times, sem repetir)
+// Os grupos servem para estes 6 times? (dois grupos de 3 com exatamente os 6 times, sem repetir: 6 nomes que cobrem os 6 times não têm como repetir)
 function validGroups(groups, teams) {
-  if (!groups || !Array.isArray(groups.A) || !Array.isArray(groups.B) || groups.A.length !== 3 || groups.B.length !== 3) return false;
+  if (!groups || !Array.isArray(groups.A) || !Array.isArray(groups.B) || !Array.isArray(teams)) return false;
   const all = [...groups.A, ...groups.B];
-  return new Set(all).size === 6 && (teams || []).length === 6 && teams.every(t => all.includes(t));
+  return groups.A.length === 3 && all.length === 6 && teams.length === 6 && teams.every(t => all.includes(t));
 }
-// As tabelas dos grupos: { A: [...], B: [...] } (linhas como standings()). Campeonato sem grupos: null.
+// As tabelas dos grupos: { A: [...], B: [...] } (linhas como standings(): só entram jogos entre times do grupo, e os grupos não têm time em comum). Campeonato sem grupos: null.
 function groupTables(champ, matches = champ.matches) {
   const g = champGroups(champ);
   if (!g) return null;
-  return Object.fromEntries(GROUP_IDS.map(id => [id, standings(g[id], matches.filter(m => m.group === id))]));
+  return Object.fromEntries(GROUP_IDS.map(id => [id, standings(g[id], matches)]));
 }
 // Fim da fase de grupos: todos os jogos disputados.
 function groupStageDone(champ, matches = champ.matches) {
@@ -1582,7 +1577,7 @@ function groupLeaders(champ, matches = champ.matches) {
   const out = { leaders: {}, seconds: {}, tied: {}, ready: false };
   if (!g) return out;
   for (const id of GROUP_IDS) {
-    const race = titleRace(g[id], matches.filter(m => m.group === id));
+    const race = titleRace(g[id], matches);
     const pick = champ.groupLeaders?.[id];
     out.tied[id] = race.tied.length > 1 ? race.tied : [];
     out.leaders[id] = race.leader || (race.tied.length > 1 && race.tied.includes(pick) ? pick : null);
@@ -6640,8 +6635,11 @@ function matchCard(m, interactive=true, champId=null) {
 }
 
 // `group` ('A' ou 'B') = a tabela de UM grupo do campeonato de 6 times (recebe só os times e os jogos desse grupo); o líder do grupo vai à final.
-function standingsTable(teams, matches, fmt, noFinal=false, group=null) {
-  const st2 = standings(teams, matches);
+// `pick` = o líder que o admin ESCOLHEU num empate total no topo do grupo: ele sobe para a 1ª linha (a tabela, sozinha, não sabe quem foi escolhido) e a nota avisa.
+function standingsTable(teams, matches, fmt, noFinal=false, group=null, pick=null) {
+  let st2 = standings(teams, matches);
+  const pi = group && pick ? st2.findIndex(r => r.team === pick) : -1;
+  if (pi > 0) st2 = [st2[pi], ...st2.slice(0, pi), ...st2.slice(pi + 1)];
   const posC = ['#F0A500','#C0C0C0','#CD7F32'];
   const rows = st2.map((s,i)=>{
     const tc2=T[s.team]||{l:s.team,c:'#8B949E'};
@@ -6656,7 +6654,7 @@ function standingsTable(teams, matches, fmt, noFinal=false, group=null) {
     </tr>`;
   }).join('');
   const note = group
-    ? '<span class="zone-note">Líder → Final</span>'
+    ? `<span class="zone-note">${pi >= 0 ? 'Líder (escolha do admin)' : 'Líder'} → Final</span>`
     : noFinal
     ? '<span class="zone-note">Líder = campeão</span>'
     : fmt===5
@@ -6677,7 +6675,9 @@ function standingsTable(teams, matches, fmt, noFinal=false, group=null) {
 function groupsStandingsHtml(champ, editable=false) {
   const g = champGroups(champ);
   if (!g) return '';
-  let h = GROUP_IDS.map(id => standingsTable(g[id], champ.matches.filter(m => m.group === id), 6, false, id)).join('');
+  const gl = groupLeaders(champ);
+  // empate total no topo já decidido pelo admin: o líder escolhido sobe para a 1ª linha da tabela do grupo
+  let h = GROUP_IDS.map(id => standingsTable(g[id], champ.matches, 6, false, id, gl.tied[id].length > 1 ? gl.leaders[id] : null)).join('');
   const open = champ.status === 'completed' ? [] : groupTiesOpen(champ);
   if (open.length) {
     h += open.map(o => {
