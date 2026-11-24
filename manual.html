@@ -650,6 +650,57 @@ p strong {
       </ul>
       <p>Antes desta opção (novembro de 2026) não havia como corrigir a lista depois de finalizar o campeonato. <span class="tag">Técnico</span> O app grava, numa só transação, o campo <code>champion_players</code> do campeonato e as entradas de <code>player_titles/{chave}</code> de quem entrou, saiu ou mudou de peso (cada entrada tem o <code>champId</code> do campeonato; os registros antigos, sem <code>champId</code>, são achados pela data, pelo time e pelo peso): ou grava tudo, ou nada. Um jogador que fica sem nenhum título tem o documento apagado, como ao excluir um campeonato.</p>
 
+      <h3 id="seis-times">6 times: dois grupos de 3 + final</h3>
+      <p>Com <strong>6 times</strong> (liga com final) o campeonato tem <strong>dois grupos de 3</strong>. Ao marcar os 6 times na tela <strong>Novo Campeonato</strong>, o app <strong>sorteia os grupos</strong> e mostra o <strong>Grupo A</strong> e o <strong>Grupo B</strong> antes de criar; se não gostar da divisão, toque em <strong>🎲 Sortear os grupos de novo</strong> quantas vezes quiser. Os times que vêm do sorteio de jogadores (<strong>⚖️ Sortear Times</strong>, que agora aceita de 2 a 6 times) também são divididos em grupos nessa tela. A liga precisa ter pelo menos 6 cores de time liberadas (<strong>Painel Admin → Cores de times usadas na liga</strong>).</p>
+      <ul style="color: var(--text2); font-size: 13px; padding-left: 20px; line-height: 2;">
+        <li><strong style="color: var(--text)">Fase de grupos: 12 jogos.</strong> Em cada grupo, todos contra todos em <strong>2 turnos</strong> (ida e volta): cada time joga 4 vezes, e o 2º turno repete o 1º com mandante e visitante trocados. Cada grupo tem a sua tabela (com o líder marcado) e cada jogo mostra a etiqueta <strong>Grupo A</strong> ou <strong>Grupo B</strong>.</li>
+        <li><strong style="color: var(--text)">Final entre os líderes.</strong> O <strong>líder de cada grupo</strong> vai à final (líder do A × líder do B). Ela é criada sozinha quando o último jogo dos grupos é registrado; depois tudo segue como sempre (placar, pênaltis se empatar, registrar os jogadores campeões).</li>
+        <li><strong style="color: var(--text)">Disputa de 3º lugar (opcional).</strong> Com a final criada, o botão <strong>🥉 Adicionar disputa de 3º lugar</strong> cria o <strong>2º colocado do grupo A × 2º colocado do grupo B</strong>.</li>
+        <li><strong style="color: var(--text)">Sem encerrar antes da hora.</strong> Como a final depende dos dois grupos, não existe "Encerrar fase regular": ela nasce quando o último jogo dos grupos é registrado.</li>
+      </ul>
+      <p><strong>Desempate dentro do grupo.</strong> Pontos (vitória 3, empate 1), depois saldo de gols, depois gols marcados. Se o topo de um grupo continuar <strong>empatado em tudo</strong>, a final espera e o app abre a janela <strong>🤝 Empate no topo do Grupo A</strong> (ou B) para o <strong>admin escolher</strong> quem é o líder do grupo. Em <em>Decidir depois</em>, a tabela mostra o aviso <em>Empate total no topo do Grupo A</em> com o link <strong>Definir quem vai à final</strong>, que abre a janela de novo; quem não é admin vê o aviso e espera a escolha. Se os dois grupos empatarem, a janela pergunta um de cada vez.</p>
+      <p><strong>Corrigir um placar depois.</strong> Vale o que está na seção 06: se o placar de um jogo dos grupos for corrigido e mudar um líder, a final que ainda não foi jogada é refeita sozinha (com aviso); a final já jogada nunca é reescrita.</p>
+      <p><strong>Liga sem final.</strong> Com 6 times não há grupos: são <strong>pontos corridos</strong>, uma <strong>tabela só, todos contra todos em 1 turno (15 jogos)</strong>, e o campeão é o time com mais pontos (ver "Liga sem final" mais abaixo). O card <strong>🔍 Cenários</strong> existe só para 4 e 5 times.</p>
+      <p><strong>Campeonatos que já existem não mudam.</strong> O formato de 6 times vale para os campeonatos criados a partir de agora; até então o app só aceitava de 3 a 5 times.</p>
+
+      <h3 id="ordem-dos-jogos">A ordem dos jogos: ninguém joga duas vezes seguidas</h3>
+      <p>Ao criar o campeonato, o app monta a lista de jogos de um jeito que <strong>evita que o mesmo time jogue duas vezes seguidas</strong>: quem acabou de jogar descansa pelo menos um jogo. A lista é a que aparece na tela como <strong>Rodada 1, Rodada 2…</strong> (a ordem em que o grupo joga).</p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Times</th>
+            <th>Como fica</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>3 times (vira)</td>
+            <td>Como sempre: quem ganha fica, o time que perdeu sai e o que descansava entra. Não há lista de jogos pronta.</td>
+          </tr>
+          <tr>
+            <td>4 times</td>
+            <td>Zerar é <strong>impossível</strong> (explicação abaixo): são <strong>2 repetições</strong> em 12 jogos, o mínimo que existe (antes eram 5). A ida e a volta de cada par de confrontos saem em seguida, numa lista só (<strong>Rodada 1</strong> a <strong>6</strong>), sem "Turno 1" e "Returno" separados.</td>
+          </tr>
+          <tr>
+            <td>5 times</td>
+            <td>5 rodadas de 2 jogos, com um time descansando em cada rodada: <strong>nenhuma repetição</strong> (antes eram 4).</td>
+          </tr>
+          <tr>
+            <td>6 times com final</td>
+            <td>Os jogos dos dois grupos se <strong>alternam</strong> (um do Grupo A, um do Grupo B, um do A…): <strong>nenhuma repetição</strong>.</td>
+          </tr>
+          <tr>
+            <td>6 times sem final</td>
+            <td>5 rodadas de 3 jogos, todos os times jogando em cada rodada: <strong>nenhuma repetição</strong>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>Por que com 4 times não dá para zerar?</strong> Cada jogo usa 2 dos 4 times, então o jogo seguinte só não repete ninguém se for exatamente os outros 2 (depois de A × B, só C × D). Isso funciona para uma sequência curta (A × B, C × D, B × A, D × C) e acaba: para passar ao próximo par de confrontos, algum time precisa jogar de novo. Como são 3 pares de confrontos, o mínimo possível é 2 repetições. O app escolhe a ordem com o menor número de repetições, e faz as duas recaírem em times diferentes.</p>
+      <div class="callout warn">
+        <div class="callout-label warn">O que continua valendo</div>
+        O admin ainda pode <strong>trocar a ordem de rodadas e de jogos</strong> (os botões ▲▼ e <em>⇅ trocar ordem</em>); se fizer isso, a escolha dele vale, mesmo que um time passe a jogar duas vezes seguidas. A <strong>final</strong>, as <strong>semifinais</strong> e a <strong>disputa de 3º lugar</strong> entram na ordem natural: se um dos times acabou de jogar o jogo anterior, ele joga de novo. O campeonato que <strong>já começou</strong> mantém a ordem que tinha: a nova ordem vale para os campeonatos criados a partir de agora.
+      </div>
+
       <h3 id="liga-sem-final">Liga sem final (pontos corridos)</h3>
       <p>A liga escolhe se os campeonatos têm final: na pergunta <strong>"Seus campeonatos têm final?"</strong> ao criar a liga, ou depois em <strong>Painel Admin → Formato dos campeonatos</strong> (<strong>🏆 Com final</strong> ou <strong>⚽ Sem final</strong>). Na liga <strong>sem final</strong> o campeonato vira <strong>pontos corridos</strong>: não existe final, semifinal nem disputa de 3º lugar, e o <strong>campeão é o time que somou mais pontos durante todo o campeonato</strong> (vitória vale 3 pontos, empate 1).</p>
 
@@ -677,13 +728,18 @@ p strong {
             <td>Todos contra todos em 1 turno (10 jogos), sem semifinais e sem final.</td>
             <td>Ao registrar o <strong>último jogo</strong>, igual aos 4 times.</td>
           </tr>
+          <tr>
+            <td>6</td>
+            <td>Uma tabela só (sem grupos), todos contra todos em 1 turno (15 jogos), sem final.</td>
+            <td>Ao registrar o <strong>último jogo</strong>, igual aos 4 times.</td>
+          </tr>
         </tbody>
       </table>
 
-      <p><strong>Encerrar antes da hora.</strong> Com 4 ou 5 times, depois de ao menos 2 jogos disputados e com jogos ainda por fazer, aparece o botão <strong>⏹ Encerrar Campeonato</strong>: os jogos que faltavam saem da lista e o líder da tabela naquele momento é o campeão.</p>
+      <p><strong>Encerrar antes da hora.</strong> Com 4, 5 ou 6 times, depois de ao menos 2 jogos disputados e com jogos ainda por fazer, aparece o botão <strong>⏹ Encerrar Campeonato</strong>: os jogos que faltavam saem da lista e o líder da tabela naquele momento é o campeão.</p>
       <p><strong>Desempate.</strong> Pontos, depois saldo de gols, depois gols marcados. Se dois ou mais times continuarem empatados em tudo no topo, o app abre a janela <strong>🤝 Empate no topo da tabela</strong> e o admin escolhe o campeão entre os times empatados. Se tocar em <em>Decidir depois</em>, o botão <strong>🏆 Registrar Jogadores Campeões</strong> (abaixo da tabela) abre a janela de novo.</p>
       <p><strong>Registrar os campeões.</strong> Com o time definido, tudo segue como sempre: o admin registra os jogadores campeões (com o peso de cada um) e salva.</p>
-      <p><strong>Cenários.</strong> Nas duas últimas rodadas (4 e 5 times) o card <strong>🔍 Cenários — Título</strong> mostra quem já é campeão garantido, quem depende de resultados e quem não tem mais chance. Empate em pontos no topo não conta como título garantido, porque o saldo de gols ainda vai decidir.</p>
+      <p><strong>Cenários.</strong> Nas duas últimas rodadas (só com 4 e 5 times; com 6 times não há) o card <strong>🔍 Cenários — Título</strong> mostra quem já é campeão garantido, quem depende de resultados e quem não tem mais chance. Empate em pontos no topo não conta como título garantido, porque o saldo de gols ainda vai decidir.</p>
 
       <div class="callout gold">
         <div class="callout-label gold">Conquistas da final ficam ocultas</div>
@@ -813,7 +869,7 @@ p strong {
       </table>
 
       <h3 id="corrigir-placar-mata-mata">Corrigir um placar depois que as semifinais ou a final já foram montadas</h3>
-      <p>Com 4 ou 5 times, os confrontos do mata-mata saem da tabela: com <strong>5 times</strong>, as <strong>semifinais</strong> são 1º × 4º e 2º × 3º e a <strong>final</strong> é entre os vencedores delas; com <strong>4 times</strong>, a <strong>final</strong> é 1º × 2º (e a disputa de 3º lugar, quando criada junto com a final, é 3º × 4º). Se um placar da <strong>fase de grupos</strong> for corrigido depois que esses jogos já foram criados, a tabela muda e o app <strong>refaz sozinho os confrontos que ainda não foram jogados</strong>, com um aviso na tela dos novos confrontos (ex.: <em>Confrontos refeitos pela nova tabela — Semi 1: Laranja × Roxo · Semi 2: Verde × Vermelho</em>). Corrigir o placar de uma <strong>semifinal</strong> também troca os times da final, enquanto ela não foi jogada.</p>
+      <p>Com 4, 5 ou 6 times, os confrontos do mata-mata saem da tabela: com <strong>5 times</strong>, as <strong>semifinais</strong> são 1º × 4º e 2º × 3º e a <strong>final</strong> é entre os vencedores delas; com <strong>4 times</strong>, a <strong>final</strong> é 1º × 2º (e a disputa de 3º lugar, quando criada junto com a final, é 3º × 4º); com <strong>6 times</strong>, a <strong>final</strong> é o líder do grupo A × o líder do grupo B (e a disputa de 3º lugar, o 2º do A × o 2º do B). Se um placar da <strong>fase de grupos</strong> for corrigido depois que esses jogos já foram criados, a tabela muda e o app <strong>refaz sozinho os confrontos que ainda não foram jogados</strong>, com um aviso na tela dos novos confrontos (ex.: <em>Confrontos refeitos pela nova tabela — Semi 1: Laranja × Roxo · Semi 2: Verde × Vermelho</em>). Corrigir o placar de uma <strong>semifinal</strong> também troca os times da final, enquanto ela não foi jogada.</p>
       <div class="callout warn">
         <div class="callout-label warn">O que já foi jogado não muda</div>
         O app nunca reescreve um jogo que já tem resultado. Se um placar da fase de grupos for corrigido <strong>depois de jogada</strong> uma das semifinais (ou a final), os confrontos ficam como estão e o app avisa, em vermelho, como eles seriam pela nova tabela. As duas semifinais só são refeitas juntas, e só se nenhuma delas foi jogada. Por isso, <strong>corrija o placar errado antes de jogar as semifinais</strong>. Se mesmo assim acontecer, escreva para <strong>suporte@peladanamao.com.br</strong>.

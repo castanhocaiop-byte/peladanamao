@@ -410,6 +410,11 @@ nav {
 }
 .final-tag  { background: #f0a50018; color: var(--gold); }
 .sf-tag     { background: #2f81f718; color: #4db8ff; }
+.grp-tag    { background: #00d67f14; color: var(--accent); }
+.groups-preview { margin: 0 14px 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--s2); }
+.groups-cols { display: flex; gap: 14px; }
+.groups-cols > div { flex: 1; min-width: 0; }
+.groups-lbl { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
 .rest-row {
   padding: 0 14px 10px;
   font-size: 12px; color: var(--text3);
@@ -982,7 +987,7 @@ function enabledColors() {
   if (!cfg) return Object.entries(T);
   return Object.entries(T).filter(([id]) => cfg.includes(id));
 }
-const FMT = { 3:'Vira (3 times)', 4:'Todos contra todos', 5:'Fase de grupos + Semis' };
+const FMT = { 3:'Vira (3 times)', 4:'Todos contra todos', 5:'Fase de grupos + Semis', 6:'Dois grupos de 3 + Final' };
 
 /* ── state ──────────────────────────────────────────────────── */
 const st = {
@@ -1005,6 +1010,7 @@ const st = {
   drawTeamColors: [],
   createPresetTeams: [],
   createRosters: {},
+  createGroups: null, // 6 times com final: os dois grupos sorteados na tela de criação ({ A: [3 times], B: [3 times] })
   createMode: 'draw', // 'draw' (sortear) ou 'manual' (montar à mão) — a tela "Novo Campeonato" alterna entre os dois
   createTeamsSource: null, // 'draw' quando os times marcados vieram de um sorteio aplicado (só de exibição: muda o rótulo da aba "Manual" pra não parecer escolha manual)
   playerTeamMap: {},
@@ -1251,31 +1257,91 @@ function genRoundRobinRounds(teams) {
   return rounds;
 }
 
-function genMatches(teams, fmt) {
+/* ── A ORDEM dos jogos: ninguém joga duas vezes seguidas (quando é possível) ─────────────────────────────────────────────────────────────────────
+   Os jogos saem numa ordem (a das rodadas: é a ordem em que o app mostra e o grupo joga). Antes ela vinha direto do rodízio, e o mesmo time podia terminar um jogo e entrar no
+   seguinte. Agora a ordem é escolhida para o time que acabou de jogar descansar pelo menos um jogo:
+     5 times (turno único) e 6 times sem final (pontos corridos): as rodadas do rodízio e os jogos de cada rodada são reordenados (busca) até não sobrar nenhuma repetição;
+     6 times com final: dois grupos de 3 em 2 turnos; os jogos dos dois grupos se ALTERNAM (rodada = 1 jogo do grupo A e 1 do B), então ninguém joga duas vezes seguidas;
+     4 times (ida e volta, 12 jogos): zerar é IMPOSSÍVEL (cada jogo usa metade dos times: o único jogo que não repete ninguém é o outro confronto do mesmo par de times, e só
+       existem 3 pares). O mínimo possível é 2 repetições em 11 passagens (a ordem de antes tinha 5): a ida e a volta de cada par de confrontos saem em seguida e só se muda de
+       par duas vezes (a busca escolhe times diferentes para repetir). Os jogos dessa forma levam `leg` 1 (ida) e 2 (volta), mas a ordem é a das rodadas, sem "turnos" separados.
+   O 3 times (vira) fica como sempre (quem ganha fica). Campeonato já criado mantém a ordem que tem (os jogos são gravados na criação). */
+const permutationsOf = arr => (arr.length <= 1 ? [arr] : arr.flatMap((x, i) => permutationsOf([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [x, ...p])));
+const gamesShareTeam = (g, h) => g[0] === h[0] || g[0] === h[1] || g[1] === h[0] || g[1] === h[1]; // g e h são [mandante, visitante]
+// Quantas vezes, na ORDEM dada, o time que jogou entra também no jogo seguinte (jogos com { home, away }).
+function countBackToBack(games) {
+  let n = 0;
+  for (let i = 1; i < (games || []).length; i++) if (gamesShareTeam([games[i - 1].home, games[i - 1].away], [games[i].home, games[i].away])) n++;
+  return n;
+}
+// Escolhe a ordem das "unidades" (cada uma é uma lista de ALTERNATIVAS; cada alternativa é uma sequência de jogos [mandante, visitante]) e a alternativa de cada uma, com o MENOR número
+// de repetições (empatando, o menor número de repetições de um mesmo time). Para na primeira ordem sem nenhuma repetição. Devolve [{ u, ai }] na ordem escolhida.
+function bestUnitOrder(units) {
+  const n = units.length, used = new Array(n).fill(false);
+  const NODE_LIMIT = 400000;
+  let best = null, nodes = 0;
+  const score = (rep, per) => rep * 100 + Math.max(0, ...Object.values(per));
+  function dfs(order, last, rep, per) {
+    if (nodes++ > NODE_LIMIT) return;
+    if (best && score(rep, per) >= best.score) return;
+    if (order.length === n) { best = { score: score(rep, per), order: order.map(o => ({ ...o })) }; return; }
+    for (let u = 0; u < n; u++) {
+      if (used[u]) continue;
+      used[u] = true;
+      units[u].forEach((alt, ai) => {
+        let r = rep, prev = last;
+        const p2 = { ...per };
+        for (const g of alt) {
+          if (prev && gamesShareTeam(prev, g)) { r++; for (const t of g) if (prev.includes(t)) p2[t] = (p2[t] || 0) + 1; }
+          prev = g;
+        }
+        dfs([...order, { u, ai }], prev, r, p2);
+      });
+      used[u] = false;
+      if (best && best.score === 0) return;
+    }
+  }
+  dfs([], null, 0, {});
+  return best ? best.order : units.map((_, u) => ({ u, ai: 0 })); // sem tempo para achar: a ordem natural
+}
+// 6 times com final: dois grupos de 3 (A e B), todos contra todos em 2 turnos dentro de cada grupo (6 jogos por grupo, 12 no total). Em cada grupo a ordem faz cada time descansar
+// um jogo a cada dois (rodízio de quem folga) e o 2º turno repete o 1º com mandante e visitante trocados. Rodada k = o jogo k do grupo A e o jogo k do grupo B (grupos alternados).
+function genGroupMatches(groups) {
+  const ms = [];
+  let n = 0;
+  const slots = g => { const [x, y, z] = g; const t1 = [[x, y], [x, z], [y, z]]; return [...t1, ...t1.map(([h, a]) => [a, h])]; };
+  const lists = { A: slots(groups.A), B: slots(groups.B) };
+  for (let i = 0; i < 6; i++) {
+    for (const grp of ['A', 'B']) {
+      const [h, a] = lists[grp][i];
+      ms.push({ id: `m_${++n}`, home: h, away: a, hs: null, as: null, phase: 'regular', group: grp, leg: i < 3 ? 1 : 2, round: i + 1, played: false });
+    }
+  }
+  return ms;
+}
+// `opts.groups` = { A: [3 times], B: [3 times] } (só 6 times com final). Sem ele: 4 times = ida e volta; 5 times e 6 times sem final = turno único.
+function genMatches(teams, fmt, opts = {}) {
   const ms = [];
   if (fmt === 3) {
     ms.push({ id:`m_${uid()}`, home:teams[0], away:teams[1], rest:teams[2], hs:null, as:null, phase:'regular', seq:1, played:false });
-  } else {
-    const rounds = genRoundRobinRounds(teams);
-    const legs = fmt === 4 ? 2 : 1;
-    let n = 0;
-    for (let lg = 0; lg < legs; lg++) {
-      for (let r = 0; r < rounds.length; r++) {
-        for (const [h, a] of rounds[r]) {
-          ms.push({
-            id: `m_${++n}`,
-            home: lg === 0 ? h : a,
-            away: lg === 0 ? a : h,
-            hs: null, as: null,
-            phase: 'regular',
-            leg: fmt === 4 ? lg + 1 : null,
-            round: r + 1,
-            played: false,
-          });
-        }
-      }
-    }
+    return ms;
   }
+  if (fmt === 6 && opts.groups) return genGroupMatches(opts.groups);
+  const rounds = genRoundRobinRounds(teams);
+  let n = 0;
+  if (fmt === 4) {
+    // 3 blocos (um par de confrontos que não se cruzam): ida (rodada 2b+1) e volta (rodada 2b+2, mandante e visitante trocados) em seguida
+    const rev = r => r.map(([h, a]) => [a, h]);
+    const units = rounds.map(r => { const s = [...r].reverse(); return [[...r, ...rev(r)], [...s, ...rev(s)]]; });
+    bestUnitOrder(units).forEach(({ u, ai }, b) => {
+      units[u][ai].forEach(([h, a], k) => ms.push({ id: `m_${++n}`, home: h, away: a, hs: null, as: null, phase: 'regular', leg: k < 2 ? 1 : 2, round: 2 * b + 1 + (k < 2 ? 0 : 1), played: false }));
+    });
+    return ms;
+  }
+  const units = rounds.map(permutationsOf);
+  bestUnitOrder(units).forEach(({ u, ai }, r) => {
+    units[u][ai].forEach(([h, a]) => ms.push({ id: `m_${++n}`, home: h, away: a, hs: null, as: null, phase: 'regular', leg: null, round: r + 1, played: false }));
+  });
   return ms;
 }
 
@@ -1313,9 +1379,10 @@ function champion(matches) {
   return f.hs>f.as?f.home:f.away;
 }
 
-/* Mata-mata de um campeonato COM final (só 4 e 5 times; o "vira" e o "sem final" não têm):
+/* Mata-mata de um campeonato COM final (só 4, 5 e 6 times; o "vira" e o "sem final" não têm):
      4 times (todos contra todos): final = 1º x 2º da tabela e, se foi criada junto, a disputa de 3º lugar = 3º x 4º;
-     5 times (fase de grupos + semis): semifinais = 1º x 4º e 2º x 3º da tabela; final = os vencedores das semifinais.
+     5 times (fase de grupos + semis): semifinais = 1º x 4º e 2º x 3º da tabela; final = os vencedores das semifinais;
+     6 times (dois grupos de 3): final = líder do grupo A x líder do grupo B e, se foi criada, a disputa de 3º lugar = 2º do A x 2º do B.
    Esses confrontos são GRAVADOS no campeonato quando nascem (submitScore, endRegular, endRegularWith3rd), enquanto a tabela se recalcula na hora. Quando o admin CORRIGE um
    resultado depois, a tabela muda sozinha, mas os confrontos gravados ficavam como nasceram. Esta função os refaz a partir dos resultados de agora, só os que AINDA NÃO FORAM
    JOGADOS, e nunca reescreve um jogo disputado (aconteceu): se um confronto já jogado não bate mais com a tabela, ele vai em `stale` para o app avisar o admin. As duas
@@ -1324,14 +1391,22 @@ function champion(matches) {
    pede diferentes; cada item é { id, label, home, away } com home e away como a tabela pede. */
 function reseedKnockout(champ, matches) {
   const out = { matches, changed: [], stale: [] };
-  if (champ.noFinal || (champ.format!==4 && champ.format!==5)) return out;
+  const groups = champGroups(champ);
+  if (champ.noFinal || (champ.format!==4 && champ.format!==5 && !groups)) return out;
   const tab = standings(champ.teams, matches).map(r=>r.team);
   const sfs = matches.filter(m=>m.phase==='semifinal');
   const fin = matches.find(m=>m.phase==='final');
   const third = matches.find(m=>m.phase==='third');
   const want = {};  // id do jogo → [mandante, visitante] como a tabela de agora pede
   const label = {};
-  if (champ.format===5) {
+  if (groups) {
+    // grupo com o topo empatado em tudo e sem escolha do admin: a final fica com o time que já está nela, se ele ainda é um dos empatados (senão fica como está e o admin é chamado a escolher)
+    const info = groupLeaders(champ, matches);
+    const cur = fin ? { A: fin.home, B: fin.away } : {};
+    const lead = id => info.leaders[id] || (info.tied[id].includes(cur[id]) ? cur[id] : null);
+    if (fin && lead('A') && lead('B')) { want[fin.id] = [lead('A'), lead('B')]; label[fin.id] = 'Final'; }
+    if (third && info.seconds.A && info.seconds.B) { want[third.id] = [info.seconds.A, info.seconds.B]; label[third.id] = '3º lugar'; }
+  } else if (champ.format===5) {
     if (sfs.length===2 && tab.length>=4) {
       want[sfs[0].id] = [tab[0], tab[3]]; label[sfs[0].id] = 'Semi 1';
       want[sfs[1].id] = [tab[1], tab[2]]; label[sfs[1].id] = 'Semi 2';
@@ -1471,10 +1546,67 @@ function titleModalFor(champ, matches = champ.matches) {
   if (r.tied.length > 1) return { type: 'champTie', teams: r.tied };
   return null;
 }
+/* ── 6 times com final: dois grupos de 3 + final entre os líderes ────────────────────────────────────────────────────────────────────────────────────
+   O campeonato guarda `groups: { A: [3 times], B: [3 times] }` e cada jogo da fase de grupos leva `group: 'A' | 'B'`. Cada grupo tem a sua tabela (pontos, saldo de gols, gols pró) e o
+   LÍDER de cada um vai à final (1º do A × 1º do B); a disputa de 3º lugar, se for criada, é 2º do A × 2º do B. Empate total no topo de um grupo (mesmos pontos, saldo e gols pró): quem
+   decide é o admin (champ.groupLeaders[grupo], janela groupTie). Sem final (pontos corridos) o campeonato de 6 times é uma tabela só, sem grupos. */
+const GROUP_IDS = ['A', 'B'];
+const champGroups = champ => (champ?.groups && Array.isArray(champ.groups.A) && Array.isArray(champ.groups.B) ? champ.groups : null);
+// Sorteia os 6 times em dois grupos de 3 (`rnd` = o sorteador, para os testes poderem fixá-lo).
+function drawGroups(teams, rnd = Math.random) {
+  const t = [...teams];
+  for (let i = t.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [t[i], t[j]] = [t[j], t[i]]; }
+  return { A: t.slice(0, 3), B: t.slice(3, 6) };
+}
+// Os grupos servem para estes 6 times? (dois grupos de 3 com exatamente os 6 times, sem repetir)
+function validGroups(groups, teams) {
+  if (!groups || !Array.isArray(groups.A) || !Array.isArray(groups.B) || groups.A.length !== 3 || groups.B.length !== 3) return false;
+  const all = [...groups.A, ...groups.B];
+  return new Set(all).size === 6 && (teams || []).length === 6 && teams.every(t => all.includes(t));
+}
+// As tabelas dos grupos: { A: [...], B: [...] } (linhas como standings()). Campeonato sem grupos: null.
+function groupTables(champ, matches = champ.matches) {
+  const g = champGroups(champ);
+  if (!g) return null;
+  return Object.fromEntries(GROUP_IDS.map(id => [id, standings(g[id], matches.filter(m => m.group === id))]));
+}
+// Fim da fase de grupos: todos os jogos disputados.
+function groupStageDone(champ, matches = champ.matches) {
+  const reg = matches.filter(m => m.phase === 'regular');
+  return !!champGroups(champ) && reg.length > 0 && reg.every(m => m.played);
+}
+// Quem vai à final: { leaders: {A, B}, seconds: {A, B}, tied: {A: [times], B: [times]}, ready }. O líder de cada grupo é o 1º da tabela; se o topo empata em tudo vale a escolha do
+// admin (groupLeaders), desde que seja um dos empatados; senão o grupo fica sem líder (`tied` lista os empatados) e a final espera.
+function groupLeaders(champ, matches = champ.matches) {
+  const g = champGroups(champ);
+  const out = { leaders: {}, seconds: {}, tied: {}, ready: false };
+  if (!g) return out;
+  for (const id of GROUP_IDS) {
+    const race = titleRace(g[id], matches.filter(m => m.group === id));
+    const pick = champ.groupLeaders?.[id];
+    out.tied[id] = race.tied.length > 1 ? race.tied : [];
+    out.leaders[id] = race.leader || (race.tied.length > 1 && race.tied.includes(pick) ? pick : null);
+    out.seconds[id] = out.leaders[id] ? (race.table.map(r => r.team).find(t => t !== out.leaders[id]) || null) : null;
+  }
+  out.ready = GROUP_IDS.every(id => out.leaders[id]);
+  return out;
+}
+// Os grupos cujo topo está empatado em tudo e o admin ainda não escolheu: [{ group, teams }].
+function groupTiesOpen(champ, matches = champ.matches) {
+  if (!groupStageDone(champ, matches)) return [];
+  const r = groupLeaders(champ, matches);
+  return GROUP_IDS.filter(id => r.tied[id].length > 1 && !r.leaders[id]).map(id => ({ group: id, teams: r.tied[id] }));
+}
+// A final entre os líderes (1º do A × 1º do B), quando a fase de grupos acabou, os dois líderes estão definidos e a final ainda não existe; senão null.
+function groupFinalMatch(champ, matches = champ.matches) {
+  if (champ.noFinal || !groupStageDone(champ, matches) || matches.some(m => m.phase === 'final')) return null;
+  const r = groupLeaders(champ, matches);
+  return r.ready ? { id: 'final', home: r.leaders.A, away: r.leaders.B, hs: null, as: null, phase: 'final', played: false } : null;
+}
 function fmtLabel(champ) {
   const base = FMT[champ.format] || '';
   if (!champ.noFinal) return base;
-  return champ.format === 5 ? 'Todos contra todos · pontos corridos' : base + ' · pontos corridos';
+  return champ.format >= 5 ? 'Todos contra todos · pontos corridos' : base + ' · pontos corridos';
 }
 
 function startListeners() {
@@ -4376,13 +4508,15 @@ async function abandonActive() {
   }
 }
 
-async function createChampionship(teams, date=today()) {
+async function createChampionship(teams, date=today(), groupsArg=null) {
   if (!DB) { toast('Banco de dados não conectado. Recarregue a página.'); return; }
   const btn = document.getElementById('dobtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Criando...'; }
   try {
     await abandonActive();
     const id = uid();
+    // 6 times com final: dois grupos de 3, os que apareceram na tela de criação (se não servem para estes times, sorteia agora). Sem final (pontos corridos) é uma tabela só.
+    const groups = teams.length === 6 && finalsEnabled() ? (validGroups(groupsArg, teams) ? { A: [...groupsArg.A], B: [...groupsArg.B] } : drawGroups(teams)) : null;
     let rosters = null;
     if (st.createRosters && Object.keys(st.createRosters).length) {
       rosters = st.createRosters;
@@ -4395,13 +4529,16 @@ async function createChampionship(teams, date=today()) {
     }
     await ldoc(`championships/${id}`).set({
       date, teams, format: teams.length, status:'active',
-      matches: genMatches(teams, teams.length),
+      matches: genMatches(teams, teams.length, groups ? { groups } : {}),
       champion:null, champion_players:null, regularEnded:false,
       freeMode: isLeagueFree(),
       ...(finalsEnabled() ? {} : { noFinal: true }),
+      ...(groups ? { groups } : {}),
+      // 4 times: os jogos agora saem em rodadas corridas (ida e volta de cada par de confrontos em seguida, sem "Turno 1 / Returno"); campeonato antigo, sem esta marca, mantém os turnos
+      ...(teams.length === 4 ? { flatRounds: true } : {}),
       ...(rosters ? {teamRosters: rosters} : {}),
     });
-    st.createPresetTeams = []; st.createRosters = {}; st.playerTeamMap = {};
+    st.createPresetTeams = []; st.createRosters = {}; st.playerTeamMap = {}; st.createGroups = null;
     st.view='home'; st.modal=null; render();
   } catch(e) {
     toast('Erro ao criar campeonato: ' + (e?.message || e));
@@ -5293,6 +5430,14 @@ async function submitScore(matchId, hs, as_, goals=[], champIdOverride=null, par
           matches.push({id:'final',home:w1,away:w2,hs:null,as:null,phase:'final',played:false});
         }
       }
+
+    }
+
+    // 6 times (dois grupos de 3): acabou a fase de grupos, a final é líder do A × líder do B (empate total no topo de um grupo: o admin escolhe, e a final nasce depois).
+    // Vale também para um resultado CORRIGIDO: se o empate no topo deixou de existir com a correção, a final que estava esperando nasce agora (groupFinalMatch não cria duas).
+    if (champGroups(champ) && !champ.noFinal) {
+      const gf = groupFinalMatch(champ, matches);
+      if (gf) matches.push(gf);
     }
 
     // Resultado CORRIGIDO (o jogo já tinha sido disputado): a tabela muda sozinha, mas os confrontos do mata-mata já criados (semifinais, final, 3º lugar) ficariam como nasceram.
@@ -5317,6 +5462,10 @@ async function submitScore(matchId, hs, as_, goals=[], champIdOverride=null, par
     } else if (!wasPlayed && noFinalComplete(champ, matches)) {
       // Sem final: o último jogo decide o campeão pela tabela (empatado em tudo, pede para o admin escolher)
       st.modal = titleModalFor(champ, matches);
+    } else if (champGroups(champ) && !champ.noFinal && matches[mi].phase==='regular' && isAdmin() && !matches.some(m=>m.phase==='final' && m.played)) {
+      // 6 times: o último jogo dos grupos (ou a correção de um resultado) pode deixar o topo de um grupo empatado em tudo; quem decide quem vai à final é o admin
+      const open = groupTiesOpen(champ, matches);
+      if (open.length) st.modal = { type: 'groupTie', champId: champ.id, group: open[0].group, teams: open[0].teams };
     }
     render();
   } catch(e) { toast('Erro ao salvar placar: ' + (e?.message||e)); }
@@ -5326,6 +5475,7 @@ async function endRegular() {
   if (!DB) { toast('Banco de dados não conectado.'); return; }
   const champ = activeChamp();
   if (!champ) return;
+  if (champGroups(champ)) return; // 6 times em grupos: a final nasce sozinha quando o último jogo dos grupos é registrado (não há encerrar antes da hora)
   try {
     const ref = ldoc(`championships/${champ.id}`);
     const matches = champ.matches.filter(m=>!(m.phase==='regular'&&!m.played));
@@ -5347,10 +5497,19 @@ async function addThirdPlaceRetro(champId) {
   if (!DB) return;
   const champ = st.champs.find(c=>c.id===champId); if(!champ) return;
   if (champ.teams.length < 4) { toast('São necessários ao menos 4 times.'); return; }
-  const st2 = standings(champ.teams, champ.matches);
-  if (st2.length < 4) { toast('Não há classificação suficiente para o 3º lugar.'); return; }
+  let pair;
+  if (champGroups(champ)) {
+    // 6 times: a disputa de 3º lugar é o 2º colocado do grupo A contra o 2º do grupo B
+    const gl = groupLeaders(champ);
+    if (!gl.seconds.A || !gl.seconds.B) { toast('Defina os líderes dos grupos primeiro.'); return; }
+    pair = [gl.seconds.A, gl.seconds.B];
+  } else {
+    const st2 = standings(champ.teams, champ.matches);
+    if (st2.length < 4) { toast('Não há classificação suficiente para o 3º lugar.'); return; }
+    pair = [st2[2].team, st2[3].team];
+  }
   try {
-    const matches = [...champ.matches, {id:'third',home:st2[2].team,away:st2[3].team,hs:null,as:null,phase:'third',played:false}];
+    const matches = [...champ.matches, {id:'third',home:pair[0],away:pair[1],hs:null,as:null,phase:'third',played:false}];
     await ldoc(`championships/${champId}`).update({matches});
     toast('Partida de 3º lugar adicionada — registre o placar!','ok');
   } catch(e) { toast('Erro: '+(e?.message||e)); }
@@ -5360,6 +5519,7 @@ async function endRegularWith3rd() {
   if (!DB) { toast('Banco de dados não conectado.'); return; }
   const champ = activeChamp(); if (!champ) return;
   if (champ.teams.length < 4) { toast('São necessários ao menos 4 times.'); return; }
+  if (champGroups(champ)) return; // 6 times em grupos: não se encerra antes da hora (ver endRegular)
   try {
     const ref = ldoc(`championships/${champ.id}`);
     const matches = champ.matches.filter(m=>!(m.phase==='regular'&&!m.played));
@@ -6427,7 +6587,9 @@ function matchCard(m, interactive=true, champId=null) {
     : m.phase==='semifinal'
     ? `<div class="phase-tag sf-tag">⚡ Semifinal</div>`
     : m.phase==='third'
-    ? `<div class="phase-tag sf-tag">🥉 3º Lugar</div>` : '';
+    ? `<div class="phase-tag sf-tag">🥉 3º Lugar</div>`
+    : GROUP_IDS.includes(m.group)
+    ? `<div class="phase-tag grp-tag">Grupo ${m.group}</div>` : '';
   const score = m.played
     ? `<span class="score-num" style="color:${m.hs>m.as?'#4DDA72':m.hs<m.as?'#FF5C5C':'#8B949E'}">${m.hs}</span>
        <span class="score-sep">–</span>
@@ -6477,13 +6639,14 @@ function matchCard(m, interactive=true, champId=null) {
   </div>`;
 }
 
-function standingsTable(teams, matches, fmt, noFinal=false) {
+// `group` ('A' ou 'B') = a tabela de UM grupo do campeonato de 6 times (recebe só os times e os jogos desse grupo); o líder do grupo vai à final.
+function standingsTable(teams, matches, fmt, noFinal=false, group=null) {
   const st2 = standings(teams, matches);
   const posC = ['#F0A500','#C0C0C0','#CD7F32'];
   const rows = st2.map((s,i)=>{
     const tc2=T[s.team]||{l:s.team,c:'#8B949E'};
     const sg=s.gp-s.gc;
-    const zone = noFinal ? (i===0?'f-zone':'') : fmt===5&&i<4?'sf-zone':((fmt===3||fmt===4)&&i<2)?'f-zone':'';
+    const zone = group ? (i===0?'f-zone':'') : noFinal ? (i===0?'f-zone':'') : fmt===5&&i<4?'sf-zone':((fmt===3||fmt===4)&&i<2)?'f-zone':'';
     return `<tr class="${zone}">
       <td class="td-pos"><span class="pos-num" style="color:${posC[i]||'#6e7681'}">${i+1}°</span></td>
       <td><span class="dot-sm" style="background:${tc2.c}"></span><span style="color:${tc2.c};font-weight:600">${tc2.l}</span></td>
@@ -6492,18 +6655,39 @@ function standingsTable(teams, matches, fmt, noFinal=false) {
       <td class="td-pts">${s.pts}</td>
     </tr>`;
   }).join('');
-  const note = noFinal
+  const note = group
+    ? '<span class="zone-note">Líder → Final</span>'
+    : noFinal
     ? '<span class="zone-note">Líder = campeão</span>'
     : fmt===5
     ? '<span class="zone-note">Top 4 → Semis</span>'
+    : fmt===6
+    ? ''  // 6 times sem grupos (campeonato registrado só pelo campeão): não há tabela de classificação com zona
     : '<span class="zone-note">Top 2 → Final</span>';
   return `<div class="card">
-    <div class="card-hdr"><span class="card-lbl">Classificação</span>${note}</div>
+    <div class="card-hdr"><span class="card-lbl">${group ? `Grupo ${group}` : 'Classificação'}</span>${note}</div>
     <table class="standings-table">
       <thead><tr><th></th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th><th>Pts</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
+}
+
+// 6 times com final: uma tabela por grupo e, quando a fase de grupos acaba com o topo de um grupo empatado em tudo, o aviso para o admin escolher quem vai à final.
+function groupsStandingsHtml(champ, editable=false) {
+  const g = champGroups(champ);
+  if (!g) return '';
+  let h = GROUP_IDS.map(id => standingsTable(g[id], champ.matches.filter(m => m.group === id), 6, false, id)).join('');
+  const open = champ.status === 'completed' ? [] : groupTiesOpen(champ);
+  if (open.length) {
+    h += open.map(o => {
+      const nm = o.teams.map(t => (T[t]?.l || t)).join(', ');
+      return `<div class="warn-box" style="margin:0 0 10px">🤝 Empate total no topo do <strong>Grupo ${o.group}</strong> (${nm}): mesmos pontos, saldo e gols marcados. ${isAdmin() && editable
+        ? `<a href="#" onclick="openGroupTie('${o.group}');return false" style="color:var(--accent);font-weight:700">Definir quem vai à final</a>`
+        : 'O admin da liga define quem vai à final.'}</div>`;
+    }).join('');
+  }
+  return h;
 }
 
 function renderChamp(champ, editable=false) {
@@ -6540,7 +6724,7 @@ function renderChamp(champ, editable=false) {
 
   if (editable && !chmpTeam) html += vWeatherForecast(date);
 
-  html += standingsTable(teams, matches, fmt, !!champ.noFinal);
+  html += champGroups(champ) ? groupsStandingsHtml(champ, editable) : standingsTable(teams, matches, fmt, !!champ.noFinal);
 
   {
     const analysis = analyzeClassification(champ);
@@ -6677,7 +6861,8 @@ function renderChamp(champ, editable=false) {
         [...playedReg].reverse().map(m=>matchCard(m,editable,champ.id)).join('');
   }
 
-  if (fmt===4) {
+  if (fmt===4 && !champ.flatRounds) {
+    // campeonato de 4 times criado antes da ordem nova: Turno 1 e Returno separados (os jogos novos vêm em rodadas corridas, ver flatRounds)
     const leg1Ms=regMs.filter(m=>m.leg===1), leg2Ms=regMs.filter(m=>m.leg===2);
     const leg1Done=leg1Ms.length&&leg1Ms.every(m=>m.played);
     const legs=leg1Done?[2,1]:[1,2];
@@ -6698,13 +6883,14 @@ function renderChamp(champ, editable=false) {
       html+=roundNums.length?renderRounds(legMs,showSwap):legMs.map(m=>matchCard(m,editable,champ.id)).join('');
     }
   }
-  if (fmt===4 && editable && !finM && !chmpTeam && playedReg.length>=2 && teams.length>=4 && !champ.noFinal)
-    html+=`<button class="btn btn-ghost" onclick="endRegularWith3rd()" style="margin-bottom:8px">🥉 Encerrar + Disputa de 3º Lugar</button>`;
-  if (fmt===5) {
-    html+=`<div class="sec-lbl">${champ.noFinal?'Pontos Corridos':'Fase de Grupos'}</div>`;
+  // rodadas corridas (uma lista só, na ordem em que se joga): 5 times, 6 times (grupos ou pontos corridos) e os campeonatos novos de 4 times (ida e volta de cada par de confrontos em seguida)
+  if (fmt===5 || fmt===6 || (fmt===4 && champ.flatRounds)) {
+    html+=`<div class="sec-lbl">${champ.noFinal?'Pontos Corridos':fmt===4?'Todos Contra Todos':'Fase de Grupos'}</div>`;
     const roundNums=[...new Set(regMs.map(m=>m.round).filter(Boolean))].sort((a,b)=>a-b);
     html+=roundNums.length ? renderRounds(regMs, editable) : regMs.map(m=>matchCard(m,editable,champ.id)).join('');
   }
+  if (fmt===4 && editable && !finM && !chmpTeam && playedReg.length>=2 && teams.length>=4 && !champ.noFinal)
+    html+=`<button class="btn btn-ghost" onclick="endRegularWith3rd()" style="margin-bottom:8px">🥉 Encerrar + Disputa de 3º Lugar</button>`;
   if (champ.noFinal) {
     // Sem final: depois dos jogos vem direto o campeão (o líder da tabela). Dá para encerrar antes de jogar tudo; no vira o botão já fica junto da lista de jogos.
     if (fmt!==3 && editable && status==='active' && !chmpTeam && !regularEnded && playedReg.length>=2 && regMs.some(m=>!m.played))
@@ -6966,7 +7152,7 @@ function vCreate() {
     </div>` : ''}
 
     ${mode === 'draw' ? drawBody : `
-    <p class="hint" style="padding-top:10px">Times participantes (3 a 5):</p>
+    <p class="hint" style="padding-top:10px">Times participantes (3 a 6):</p>
     <div class="team-grid">
       ${enabledColors().map(([id,t])=>{
         const pre = (st.createPresetTeams||[]).includes(id);
@@ -7002,6 +7188,7 @@ function vCreate() {
       <p style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Time Campeão</p>
       <div id="champ-team-sel"></div>
     </div>`:''}
+    <div id="groups-preview" class="groups-preview" style="display:none"></div>
     <div id="fmthint" class="fmt-hint" style="display:none"></div>
     <button class="btn btn-primary" id="dobtn" style="display:none" onclick="doCreate()">Criar Campeonato</button>
     `}
@@ -7031,9 +7218,9 @@ function renderDrawCard() {
   const activeNames = new Set(active.map(p=>(p.name||'').trim().toLowerCase()));
   // preset avulsos auto-included in draw (exclude those already in active roster)
   const presetAvulsoNames = (presetChamp()?.avulsos||[]).map(a=>(a.name||'').trim()).filter(n=>n && !activeNames.has(n.toLowerCase()));
-  const teamLabels = ['A','B','C','D','E'];
+  const teamLabels = ['A','B','C','D','E','F'];
 
-  const nBtns = [2,3,4,5].map(n => {
+  const nBtns = [2,3,4,5,6].map(n => {
     const act = st.drawNumTeams===n;
     return `<button onclick="setDrawNumTeams(${n})"
       style="padding:5px 13px;border-radius:20px;border:1px solid ${act?'var(--accent)':'var(--border)'};
@@ -7140,6 +7327,7 @@ function renderDrawCard() {
         }).join('')}
       </div>
       <div style="padding:0 14px 10px;display:flex;flex-wrap:wrap;gap:6px">${nBtns}</div>
+      ${enabledColors().length < st.drawNumTeams ? `<div class="warn-box" style="margin:0 14px 10px">⚠️ A liga só libera ${enabledColors().length} cores de time, e para ${st.drawNumTeams} times é preciso ter ${st.drawNumTeams}. O admin libera mais cores no Painel Admin.</div>` : ''}
       <p id="draw-present-count" style="padding:0 14px 10px;font-size:12px;color:var(--text3)">Marque quem está presente hoje (${active.length - absentSet.size} de ${active.length}${extraCount?` · ${extraCount} avulso${extraCount!==1?'s':''}`:''})  </p>
       ${presRows}
       <div style="padding:8px 14px 10px;border-top:1px solid var(--border2)">
@@ -9592,7 +9780,7 @@ function render() {
   if(main) main.innerHTML=termsNotice()+planBanner()+notifBanner()+installBanner()+content;
   trackSeen(main);
   if(isAdmin()&&(st.view==='players'||st.view==='history')) loadPushInfo(); // 🔔 do Elenco e lista de quem falta votar: busca (no máximo a cada 5 min) quantos aparelhos cada conta tem
-  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mFinCobrancaGrupo()+mRenamePlayer()+mAddRoster()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
+  if(modR) modR.innerHTML=mScore()+mChamp()+mPenaltyWinner()+mChampTie()+mGroupTie()+mPenaltyMisses()+mChampSummary()+mFinalGoals()+mFinDespesa()+mFinDespesaExcluir()+mFinConfig()+mFinCobrancaGrupo()+mRenamePlayer()+mAddRoster()+mFinAvulso()+mAdminPanel()+mMjTeamDetail()+mBadgeInfo()+mRival()+mVote()+mRateStars()+mSubscription()+mPixPay();
   const _ab=document.getElementById('admin-badge');
   if(_ab){const _c=st.pendingCount+st.linkRequestCount;_ab.textContent=_c>0?_c:'';_ab.style.display=_c>0?'flex':'none';}
   if(st._hlTarget){
@@ -12561,6 +12749,33 @@ async function toggleDespesaPaga(id, current, occKey) {
 /* ── event handlers ─────────────────────────────────────────── */
 function nav(view) { st.view=view; st.histId=null; st.confirmDelete=null; render(); }
 
+// 6 times com final: os dois grupos sorteados, para o admin conferir (e sortear de novo) antes de criar. `ck` = os 6 times marcados.
+function renderGroupsPreview(ck) {
+  const g = validGroups(st.createGroups, ck) ? st.createGroups : (st.createGroups = drawGroups(ck));
+  const col = id => `<div>
+      <div class="groups-lbl">Grupo ${id}</div>
+      ${g[id].map(t => { const tc = T[t]||{l:t,c:'#8B949E'}; return `<div style="display:flex;align-items:center;padding:3px 0"><span class="dot-sm" style="background:${tc.c}"></span><span style="color:${tc.c};font-weight:600;font-size:14px">${tc.l}</span></div>`; }).join('')}
+    </div>`;
+  return `<div class="groups-cols">${col('A')}${col('B')}</div>
+    <button class="btn btn-ghost" onclick="rerollGroups()" style="margin:10px 0 0;font-size:13px">🎲 Sortear os grupos de novo</button>`;
+}
+
+function rerollGroups() {
+  const ck=[...document.querySelectorAll('.tck:checked')].map(c=>c.value);
+  if (ck.length !== 6) return;
+  st.createGroups = drawGroups(ck);
+  const gp = document.getElementById('groups-preview');
+  if (gp) gp.innerHTML = renderGroupsPreview(ck);
+}
+
+// Mostra os dois grupos só no campeonato NOVO de 6 times com final (não no registro de um já encerrado, que não tem jogos).
+function syncGroupsPreview(ck, quick) {
+  const gp = document.getElementById('groups-preview');
+  if (!gp) return;
+  if (ck.length===6 && finalsEnabled() && !quick) { gp.innerHTML = renderGroupsPreview(ck); gp.style.display = 'block'; }
+  else { gp.style.display = 'none'; gp.innerHTML = ''; }
+}
+
 function onTkChg() {
   const ck=[...document.querySelectorAll('.tck:checked')].map(c=>c.value);
   document.querySelectorAll('.team-chk-label').forEach(el=>{
@@ -12573,15 +12788,18 @@ function onTkChg() {
     3:'🔄 <strong>Vira</strong> — quem ganha fica. Ao final, os 2 primeiros fazem a final.',
     4:'🔁 <strong>Todos contra todos</strong> em 2 turnos (12 jogos) + Final.',
     5:'📋 <strong>Fase de grupos</strong> 1 turno (10 jogos) + Semifinais + Final.',
+    6:'👥 <strong>Dois grupos de 3</strong> em 2 turnos (12 jogos) + Final entre os líderes dos grupos.',
   }:{
     3:'🔄 <strong>Vira</strong> — quem ganha fica. Sem final: o campeão é o time com mais pontos quando você encerrar o campeonato.',
     4:'🔁 <strong>Pontos corridos</strong> em 2 turnos (12 jogos). Sem final: o campeão é o time com mais pontos.',
     5:'📋 <strong>Pontos corridos</strong> em 1 turno (10 jogos). Sem final: o campeão é o time com mais pontos.',
+    6:'📋 <strong>Pontos corridos</strong> em 1 turno (15 jogos). Sem final: o campeão é o time com mais pontos.',
   };
   const quick = document.getElementById('quick-reg')?.checked;
   const assignWrap = document.getElementById('player-assign-wrap');
   const assignInner = document.getElementById('player-assign-inner');
-  if(ck.length>=3&&ck.length<=5){
+  syncGroupsPreview(ck, quick);
+  if(ck.length>=3&&ck.length<=6){
     hint.innerHTML=desc[ck.length]; hint.style.display='block';
     btn.style.display='block';
     btn.textContent = quick ? `Registrar Campeonato` : `Criar com ${ck.length} Times`;
@@ -12608,13 +12826,14 @@ function onQuickChg() {
   if(qd) qd.style.display = checked ? 'block' : 'none';
   const ck=[...document.querySelectorAll('.tck:checked')];
   const btn = document.getElementById('dobtn');
-  if(btn && ck.length>=3 && ck.length<=5)
+  if(btn && ck.length>=3 && ck.length<=6)
     btn.textContent = checked ? 'Registrar Campeonato' : `Criar com ${ck.length} Times`;
+  syncGroupsPreview(ck.map(c=>c.value), checked);
 }
 
 function doCreate() {
   const ck=[...document.querySelectorAll('.tck:checked')].map(c=>c.value);
-  if(ck.length<3||ck.length>5) return;
+  if(ck.length<3||ck.length>6) return;
   const date = document.getElementById('champ-date')?.value || today();
   const quick = document.getElementById('quick-reg')?.checked;
   if(quick) {
@@ -12622,7 +12841,7 @@ function doCreate() {
     if(!champTeam){ toast('Selecione o time campeão.'); return; }
     createHistoricalChamp(ck, date, champTeam);
   } else {
-    createChampionship(ck, date);
+    createChampionship(ck, date, ck.length===6 ? st.createGroups : null);
   }
 }
 
@@ -13056,6 +13275,55 @@ function pickChampionTie(team) {
   const m=st.modal; if(m?.type!=='champTie'||!m.teams.includes(team)) return;
   st.modal={type:'champion',champion:team,players:defPlayers()};
   render();
+}
+
+// 6 times (dois grupos de 3): empate total no topo de um grupo (mesmos pontos, saldo e gols marcados). Quem decide o líder do grupo, e portanto quem vai à final, é o admin.
+function mGroupTie() {
+  const m=st.modal; if(m?.type!=='groupTie') return '';
+  return `<div class="overlay">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-width:360px">
+      <div class="sheet-handle"></div>
+      <div style="padding:20px 16px 8px;text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🤝</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">Empate no topo do Grupo ${esc(m.group)}</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px">${m.teams.length} times com os mesmos pontos, saldo e gols marcados. Quem é o líder do grupo e vai à final?</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${m.teams.map(t=>{const tc=T[t]||{l:t,c:'#8B949E'};return `<button onclick="pickGroupLeader('${t}')" style="padding:14px;border-radius:10px;border:2px solid ${tc.c};background:${tc.c}22;color:${tc.c};font-size:15px;font-weight:700;cursor:pointer">${tc.l}</button>`;}).join('')}
+        </div>
+        <button class="btn btn-ghost" style="margin-top:12px" onclick="closeModal()">Decidir depois</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openGroupTie(group) {
+  if (!isAdmin()) return;
+  const champ = activeChamp(); if (!champ) return;
+  const o = groupTiesOpen(champ).find(x => x.group === group); if (!o) return;
+  st.modal = { type: 'groupTie', champId: champ.id, group: o.group, teams: o.teams };
+  render();
+}
+
+// O admin escolheu o líder de um grupo empatado: grava a escolha (champ.groupLeaders), cria a final se os dois líderes já estão definidos (ou refaz a que estava esperando) e,
+// se o outro grupo também está empatado, passa para ele.
+async function pickGroupLeader(team) {
+  const m=st.modal; if(m?.type!=='groupTie'||!m.teams.includes(team)||!DB) return;
+  if (!isAdmin()) { toast('Só o admin da liga escolhe o líder do grupo.'); return; }
+  const champ = st.champs.find(c=>c.id===m.champId); if(!champ) return;
+  try {
+    const next = { ...champ, groupLeaders: { ...(champ.groupLeaders||{}), [m.group]: team } };
+    let matches = champ.matches.map(x=>({...x}));
+    let mudou = false;
+    const gf = groupFinalMatch(next, matches);
+    if (gf) { matches.push(gf); mudou = true; }
+    const ko = reseedKnockout(next, matches); // a final que já estava criada (com outro time) passa a ser a deste líder, se ainda não foi jogada
+    if (ko.changed.length) { matches = ko.matches; mudou = true; }
+    // caminho com ponto: grava só a escolha DESTE grupo, sem apagar a do outro (se as duas escolhas vierem coladas); a lista de jogos só vai junto se a final nasceu ou mudou
+    await ldoc(`championships/${champ.id}`).update({ [`groupLeaders.${m.group}`]: team, ...(mudou ? { matches } : {}) });
+    const open = groupTiesOpen(next, matches);
+    st.modal = open.length ? { type: 'groupTie', champId: champ.id, group: open[0].group, teams: open[0].teams } : null;
+    render();
+  } catch(e){ toast('Erro: '+(e?.message||e)); }
 }
 
 async function setPenaltyWinner(team) {
